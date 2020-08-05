@@ -1,0 +1,165 @@
+#- * - python - * -
+
+load(
+    "@drake//tools/skylark:drake_cc.bzl",
+    "drake_cc_binary",
+    "drake_cc_googletest",
+    "drake_cc_library",
+)
+load(
+    "@drake//tools/vector_gen:vector_gen.bzl",
+    "drake_cc_vector_gen_library",
+)
+load("//tools/lint:lint.bzl", "add_lint_tests")
+
+drake_cc_library(
+    name = "fem_solver",
+    srcs =
+        [
+            "fem_solver.cc",
+        ],
+    hdrs =
+        [
+            "fem_solver.h",
+        ],
+    deps =
+        [
+            ":backward_euler_objective",
+            ":fem_element",
+            ":fem_force",
+            ":newton_solver",
+            "//common:essential",
+        ],
+)
+
+drake_cc_library(
+    name = "newton_solver",
+    srcs =
+        [
+            "newton_solver.cc",
+        ],
+    hdrs =
+        [
+            "newton_solver.h",
+        ],
+    deps =
+        [
+            ":backward_euler_objective",
+            "//common:essential",
+        ],
+)
+
+drake_cc_library(
+    name = "backward_euler_objective",
+    srcs =
+        [
+            "backward_euler_objective.cc",
+        ],
+    hdrs =
+        [
+            "backward_euler_objective.h",
+        ],
+    deps =
+        [
+            ":fem_force",
+            "//common:essential",
+        ],
+)
+
+drake_cc_library(
+    name = "fem_force",
+    srcs =
+        [
+            "fem_force.cc",
+        ],
+    hdrs =
+        [
+            "fem_force.h",
+        ],
+    deps =
+        [
+            ":fem_element",
+            "//common:essential",
+        ],
+)
+
+drake_cc_library(
+    name = "fem_element",
+    srcs =
+        [
+            "fem_element.cc",
+        ],
+    hdrs =
+        [
+            "fem_element.h",
+        ],
+    deps =
+        [
+            ":constitutive_model",
+            "//common:essential",
+        ],
+)
+
+drake_cc_library(
+    name = "constitutive_model",
+    srcs =
+        [
+            "constitutive_model.cc",
+        ],
+    hdrs =
+        [
+            "constitutive_model.h",
+        ],
+    deps =
+        [
+            "//common:essential",
+        ],
+)
+
+drake_cc_library(
+    name = "corotated_linear_model",
+    srcs =
+        [
+            "corotated_linear_model.cc",
+        ],
+    hdrs =
+        [
+            "corotated_linear_model.h",
+        ],
+    deps =
+        [
+            ":constitutive_model",
+            "//common:essential",
+        ],
+)
+
+#"//geometry:geometry_roles",
+#"//geometry:scene_graph",
+#"//math:geometric_transform",
+#"//systems/framework:diagram_builder",
+#"//systems/framework:leaf_system",
+#drake_cc_vector_gen_library(
+#name = "cloth_spring_model_params",
+#srcs = ["cloth_spring_model_params_named_vector.yaml"],
+#)
+drake_cc_binary(
+    name = "run_pancake",
+    srcs =
+        [
+            "run_pancake.cc",
+        ],
+    deps =
+        [
+            ":fem_solver",
+            "//" +
+            "common:add_text_logging_" +
+            "gflags",
+            "//" +
+            "geometry:geometry_" +
+            "visualization",
+            "//systems/analysis:simulator_gflags",
+            "//systems/framework:diagram",
+        ],
+)
+
+add_lint_tests()
