@@ -42,6 +42,7 @@ class FemSolver {
     ApplyVelocityBoundaryConditions();
     q_ = q_hat_ + dt_ * dv_;
     ApplyPositionBoundaryConditions();
+    time_ += dt_;
   }
   /**
    Add an object represented by a list of vertices connected by a simplex mesh
