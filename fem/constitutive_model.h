@@ -21,14 +21,17 @@ class ConstitutiveModel {
   virtual void UpdateState(const Matrix3<T>& F,
                            const Eigen::Matrix<T, 3, 4>& q) = 0;
 
+    /** Calculates the energy density. */
+    virtual T CalcEnergyDensity() const = 0;
+
   /** Calculates the First Piola stress. */
-  virtual Matrix3<T> CalcP() const = 0;
+  virtual Matrix3<T> CalcFirstPiola() const = 0;
 
   /** Calculates the First Piola stress Differential dP(dF). */
-  virtual Matrix3<T> CalcdP(const Matrix3<T> dF) const = 0;
+  virtual Matrix3<T> CalcFirstPiolaDifferential(const Matrix3<T> dF) const = 0;
 
   /** Calculates the First Piola stress derivative dP(dF). */
-  virtual Eigen::Matrix<T, 9, 9> CalcdPdF() const = 0;
+  virtual Eigen::Matrix<T, 9, 9> CalcFirtstPiolaDerivative() const = 0;
 };
 
 }  // namespace fem
