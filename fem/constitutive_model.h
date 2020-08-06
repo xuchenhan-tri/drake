@@ -28,7 +28,7 @@ class ConstitutiveModel {
   virtual Matrix3<T> CalcdP(const Matrix3<T> dF) const = 0;
 
   /** Calculates the First Piola stress derivative dP(dF). */
-  virtual Eigen::Matrix<T, 9, 9> CalcdPdF(const Matrix3<T>& F) const = 0;
+  virtual Eigen::Matrix<T, 9, 9> CalcdPdF() const = 0;
 };
 
 }  // namespace fem
