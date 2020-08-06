@@ -1,6 +1,6 @@
 #pragma once
 
-#include "drake/common/default_scalars.h"
+#include <Eigen/Sparse>
 #include "drake/common/eigen_types.h"
 #include "drake/fem/fem_element.h"
 
