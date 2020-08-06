@@ -33,6 +33,8 @@ class FemElement {
 
   T element_measure() const { return element_measure_; }
 
+  const Vector4<int>& indices() const { return vertex_indices_; }
+
   const Matrix3<T>& Dm_inv() const { return Dm_inv_; }
 
   const ConstitutiveModel<T>* constitutive_model() const { return constitutive_model_.get(); }
