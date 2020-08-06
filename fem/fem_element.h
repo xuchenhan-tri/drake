@@ -2,7 +2,6 @@
 
 #include <memory>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/eigen_types.h"
 #include "drake/fem/constitutive_model.h"
 
@@ -31,6 +30,12 @@ class FemElement {
   /** Given index = [i₀, i₁, i₂, i₃], calculates the shape matrix from linear
    * interpolation [x_i₁-x_i₀; x_i₂-x_i₀; x_i₃-x_i₀]. */
   Matrix3<T> CalcShapeMatrix(const Vector4<int>& index, const Matrix3X<T>& q);
+
+  T element_measure() const { return element_measure_; }
+
+  const Matrix3<T>& Dm_inv() const { return Dm_inv_; }
+
+  const ConstitutiveModel<T>* constitutive_model() const { return constitutive_model_.get(); }
 
  private:
   Vector4<int> vertex_indices_;
