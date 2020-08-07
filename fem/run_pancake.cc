@@ -21,7 +21,8 @@ namespace fem {
 
 int DoMain() {
   FemSolver<double> fem(0.01);
-  std::cout << fem.dt() << std::endl;
+  fem.AdvanceOneTimeStep();
+  std::cout << fem.get_dt() << std::endl;
   return 0;
 }
 

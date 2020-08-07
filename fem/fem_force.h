@@ -16,13 +16,18 @@ class FemForce {
   /** Called by BackwardEulerObjective::CalcResidual. Calculates the elastic and
     damping forces, scale them by scale, and then add them to the force vector.
    */
-  void AccumulateScaledForce(T scale, Matrix3X<T>* force) const;
+  void AccumulateScaledForce(T scale, EigenPtr<Matrix3X<T>> force) const;
 
-  /** Called by BackwardEulerObjective::CalcStep. Calculates the K*x where K is
+  /** Called by BackwardEulerObjective::Multiply. Calculates the K*dx where K is
     the stiffness matrix, scale the result by scale, and then add it to the
-    force vector. */
-  void AccumulateScaledForceDifferential(T scale, const Matrix3X<T>& dx,
-                                         Matrix3X<T>* force_differential) const;
+    force_differential vector. */
+  void AccumulateScaledElasticForceDifferential(T scale, const Eigen::Ref<const Matrix3X<T>>& dx,
+                                         EigenPtr<Matrix3X<T>> force_differential) const;
+    /** Called by BackwardEulerObjective::Multiply. Calculates the D*dx where D is
+      the damping matrix, scale the result by scale, and then add it to the
+      force_differential vector. */
+    void AccumulateScaledDampingForceDifferential(T scale, const Eigen::Ref<const Matrix3X<T>>& dx,
+                                           EigenPtr<Matrix3X<T>> force_differential) const;
 
   /** Called by BackwardEulerObjective::BuildJacobian. Calculates K where K is
     the stiffness matrix, scale it by scale, and then add it to
