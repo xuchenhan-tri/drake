@@ -3,6 +3,7 @@
 #include "drake/common/default_scalars.h"
 #include "drake/common/eigen_types.h"
 #include "drake/fem/backward_euler_objective.h"
+#include "drake/fem/conjugate_gradient_solver.h"
 
 namespace drake {
 namespace fem {
@@ -24,10 +25,32 @@ class NewtonSolver {
 
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(NewtonSolver);
 
-  NewtonSolver(BackwardEulerObjective<T>& objective): objective_(objective){}
+  NewtonSolver(BackwardEulerObjective<T>& objective) : objective_(objective), linear_solver_(objective) {}
   /** Takes in an initial guess for the solution and overwrites it with the
       actual solution. */
-  NewtonSolverStatus Solve(VectorX<T>* x) const;
+  NewtonSolverStatus Solve(EigenPtr<VectorX<T>> x) {
+    dx_.resizeLike(*x);
+    residual_.resizeLike(*x);
+    if (UpdateAndEvalResidual(*x)) return NewtonSolverStatus::Success;
+    for (int i = 0; i < max_iterations_; ++i) {
+      linear_solver_.Solve(residual_, &dx_);
+      *x += dx_;
+      if (UpdateAndEvalResidual(*x)) return NewtonSolverStatus::Success;
+    }
+    return NewtonSolverStatus::NoConvergence;
+  }
+
+  bool UpdateAndEvalResidual(const VectorX<T>& x) {
+    objective_.Update(x);
+    objective_.CalcResidual(&residual_);
+    return norm(residual_) < tolerance_;
+  }
+
+  // TODO(xuchenhan-tri): provide more customized norm than l2.
+  T norm(const VectorX<T>& x)
+  {
+    return x.norm();
+  }
 
   int max_iteration() const { return max_iterations_; }
 
@@ -42,11 +65,14 @@ class NewtonSolver {
 
  private:
   BackwardEulerObjective<T>& objective_;
+  ConjugateGradientSolver<T> linear_solver_;
   int max_iterations_{
       20};  // If Newton's method does not converge in 20 iterations, you should
             // consider either using another method or come up with a better
             // initial guess.
   T tolerance_{1e-3};
+  VectorX<T> dx_;
+  VectorX<T> residual_;
 };
 
 }  // namespace fem

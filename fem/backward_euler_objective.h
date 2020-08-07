@@ -3,9 +3,14 @@
 #include "drake/common/default_scalars.h"
 #include "drake/common/eigen_types.h"
 #include "drake/fem/fem_force.h"
+#include "drake/fem/fem_solver.h"
 
 namespace drake {
 namespace fem {
+
+template <typename T>
+class FemSolver;
+
 // When doing Backward Euler, the objective we are solving for is
 //
 // G(x) = M*x - f(qⁿ⁺¹, vⁿ⁺¹) * dt
@@ -85,14 +90,24 @@ class BackwardEulerObjective {
 
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(BackwardEulerObjective)
 
-  BackwardEulerObjective(FemForce<T>& force)
-      : force_(force),
-        projection_([](Matrix3X<T>*) {}),
-        preconditioner_([](const Matrix3X<T>&, Matrix3X<T>*) {}) {}
+  BackwardEulerObjective(const FemSolver<T>& solver, FemForce<T>& force)
+      : projection_([](EigenPtr<Matrix3X<T>>) {}),
+        preconditioner_(
+            [](const Eigen::Ref<const Matrix3X<T>>&, EigenPtr<Matrix3X<T>>) {}),
+        fem_solver(solver),
+        force_(force) {}
   void Update(const VectorX<T>& x);
 
-  // Evaluate -G(x) = -M*x + f(qⁿ + dt * (vⁿ + x), vⁿ + x)
-  VectorX<T> CalcResidual();
+  // Evaluate -G(x) = -M*x + f(qⁿ + dt * (vⁿ + x), vⁿ + x) * dt.
+  void CalcResidual(VectorX<T>* residual) {
+    Eigen::Map<Matrix3X<T>> force(residual->data(), 3, residual->size() / 3);
+    force.setZero();
+    for (int i = 0; i < fem_solver.get_mass().cols(); ++i) {
+      force.col(i) -= fem_solver.get_mass()[i] * fem_solver.get_dv().col(i);
+    }
+    force_.AccumulateScaledForce(fem_solver.get_dt(), &force);
+    *residual = Eigen::Map<VectorX<T>>(force.data(), force.size());
+  }
 
   // Solves A * dx = b for dx where b = -G(x) calculated with CalcResidual(),
   // and
@@ -117,9 +132,9 @@ class BackwardEulerObjective {
   //
   // Assembling A, we get
   //
-  // A = (1+alpha) * M + (beta * dt + dt²) * K.
+  // A = (1+alpha*dt) * M + (beta * dt + dt²) * K.
 
-  VectorX<T> CalcStep(const VectorX<T>& residual);
+  void CalcStep(const VectorX<T>& residual, VectorX<T>* step);
 
   void set_projection(std::function<void(Matrix3X<T>*)> projection) {
     projection_ = projection;
@@ -131,16 +146,30 @@ class BackwardEulerObjective {
   }
 
   /** Return the product of matrix-vector multiplication A*x where A = (1+alpha)
-   * * M + (beta * dt + dt²) * K. */
-  VectorX<T> Multiply(const VectorX<T>& x) const;
+   * M + (beta * dt + dt²) * K. */
+  void Multiply(const Eigen::Ref<const Matrix3X<T>>& x, EigenPtr<Matrix3X<T>> prod) const {
+    DRAKE_DEMAND(prod->cols() == fem_solver.get_mass().size());
+    DRAKE_DEMAND(x.cols() == fem_solver.get_mass().size());
+    for (int i = 0; i < prod->cols(); ++i) {
+      prod->col(i) = fem_solver.get_mass()[i] * x.col(i);
+    }
+    force_.AccumulateScaledDampingForceDifferential(fem_solver.get_dt(),
+                                                    x, prod);
+    force_.AccumulateScaledElasticForceDifferential(
+        fem_solver.get_dt() * fem_solver.get_dt(), x, prod);
+  }
+
+  /** Build the matrix A = (1+alpha*dt) * M + (beta * dt + dt²) * K. */
+  void BuildJacobian(Eigen::SparseMatrix<T>* jacobian) const;
+
+  std::function<void(EigenPtr<Matrix3X<T>>)> projection_;
+  std::function<void(const Eigen::Ref<const Matrix3X<T>>&,
+                     EigenPtr<Matrix3X<T>>)>
+      preconditioner_;
 
  private:
-  /* Build the matrix A = (1+alpha) * M + (beta * dt + dt²) * K. */
-  void BuildJacobian();
-
+  const FemSolver<T>& fem_solver;
   FemForce<T>& force_;
-  std::function<void(Matrix3X<T>*)> projection_;
-  std::function<void(const Matrix3X<T>&, Matrix3X<T>*)> preconditioner_;
 };
 }  // namespace fem
 }  // namespace drake

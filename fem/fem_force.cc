@@ -6,7 +6,7 @@ namespace drake {
 namespace fem {
 
 template <typename T>
-void FemForce<T>::AccumulateScaledForce(T scale, Matrix3X<T>* force) const {
+void FemForce<T>::AccumulateScaledForce(T scale, EigenPtr<Matrix3X<T>> force) const {
   // Gradient of the shape function is constant for linear interpolation.
   // TODO(xuchenhan-tri): support non-linear elements.
   Eigen::Matrix<T, 3, 4> grad_shape;
@@ -25,8 +25,8 @@ void FemForce<T>::AccumulateScaledForce(T scale, Matrix3X<T>* force) const {
 }
 
 template <typename T>
-void FemForce<T>::AccumulateScaledForceDifferential(
-    T scale, const Matrix3X<T>& dx, Matrix3X<T>* force_differential) const {
+void FemForce<T>::AccumulateScaledElasticForceDifferential(
+    T scale, const Eigen::Ref<const Matrix3X<T>>& dx, EigenPtr<Matrix3X<T>> force_differential) const {
   // Gradient of the shape function is constant for linear interpolation.
   // TODO(xuchenhan-tri): support non-linear elements.
   Eigen::Matrix<T, 3, 4> grad_shape;

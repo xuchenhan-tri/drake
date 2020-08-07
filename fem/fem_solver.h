@@ -24,7 +24,7 @@ class FemSolver {
       : dt_(dt),
         elements_({}),
         force_(elements_),
-        objective_(force_),
+        objective_(*this, force_),
         newton_solver_(objective_) {}
   /**
    Calls NewtonSolver to calculate the discrete velocity change.
@@ -37,7 +37,9 @@ class FemSolver {
   void AdvanceOneTimeStep() {
     dv_.setZero();
     q_hat_ = q_ + dt_ * v_;
-    newton_solver_.Solve(dv_);
+    Eigen::Map<VectorX<T>> x(dv_.data(), dv_.size());
+    newton_solver_.Solve(&x);
+    dv_ = Eigen::Map<Matrix3X<T>>(x.data(), dv_.rows(),  dv_.cols());
     v_ += dv_;
     ApplyVelocityBoundaryConditions();
     q_ = q_hat_ + dt_ * dv_;
@@ -165,6 +167,8 @@ class FemSolver {
 
   const VectorX<T>& get_mass() const { return mass_; }
 
+  const Matrix3X<T>& get_dv() const { return dv_; }
+
   const std::vector<FemElement<T>>& get_elements() const { return elements_; }
 
   std::vector<FemElement<T>>& get_mutable_elements() { return elements_; }
@@ -173,7 +177,7 @@ class FemSolver {
 
   FemForce<T>& get_mutable_force() { return force_; }
 
-  T dt() const { return dt_; }
+  T get_dt() const { return dt_; }
 
   void set_dt(T dt) { dt_ = dt; }
 
@@ -186,7 +190,7 @@ class FemSolver {
     for (const auto& boundary_condition : v_bc_) {
       const auto& vertex_range = vertex_indices_[boundary_condition.object_id];
       for (int j = 0; j < static_cast<int>(vertex_range.size()); ++j) {
-        boundary_condition.bc(vertex_range[j], time_, v_);
+        boundary_condition.bc(vertex_range[j], time_, &v_);
       }
     }
   }
@@ -195,7 +199,7 @@ class FemSolver {
     for (const auto& boundary_condition : q_bc_) {
       const auto& vertex_range = vertex_indices_[boundary_condition.object_id];
       for (int j = 0; j < static_cast<int>(vertex_range.size()); ++j) {
-        boundary_condition.bc(vertex_range[j], time_, q_);
+        boundary_condition.bc(vertex_range[j], time_, &q_);
       }
     }
   }

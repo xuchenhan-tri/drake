@@ -45,6 +45,7 @@ drake_cc_library(
     deps =
         [
             ":backward_euler_objective",
+            ":conjugate_gradient_solver",
             "//common:essential",
         ],
 )
@@ -62,6 +63,38 @@ drake_cc_library(
     deps =
         [
             ":fem_force",
+            "//common:essential",
+        ],
+)
+
+drake_cc_library(
+    name = "linear_system_solver",
+    srcs =
+        [
+        ],
+    hdrs =
+        [
+            "linear_system_solver.h",
+        ],
+    deps =
+        [
+            ":backward_euler_objective",
+            "//common:essential",
+        ],
+)
+
+drake_cc_library(
+    name = "conjugate_gradient_solver",
+    srcs =
+        [
+        ],
+    hdrs =
+        [
+            "conjugate_gradient_solver.h",
+        ],
+    deps =
+        [
+            ":linear_system_solver",
             "//common:essential",
         ],
 )
