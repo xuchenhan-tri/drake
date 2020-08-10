@@ -177,6 +177,10 @@ class FemSolver {
 
   FemForce<T>& get_mutable_force() { return force_; }
 
+    const BackwardEulerObjective<T>& get_objective() const { return objective_; }
+
+    BackwardEulerObjective<T>& get_mutable_objective() { return objective_; }
+
   T get_dt() const { return dt_; }
 
   void set_dt(T dt) { dt_ = dt; }

@@ -51,6 +51,40 @@ drake_cc_library(
 )
 
 drake_cc_library(
+    name = "eigen_conjugate_gradient_solver",
+    srcs =
+        [
+        ],
+    hdrs =
+        [
+            "eigen_conjugate_gradient_solver.h",
+        ],
+    deps =
+        [
+            ":eigen_sparse_matrix",
+            ":linear_system_solver",
+            "//common:essential",
+        ],
+)
+
+drake_cc_library(
+    name = "eigen_sparse_matrix",
+    srcs =
+        [
+        ],
+    hdrs =
+        [
+            "eigen_sparse_matrix.h",
+        ],
+    deps =
+        [
+            ":backward_euler_objective",
+            "//common:essential",
+            "@eigen",
+        ],
+)
+
+drake_cc_library(
     name = "backward_euler_objective",
     srcs =
         [
@@ -183,15 +217,16 @@ drake_cc_binary(
         ],
     deps =
         [
+            ":eigen_conjugate_gradient_solver",
             ":fem_solver",
             "//" +
             "common:add_text_logging_" +
             "gflags",
-            "//" +
-            "geometry:geometry_" +
-            "visualization",
+            #"//" +
+            #"geometry:geometry_" +
+            #"visualization",
             "//systems/analysis:simulator_gflags",
-            "//systems/framework:diagram",
+            #"//systems/framework:diagram",
         ],
 )
 

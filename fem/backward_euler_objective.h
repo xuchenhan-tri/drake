@@ -160,12 +160,14 @@ class BackwardEulerObjective {
   }
 
   /** Build the matrix A = (1+alpha*dt) * M + (beta * dt + dt²) * K. */
-  void BuildJacobian(Eigen::SparseMatrix<T>* jacobian) const;
+  void BuildJacobian() const { /* TODO(xuchenhan-tri): implement me. */ }
+
+  int get_num_dofs() const {  /* TODO(xuchenhan-tri): implement me. */ return 0; }
 
   std::function<void(EigenPtr<Matrix3X<T>>)> projection_;
   std::function<void(const Eigen::Ref<const Matrix3X<T>>&,
                      EigenPtr<Matrix3X<T>>)>
-      preconditioner_;
+      preconditioner_; // Figure out eigen support customized preconditioner
 
  private:
   const FemSolver<T>& fem_solver;
