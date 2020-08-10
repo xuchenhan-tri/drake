@@ -29,7 +29,15 @@ class FemElement {
 
   /** Given index = [i₀, i₁, i₂, i₃], calculates the shape matrix from linear
    * interpolation [x_i₁-x_i₀; x_i₂-x_i₀; x_i₃-x_i₀]. */
-  Matrix3<T> CalcShapeMatrix(const Vector4<int>& index, const Matrix3X<T>& q);
+  Matrix3<T> CalcShapeMatrix(const Vector4<int>& index, const Matrix3X<T>& q) const
+  {
+      Matrix3<T> shape_matrix;
+      for (int i = 0; i < 3; ++i)
+      {
+          shape_matrix.col(i) = q.col(index(i+1)) - q.col(0);
+      }
+      return shape_matrix;
+  }
 
   T element_measure() const { return element_measure_; }
 
