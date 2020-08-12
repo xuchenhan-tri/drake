@@ -25,6 +25,7 @@ public:
 
     /** Set up the equation A*x = rhs. */
     virtual void SetUp() {
+        cg_.setTolerance(1e-3);
         matrix_.BuildMatrix();
         cg_.compute(matrix_);
     }

@@ -5,6 +5,7 @@
 
 #include "drake/fem/backward_euler_objective.h"
 
+#include <iostream>
 //#include "drake/common/eigen_types.h"
 
 namespace drake {
@@ -66,14 +67,15 @@ class EigenSparseMatrix : public Eigen::EigenBase<EigenSparseMatrix<T>> {
   EigenSparseMatrix(const BackwardEulerObjective<T>& objective)
       : objective_(objective) {}
 
-  void Multiply(const Eigen::Ref<const VectorX<T>>& x, EigenPtr<VectorX<T>> b) const {
-    return objective_.Multiply(x, b);
+  void Multiply(const Eigen::Ref<const VectorX<T>>& x, EigenPtr<Matrix3X<T>> b) const {
+    const Matrix3X<T>& tmp_x = Eigen::Map<const Matrix3X<T>>(x.data(), 3, x.size()/3);
+    return objective_.Multiply(tmp_x, b);
   }
 
   VectorX<T> Multiply(const Eigen::Ref<const VectorX<T>>& x) const {
-      VectorX<T> b(x.size());
+      Matrix3X<T> b(3, x.size()/3);
       Multiply(x, &b);
-      return b;
+      return Eigen::Map<VectorX<T>>(b.data(), b.size());
   }
 
   void set_matrix_free(bool matrix_free) { objective_.set_matrix_free(matrix_free); }

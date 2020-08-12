@@ -25,6 +25,7 @@ drake_cc_library(
     deps =
         [
             ":backward_euler_objective",
+            ":corotated_linear_model",
             ":fem_element",
             ":fem_force",
             ":newton_solver",
@@ -45,7 +46,7 @@ drake_cc_library(
     deps =
         [
             ":backward_euler_objective",
-            ":conjugate_gradient_solver",
+            ":eigen_conjugate_gradient_solver",
             "//common:essential",
         ],
 )
@@ -220,6 +221,7 @@ drake_cc_library(
         ],
     deps =
         [
+            ":fem_solver",
             ":vtk_parser",
             "//common:essential",
             "//systems/framework:leaf_system",
@@ -246,10 +248,6 @@ drake_cc_binary(
         [
             "run_pancake.cc",
         ],
-    data = [
-        ":models/block0.obj",
-        ":models/pancake.vtk",
-    ],
     deps =
         [
             ":fem_system",
