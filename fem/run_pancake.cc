@@ -14,16 +14,16 @@
 #include "drake/systems/framework/diagram.h"
 #include "drake/systems/framework/diagram_builder.h"
 
-DEFINE_double(simulation_time, 10.0,
+DEFINE_double(simulation_time, 0.2,
               "How long to simulate the system");
 namespace drake {
 namespace fem {
 
 int DoMain() {
     systems::DiagramBuilder<double> builder;
-    double dt = 0.1;
+    double dt = 0.005;
     auto* fem_system = builder.AddSystem<FemSystem<double>>(dt);
-    fem_system->AddRectangularBlock(10,10,3,0.01);
+    fem_system->AddRectangularBlock(20,20,2,0.005);
     auto* obj_writer = builder.AddSystem<ObjWriter<double>>(*fem_system);
     builder.Connect(fem_system->get_output_port(0),
                      obj_writer->get_input_port(0));

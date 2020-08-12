@@ -12,6 +12,8 @@ void CorotatedLinearElasticity<T>::UpdateState(
   Q.template topLeftCorner<3, 4>() = q;
   Q.template bottomRows<1>() = Vector4<T>::Ones();
   R_ = (Q * inv_P_).template topLeftCorner<3, 3>();
+  Eigen::JacobiSVD<Matrix3<T>> svd(R_, Eigen::ComputeFullU | Eigen::ComputeFullV);
+  R_ = svd.matrixU() * svd.matrixV().transpose();
   Matrix3<T> RtF = R_.transpose() * F_;
   strain_ = 0.5 * (RtF + RtF.transpose()) - Matrix3<T>::Identity();
   trace_strain_ = strain_.trace();
@@ -37,13 +39,6 @@ Matrix3<T> CorotatedLinearElasticity<T>::CalcFirstPiolaDifferential(
   return dP;
 }
 
-template <typename T>
-
-Eigen::Matrix<T, 9, 9> CorotatedLinearElasticity<T>::CalcFirstPiolaDerivative()
-    const {
-  // TODO(xuchenhan-tri): implement me.
-  Eigen::Matrix<T, 9, 9> dPdF;
-  return dPdF;
-}
+template class CorotatedLinearElasticity<double>;
 }  // namespace fem
 }  // namespace drake

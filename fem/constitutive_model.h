@@ -15,13 +15,17 @@ class ConstitutiveModel {
      @param[in] q  The positions of the vertices belonging to the element that
      the model lives on .
   */
-  virtual ~ConstitutiveModel() = 0;
+  ConstitutiveModel(T alpha, T beta) : alpha_(alpha), beta_(beta) {};
+  virtual ~ConstitutiveModel(){}
 
   virtual void UpdateState(const Matrix3<T>& F,
                            const Eigen::Matrix<T, 3, 4>& q) = 0;
 
-    /** Calculates the energy density. */
-    virtual T CalcEnergyDensity() const = 0;
+    virtual T get_alpha() const { return alpha_; }
+  virtual T get_beta() const { return beta_; }
+
+  /** Calculates the energy density. */
+  virtual T CalcEnergyDensity() const = 0;
 
   /** Calculates the First Piola stress. */
   virtual Matrix3<T> CalcFirstPiola() const = 0;
@@ -30,7 +34,10 @@ class ConstitutiveModel {
   virtual Matrix3<T> CalcFirstPiolaDifferential(const Matrix3<T> dF) const = 0;
 
   /** Calculates the First Piola stress derivative dP(dF). */
-  virtual Eigen::Matrix<T, 9, 9> CalcFirtstPiolaDerivative() const = 0;
+  virtual Eigen::Matrix<T, 9, 9> CalcFirstPiolaDerivative() const = 0;
+private:
+    T alpha_{0};
+    T beta_{0};
 };
 
 }  // namespace fem
