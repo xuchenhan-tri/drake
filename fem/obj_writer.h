@@ -16,7 +16,7 @@ class ObjWriter final : public systems::LeafSystem<T> {
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(ObjWriter)
   ObjWriter(const FemSystem<T>& fem) {
     this->DeclareInputPort("vertex_positions", systems::kVectorValued,
-                           fem.get_Q().cols() * 3);
+                           fem.get_num_position_dofs());
     // Generate boundary faces.
     const auto& tets = fem.get_indices();
     /* A typical tetrahedral element looks like:

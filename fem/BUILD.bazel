@@ -20,12 +20,14 @@ drake_cc_library(
         ],
     hdrs =
         [
+            "fem_config.h",
             "fem_solver.h",
         ],
     deps =
         [
             ":backward_euler_objective",
             ":corotated_linear_model",
+            ":fem_data",
             ":fem_element",
             ":fem_force",
             ":newton_solver",
@@ -86,6 +88,19 @@ drake_cc_library(
 )
 
 drake_cc_library(
+    name = "fem_data",
+    hdrs =
+        [
+            "fem_data.h",
+        ],
+    deps =
+        [
+            ":fem_element",
+            "//common:essential",
+        ],
+)
+
+drake_cc_library(
     name = "backward_euler_objective",
     srcs =
         [
@@ -97,6 +112,7 @@ drake_cc_library(
         ],
     deps =
         [
+            ":fem_data",
             ":fem_force",
             "//common:essential",
         ],
@@ -217,6 +233,7 @@ drake_cc_library(
     name = "fem_system",
     hdrs =
         [
+            "fem_config.h",
             "fem_system.h",
         ],
     deps =

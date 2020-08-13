@@ -1,13 +1,12 @@
 #pragma once
 
-#include "drake/common/eigen_types.h"
+#include "drake/fem/fem_data.h"
 #include "drake/fem/fem_force.h"
+
+#include "drake/common/eigen_types.h"
 
 namespace drake {
 namespace fem {
-
-template <typename T>
-class FemSolver;
 /**
  When doing Backward Euler, the objective we are solving for is
 
@@ -114,8 +113,8 @@ class BackwardEulerObjective {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(BackwardEulerObjective)
 
-  BackwardEulerObjective(FemSolver<T>& solver, FemForce<T>& force)
-      : fem_solver_(solver), force_(force) {}
+  BackwardEulerObjective(FemData<T>& data, FemForce<T>& force)
+      : fem_data_(data), force_(force) {}
 
   /** Move the position of the vertices to tmp_x = q_hat + dt * dv where q_hat =
    * q + v_n * dt, and updates the quantities that depends on vertex positions.
@@ -141,7 +140,7 @@ class BackwardEulerObjective {
     int get_num_dofs() const;
 
  private:
-  FemSolver<T>& fem_solver_;
+  FemData<T>& fem_data_;
   FemForce<T>& force_;
 };
 }  // namespace fem
