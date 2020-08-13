@@ -1,9 +1,7 @@
 #pragma once
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/eigen_types.h"
 #include "drake/fem/fem_force.h"
-#include "drake/fem/fem_solver.h"
 
 namespace drake {
 namespace fem {
@@ -123,81 +121,24 @@ class BackwardEulerObjective {
    * q + v_n * dt, and updates the quantities that depends on vertex positions.
    * @param dv[in] The candidate change of velocity.
    */
-  void Update(const VectorX<T>& dv) {
-    const Matrix3X<T>& tmp_x =
-        Eigen::Map<const Matrix3X<T>>(dv.data(), 3, dv.size() / 3) *
-            fem_solver_.get_dt() +
-        fem_solver_.get_q_hat();
-    auto& elements = fem_solver_.get_mutable_elements();
-    for (auto& e : elements) {
-      e.UpdateF(tmp_x);
-    }
-  }
+  void Update(const VectorX<T>& dv);
 
   /** Evaluate -G(x) = -M*x + f(qⁿ + dt * (vⁿ + x), vⁿ + x) * dt, where f = fe +
    * fd + gravity. */
-  void CalcResidual(VectorX<T>* residual) {
-    Eigen::Map<Matrix3X<T>> impulse(residual->data(), 3, residual->size() / 3);
-    impulse.setZero();
-    const VectorX<T>& mass = fem_solver_.get_mass();
-    const Matrix3X<T>& dv = fem_solver_.get_dv();
-    const T& dt = fem_solver_.get_dt();
-    const Vector3<T>& gravity = fem_solver_.get_gravity();
-    const auto& v_hat = fem_solver_.get_v() + fem_solver_.get_dv();
-
-    // Add -M*x + gravity * dt
-    for (int i = 0; i < mass.size(); ++i) {
-      impulse.col(i) -= mass(i) * dv.col(i);
-      impulse.col(i) += mass(i) * dt * gravity;
-    }
-    // Add fe * dt.
-    force_.AccumulateScaledElasticForce(dt, &impulse);
-    // Add fd * dt.
-    force_.AccumulateScaledDampingForce(dt, v_hat, &impulse);
-    // Apply boundary condition.
-    Project(&impulse);
-    *residual = Eigen::Map<VectorX<T>>(impulse.data(), impulse.size());
-  }
+  void CalcResidual(VectorX<T>* residual);
 
   /** Return the product of matrix-vector multiplication A*x where A =
    * (1+alpha*dt) M + (beta * dt + dt²) * K. */
   void Multiply(const Eigen::Ref<const Matrix3X<T>>& x,
-                EigenPtr<Matrix3X<T>> prod) const {
-    DRAKE_DEMAND(prod->cols() == fem_solver_.get_mass().size());
-    DRAKE_DEMAND(x.cols() == fem_solver_.get_mass().size());
-    const VectorX<T>& mass = fem_solver_.get_mass();
-    const T& dt = fem_solver_.get_dt();
-    // Get M*x.
-    for (int i = 0; i < prod->cols(); ++i) {
-      prod->col(i) = mass(i) * x.col(i);
-    }
-    // Get dt * (alpha * M + beta * K) * x.
-    force_.AccumulateScaledDampingForceDifferential(-dt, x, prod);
-    // Get  dt² * K * x.
-    force_.AccumulateScaledElasticForceDifferential(-dt * dt, x, prod);
-    // Apply boundary condition.
-    Project(prod);
-  }
+                EigenPtr<Matrix3X<T>> prod) const;
 
   /** Build the matrix A = (1+alpha*dt) * M + (beta * dt + dt²) * K. */
   void BuildJacobian() const { /* TODO(xuchenhan-tri): implement me. */
   }
 
-  int get_num_dofs() const { return fem_solver_.get_q().size(); }
+  void Project(EigenPtr<Matrix3X<T>> impulse) const;
 
-  void Project(EigenPtr<Matrix3X<T>> impulse) const {
-    const auto& bc = fem_solver_.get_v_bc();
-    const auto& vertex_indices = fem_solver_.get_vertex_indices();
-    const T& time = fem_solver_.get_time();
-    const Matrix3X<T>& initial_position = fem_solver_.get_Q();
-
-    for (const auto& boundary_condition : bc) {
-      const auto& vertex_range = vertex_indices[boundary_condition.object_id];
-      for (int j = 0; j < static_cast<int>(vertex_range.size()); ++j) {
-        boundary_condition.bc(vertex_range[j], time, initial_position, impulse);
-      }
-    }
-  }
+    int get_num_dofs() const;
 
  private:
   FemSolver<T>& fem_solver_;
