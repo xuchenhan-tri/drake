@@ -5,8 +5,11 @@
 #include "drake/fem/backward_euler_objective.h"
 #include "drake/fem/constitutive_model.h"
 #include "drake/fem/corotated_linear_model.h"
+#include "drake/fem/fem_config.h"
+#include "drake/fem/fem_data.h"
 #include "drake/fem/fem_element.h"
 #include "drake/fem/fem_force.h"
+#include "drake/fem/fem_system.h"
 #include "drake/fem/newton_solver.h"
 
 namespace drake {
@@ -15,35 +18,34 @@ namespace fem {
 template <typename T>
 class FemSolver {
  public:
-  struct BoundaryCondition {
-    int object_id;
-    std::function<void(int, T, const Matrix3X<T>&, EigenPtr<Matrix3X<T>>)> bc;
-  };
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(FemSolver);
 
   FemSolver(T dt)
-      : dt_(dt),
-        elements_({}),
-        force_(elements_),
-        objective_(*this, force_),
+      : data_(dt),
+        force_(data_.get_elements()),
+        objective_(data_, force_),
         newton_solver_(objective_) {}
   /**
-   Calls NewtonSolver to calculate the discrete velocity change.
-   Update the position and velocity states from time n to time n+1.
+   The internal main loop for the FEM simulation that calls NewtonSolver to
+   calculate the discrete velocity change. Update the position and velocity
+   states from time n to time n+1.
    */
-  void UpdateDiscreteState(const VectorX<T>& q_n, const VectorX<T>& v_n,
-                           VectorX<T>* next_q, VectorX<T>* next_v) const;
+  void AdvanceOneTimeStep(const Eigen::Ref<const Matrix3X<T>>& q_n) {
+    auto& q = data_.get_mutable_q();
+    auto& q_hat = data_.get_mutable_q_hat();
+    auto v = data_.get_mutable_v();
+    auto& dv = data_.get_mutable_dv();
+    const auto& dt = data_.get_dt();
+    T time = data_.get_time();
 
-  /** The internal main loop for the FEM simulation. */
-  void AdvanceOneTimeStep() {
-    dv_.setZero();
-    q_hat_ = q_ + dt_ * v_;
-    Eigen::Map<VectorX<T>> x(dv_.data(), dv_.size());
+    dv.setZero();
+    q_hat = q_n + dt * v;
+    Eigen::Map<VectorX<T>> x(dv.data(), dv.size());
     newton_solver_.Solve(&x);
-    dv_ = Eigen::Map<Matrix3X<T>>(x.data(), dv_.rows(), dv_.cols());
-    v_ += dv_;
-    q_ = q_hat_ + dt_ * dv_;
-    time_ += dt_;
+    dv = Eigen::Map<Matrix3X<T>>(x.data(), dv.rows(), dv.cols());
+    v += dv;
+    q = q_hat + dt * dv;
+    data_.set_time(time + dt);
   }
   /**
    Add an object represented by a list of vertices connected by a simplex mesh
@@ -56,52 +58,70 @@ class FemSolver {
   @return The object_id of the newly added_object.
   */
   int AddUndeformedObject(const std::vector<Vector4<int>>& indices,
-                          const Matrix3X<T>& positions, const T density) {
+                          const Matrix3X<T>& positions,
+                          const FemConfig& config) {
+    int num_elements = data_.get_num_elements();
+    int num_vertices = data_.get_num_vertices();
+    int num_objects = data_.get_num_objects();
+    auto& element_indices = data_.get_mutable_element_indices();
+    auto& vertex_indices = data_.get_mutable_vertex_indices();
+    auto& elements = data_.get_mutable_elements();
+    auto& Q = data_.get_mutable_Q();
+    auto& q = data_.get_mutable_q();
+    auto& v = data_.get_mutable_v();
+    auto& dv = data_.get_mutable_dv();
+    auto& mass = data_.get_mutable_mass();
+    auto& mesh = data_.get_mutable_mesh();
+
     // Add new elements and record the element indices for this object.
     std::vector<int> local_element_indices(indices.size());
-    Vector4<int> particle_offset{num_vertices_, num_vertices_, num_vertices_,
-                                 num_vertices_};
+    Vector4<int> particle_offset{num_vertices, num_vertices, num_vertices,
+                                 num_vertices};
     for (int i = 0; i < static_cast<int>(indices.size()); ++i) {
       Matrix3X<T> local_positions(3, 4);
       for (int j = 0; j < 4; ++j) {
         local_positions.col(j) = positions.col(indices[i][j]);
       }
-      elements_.emplace_back(indices[i] + particle_offset, positions,
-                             std::make_unique<CorotatedLinearElasticity<T>>(
-                                 200000.0, 0.3, 0.0, 0.0, local_positions), density);
-      local_element_indices[i] = num_elements_++;
+      mesh.push_back(indices[i] + particle_offset);
+      elements.emplace_back(
+          indices[i] + particle_offset, positions,
+          std::make_unique<CorotatedLinearElasticity<T>>(
+              config.youngs_modulus, config.poisson_ratio, config.mass_damping,
+              config.stiffness_damping, local_positions),
+          config.density);
+      local_element_indices[i] = num_elements++;
     }
-    element_indices_.push_back(local_element_indices);
+    element_indices.push_back(local_element_indices);
 
     // Record the vertex indices for this object.
     std::vector<int> local_vertex_indices(positions.cols());
     for (int i = 0; i < positions.cols(); ++i)
-      local_vertex_indices[i] = num_vertices_++;
-    vertex_indices_.push_back(local_vertex_indices);
+      local_vertex_indices[i] = num_vertices++;
+    vertex_indices.push_back(local_vertex_indices);
 
     // Allocate for positions and velocities.
-    Q_.conservativeResize(3, q_.cols() + positions.cols());
-    Q_.rightCols(positions.cols()) = positions;
-    q_.conservativeResize(3, q_.cols() + positions.cols());
-    q_.rightCols(positions.cols()) = positions;
-    v_.conservativeResize(3, v_.cols() + positions.cols());
-    v_.rightCols(positions.cols()).setZero();
-    dv_.resize(3, v_.cols());
+    Q.conservativeResize(3, q.cols() + positions.cols());
+    Q.rightCols(positions.cols()) = positions;
+    q.conservativeResize(3, q.cols() + positions.cols());
+    q.rightCols(positions.cols()) = positions;
+    v.conservativeResize(3, v.cols() + positions.cols());
+    v.rightCols(positions.cols()).setZero();
+    dv.resize(3, v.cols());
 
     // Set mass.
-    mass_.conservativeResize(mass_.size() + positions.cols());
-    const int object_id = num_objects_++;
-    SetMassFromDensity(object_id, density);
-    BoundaryCondition bc;
-    bc.object_id = object_id;
-    bc.bc = [](int index, T time, const Matrix3X<T>& Q, EigenPtr<Matrix3X<T>> v){
-        DRAKE_DEMAND(time > -1);
-        if (Q.col(index).norm() <= 0.01)
-        {
-            v->col(index).setZero();
-        }
-    };
-    v_bc_.push_back(bc);
+    mass.conservativeResize(mass.size() + positions.cols());
+    const int object_id = num_objects;
+    SetMassFromDensity(object_id, config.density);
+    //BoundaryCondition<T> bc;
+    //bc.object_id = object_id;
+    //bc.bc = [](int index, T time, const Matrix3X<T>& initial_pos,
+    //           EigenPtr<Matrix3X<T>> velocity) {
+    //  DRAKE_DEMAND(time > -1);
+    //  if (initial_pos.col(index).norm() <= 0.011) {
+    //    velocity->col(index).setZero();
+    //  }
+    //};
+    //v_bc.push_back(bc);
     return object_id;
   }
   /**
@@ -111,18 +131,22 @@ class FemSolver {
       */
 
   void SetMassFromDensity(const int object_id, const T density) {
-    const auto& vertex_range = vertex_indices_[object_id];
+    const auto& vertex_indices = data_.get_vertex_indices();
+    const auto& element_indices = data_.get_element_indices();
+    const auto& elements = data_.get_elements();
+    auto& mass = data_.get_mutable_mass();
+    const auto& vertex_range = vertex_indices[object_id];
     // Clear old mass values.
     for (int i = 0; i < static_cast<int>(vertex_range.size()); ++i) {
-      mass_[i] = 0;
+      mass[i] = 0;
     }
     // Add the mass contribution of each element.
-    const auto& element_range = element_indices_[object_id];
+    const auto& element_range = element_indices[object_id];
     for (int i = 0; i < static_cast<int>(element_range.size()); ++i) {
-      const auto& element = elements_[i];
+      const auto& element = elements[i];
       const Vector4<int>& local_indices = element.get_indices();
       for (int j = 0; j < static_cast<int>(local_indices.size()); ++j) {
-        mass_[local_indices[j]] += density * element.get_element_measure();
+        mass[local_indices[j]] += density * element.get_element_measure();
       }
     }
   }
@@ -138,25 +162,32 @@ class FemSolver {
 
       @pre @p object_id < number of existing objects.
    */
-  void SetInitialStates(const int object_id,
-                        std::function<void(int, EigenPtr<Matrix3X<T>>)> set_position,
-                        std::function<void(int, EigenPtr<Matrix3X<T>>)> set_velocity) {
-    DRAKE_DEMAND(object_id < num_objects_);
-    const auto& vertex_range = vertex_indices_[object_id];
+  void SetInitialStates(
+      const int object_id,
+      std::function<void(int, EigenPtr<Matrix3X<T>>)> set_position,
+      std::function<void(int, EigenPtr<Matrix3X<T>>)> set_velocity) {
+    const int num_objects = data_.get_num_objects();
+    const auto& vertex_indices = data_.get_vertex_indices();
+    auto& Q = data_.get_mutable_Q();
+    auto& q = data_.get_mutable_q();
+    auto& v = data_.get_mutable_v();
+
+    DRAKE_DEMAND(object_id < num_objects);
+    const auto& vertex_range = vertex_indices[object_id];
     Matrix3X<T> init_q(3, vertex_range.size());
     Matrix3X<T> init_v(3, vertex_range.size());
     for (int i = 0; i < static_cast<int>(vertex_range.size()); ++i) {
-        init_q.col(i) = Q_.col(vertex_range[i]);
-        init_v.col(i) = v_.col(vertex_range[i]);
+      init_q.col(i) = Q.col(vertex_range[i]);
+      init_v.col(i) = v.col(vertex_range[i]);
     }
     for (int i = 0; i < static_cast<int>(vertex_range.size()); ++i) {
       set_position(i, &init_q);
       set_velocity(i, &init_v);
     }
     for (int i = 0; i < static_cast<int>(vertex_range.size()); ++i) {
-      q_.col(vertex_range[i]) = init_q.col(i);
-      Q_.col(vertex_range[i]) = init_q.col(i);
-      v_.col(vertex_range[i]) = init_v.col(i);
+      q.col(vertex_range[i]) = init_q.col(i);
+      Q.col(vertex_range[i]) = init_q.col(i);
+      v.col(vertex_range[i]) = init_v.col(i);
     }
   }
 
@@ -172,81 +203,30 @@ class FemSolver {
 
       @pre @p object_id < number of existing objects.
    */
-  void SetVelocityBoundaryCondition(
-      const int object_id, std::function<void(int, T, const Matrix3X<T>&, Matrix3X<T>*)> bc) {
-    DRAKE_DEMAND(object_id < num_objects_);
-    v_bc_.emplace_back(object_id, bc);
+  void SetBoundaryCondition(
+      const int object_id,
+      std::function<void(int, const Matrix3X<T>&, EigenPtr<Matrix3X<T>>)> bc) {
+    const int num_objects = data_.get_num_objects();
+    auto& v_bc = data_.get_mutable_v_bc();
+    DRAKE_DEMAND(object_id < num_objects);
+    v_bc.emplace_back(object_id, bc);
   }
 
-  const VectorX<T>& get_mass() const { return mass_; }
+  int get_num_position_dofs() const { return data_.get_num_position_dofs(); }
 
-  const Matrix3X<T>& get_dv() const { return dv_; }
+  const std::vector<Vector4<int>>& get_mesh() const {
+    return data_.get_mesh();
+  }
 
-  const Matrix3X<T>& get_v() const { return v_; }
+  const Matrix3X<T>& get_q() const {
+      return data_.get_q();
+  }
 
-  const Matrix3X<T>& get_q() const { return q_; }
-
-  const Matrix3X<T>& get_Q() const { return Q_; }
-
-  const Matrix3X<T>& get_q_hat() const { return q_hat_; }
-
-  void set_q(const Matrix3X<T>& q) { q_ = q; }
-
-  void set_Q(const Matrix3X<T>& Q) { Q_ = Q; }
-
-  const std::vector<FemElement<T>>& get_elements() const { return elements_; }
-
-  std::vector<FemElement<T>>& get_mutable_elements() { return elements_; }
-
-  const FemForce<T>& get_force() const { return force_; }
-
-  FemForce<T>& get_mutable_force() { return force_; }
-
-  const BackwardEulerObjective<T>& get_objective() const { return objective_; }
-
-  BackwardEulerObjective<T>& get_mutable_objective() { return objective_; }
-
-  T get_dt() const { return dt_; }
-
-  void set_dt(T dt) { dt_ = dt; }
-
-  T get_time() const { return time_; }
-
-  const Vector3<T>& get_gravity() const { return gravity_; }
-
-  void set_gravity(Vector3<T>& gravity) { gravity_ = gravity; }
-
-  const  std::vector<BoundaryCondition>& get_v_bc() const { return v_bc_;}
-
-  const std::vector<std::vector<int>>& get_vertex_indices() const { return vertex_indices_;}
  private:
-  T dt_;
-  std::vector<FemElement<T>> elements_;
+  FemData<T> data_;
   FemForce<T> force_;
   BackwardEulerObjective<T> objective_;
   NewtonSolver<T> newton_solver_;
-  // vertex_indices_[i] gives the vertex indices corresponding to object i.
-  std::vector<std::vector<int>> vertex_indices_;
-  // element_indices_[i] gives the element indices corresponding to object i.
-  std::vector<std::vector<int>> element_indices_;
-  // Initial position.
-  Matrix3X<T> Q_;
-  // Time n position.
-  Matrix3X<T> q_;
-  // Time n position + dt * time n velocity.
-  Matrix3X<T> q_hat_;
-  // Time n velocity.
-  Matrix3X<T> v_;
-  // Time n+1 velocity - Time n velocity.
-  Matrix3X<T> dv_;
-  VectorX<T> mass_;
-  Vector3<T> gravity_{0,0,-9.81};
-  // Velocity boundary conditions.
-  std::vector<BoundaryCondition> v_bc_;
-  int num_objects_{0};
-  int num_vertices_{0};
-  int num_elements_{0};
-  double time_{0.0};
 };
 
 }  // namespace fem
