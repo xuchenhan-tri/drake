@@ -1,7 +1,5 @@
 #pragma once
 
-#include <memory>
-
 #include "drake/common/eigen_types.h"
 
 namespace drake {
@@ -15,13 +13,14 @@ class ConstitutiveModel {
      @param[in] q  The positions of the vertices belonging to the element that
      the model lives on .
   */
-  ConstitutiveModel(T alpha, T beta) : alpha_(alpha), beta_(beta) {};
-  virtual ~ConstitutiveModel(){}
+  ConstitutiveModel(T alpha, T beta) : alpha_(alpha), beta_(beta){}
+  virtual ~ConstitutiveModel() {}
 
-  virtual void UpdateState(const Matrix3<T>& F,
-                           const Eigen::Matrix<T, 3, 4>& q) = 0;
+  virtual void UpdateState(
+      const Eigen::Ref<const Matrix3<T>>& F,
+      const Eigen::Ref<const Eigen::Matrix<T, 3, 4>>& q) = 0;
 
-    virtual T get_alpha() const { return alpha_; }
+  virtual T get_alpha() const { return alpha_; }
   virtual T get_beta() const { return beta_; }
 
   /** Calculates the energy density. */
@@ -31,13 +30,15 @@ class ConstitutiveModel {
   virtual Matrix3<T> CalcFirstPiola() const = 0;
 
   /** Calculates the First Piola stress Differential dP(dF). */
-  virtual Matrix3<T> CalcFirstPiolaDifferential(const Matrix3<T> dF) const = 0;
+  virtual Matrix3<T> CalcFirstPiolaDifferential(
+      const Eigen::Ref<const Matrix3<T>>& dF) const = 0;
 
   /** Calculates the First Piola stress derivative dP(dF). */
   virtual Eigen::Matrix<T, 9, 9> CalcFirstPiolaDerivative() const = 0;
-private:
-    T alpha_{0};
-    T beta_{0};
+
+ private:
+  T alpha_{0};
+  T beta_{0};
 };
 
 }  // namespace fem

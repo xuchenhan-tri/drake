@@ -13,13 +13,13 @@
 #include "drake/systems/framework/diagram.h"
 #include "drake/systems/framework/diagram_builder.h"
 
-DEFINE_double(simulation_time, 0.2, "How long to simulate the system");
+DEFINE_double(simulation_time, 0.4, "How long to simulate the system");
 namespace drake {
 namespace fem {
 
 int DoMain() {
   systems::DiagramBuilder<double> builder;
-  const double dt = 0.005;
+  const double dt = 0.01;
   auto* fem_system = builder.AddSystem<FemSystem<double>>(dt);
   const double mesh_spacing = 0.005;
   const int nx = 20;
@@ -45,10 +45,10 @@ int DoMain() {
   };
 
   auto bc = [](int index, const Matrix3X<double>& initial_pos,
-             EigenPtr<Matrix3X<double>> velocity) {
-      if (initial_pos.col(index).norm() <= 0.011) {
-          velocity->col(index).setZero();
-      }
+               EigenPtr<Matrix3X<double>> velocity) {
+    if (initial_pos.col(index).norm() <= 0.011) {
+      velocity->col(index).setZero();
+    }
   };
   fem_system->AddRectangularBlock(nx, ny, nz, mesh_spacing, config,
                                   position_transform, velocity_transform, bc);

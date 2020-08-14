@@ -1,5 +1,8 @@
 #pragma once
 
+#include <memory>
+#include <vector>
+
 #include "drake/common/default_scalars.h"
 #include "drake/common/eigen_types.h"
 #include "drake/fem/backward_euler_objective.h"
@@ -20,11 +23,11 @@ class FemSolver {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(FemSolver);
 
-  FemSolver(T dt)
+  explicit FemSolver(T dt)
       : data_(dt),
         force_(data_.get_elements()),
-        objective_(data_, force_),
-        newton_solver_(objective_) {}
+        objective_(&data_, &force_),
+        newton_solver_(&objective_) {}
   /**
    The internal main loop for the FEM simulation that calls NewtonSolver to
    calculate the discrete velocity change. Update the position and velocity
@@ -112,16 +115,6 @@ class FemSolver {
     mass.conservativeResize(mass.size() + positions.cols());
     const int object_id = num_objects;
     SetMassFromDensity(object_id, config.density);
-    //BoundaryCondition<T> bc;
-    //bc.object_id = object_id;
-    //bc.bc = [](int index, T time, const Matrix3X<T>& initial_pos,
-    //           EigenPtr<Matrix3X<T>> velocity) {
-    //  DRAKE_DEMAND(time > -1);
-    //  if (initial_pos.col(index).norm() <= 0.011) {
-    //    velocity->col(index).setZero();
-    //  }
-    //};
-    //v_bc.push_back(bc);
     return object_id;
   }
   /**
@@ -214,13 +207,9 @@ class FemSolver {
 
   int get_num_position_dofs() const { return data_.get_num_position_dofs(); }
 
-  const std::vector<Vector4<int>>& get_mesh() const {
-    return data_.get_mesh();
-  }
+  const std::vector<Vector4<int>>& get_mesh() const { return data_.get_mesh(); }
 
-  const Matrix3X<T>& get_q() const {
-      return data_.get_q();
-  }
+  const Matrix3X<T>& get_q() const { return data_.get_q(); }
 
  private:
   FemData<T> data_;

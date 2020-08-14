@@ -2,7 +2,6 @@
 
 #include <memory>
 
-// #include "drake/common/default_scalars.h"
 #include "drake/common/eigen_types.h"
 #include "drake/fem/constitutive_model.h"
 
@@ -33,14 +32,15 @@ class CorotatedLinearElasticity : public ConstitutiveModel<T> {
 
   virtual ~CorotatedLinearElasticity() {}
 
-  void UpdateState(const Matrix3<T>& F,
-                   const Eigen::Matrix<T, 3, 4>& q) override;
+  void UpdateState(const Eigen::Ref<const Matrix3<T>>& F,
+                   const Eigen::Ref<const Eigen::Matrix<T, 3, 4>>& q) override;
 
   T CalcEnergyDensity() const override;
 
   Matrix3<T> CalcFirstPiola() const override;
 
-  Matrix3<T> CalcFirstPiolaDifferential(const Matrix3<T> dF) const override;
+  Matrix3<T> CalcFirstPiolaDifferential(
+      const Eigen::Ref<const Matrix3<T>>& dF) const override;
 
   Eigen::Matrix<T, 9, 9> CalcFirstPiolaDerivative() const override {
     // TODO(xuchenhan-tri): implement me.

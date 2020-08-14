@@ -1,9 +1,8 @@
 #pragma once
 
+#include "drake/common/eigen_types.h"
 #include "drake/fem/fem_data.h"
 #include "drake/fem/fem_force.h"
-
-#include "drake/common/eigen_types.h"
 
 namespace drake {
 namespace fem {
@@ -113,18 +112,18 @@ class BackwardEulerObjective {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(BackwardEulerObjective)
 
-  BackwardEulerObjective(FemData<T>& data, FemForce<T>& force)
-      : fem_data_(data), force_(force) {}
+  BackwardEulerObjective(FemData<T>* data, FemForce<T>* force)
+      : fem_data_(*data), force_(*force) {}
 
   /** Move the position of the vertices to tmp_x = q_hat + dt * dv where q_hat =
    * q + v_n * dt, and updates the quantities that depends on vertex positions.
    * @param dv[in] The candidate change of velocity.
    */
-  void Update(const VectorX<T>& dv);
+  void Update(const Eigen::Ref<const VectorX<T>>& dv);
 
   /** Evaluate -G(x) = -M*x + f(qⁿ + dt * (vⁿ + x), vⁿ + x) * dt, where f = fe +
    * fd + gravity. */
-  void CalcResidual(VectorX<T>* residual);
+  void CalcResidual(EigenPtr<VectorX<T>> residual);
 
   /** Return the product of matrix-vector multiplication A*x where A =
    * (1+alpha*dt) M + (beta * dt + dt²) * K. */
@@ -137,7 +136,17 @@ class BackwardEulerObjective {
 
   void Project(EigenPtr<Matrix3X<T>> impulse) const;
 
-    int get_num_dofs() const;
+  int get_num_dofs() const;
+
+  T norm(const Eigen::Ref<const VectorX<T>>& x) const {
+    // Input has unit of impulse. Convert to the unit of velocity by dividing by
+    // mass.
+    const auto& tmp_x =
+        Eigen::Map<const Matrix3X<T>>(x.data(), 3, x.size() / 3);
+    DRAKE_DEMAND(tmp_x.cols() == fem_data_.get_mass().size());
+    const auto& tmp_mass = fem_data_.get_mass().transpose().array();
+    return (tmp_x.array().rowwise() / tmp_mass).abs().maxCoeff();
+  }
 
  private:
   FemData<T>& fem_data_;

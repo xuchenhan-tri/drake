@@ -5,7 +5,7 @@ namespace drake {
 namespace fem {
 
 template <typename T>
-void BackwardEulerObjective<T>::Update(const VectorX<T>& dv) {
+void BackwardEulerObjective<T>::Update(const Eigen::Ref<const VectorX<T>>& dv) {
   const Matrix3X<T>& tmp_x =
       Eigen::Map<const Matrix3X<T>>(dv.data(), 3, dv.size() / 3) *
           fem_data_.get_dt() +
@@ -17,7 +17,7 @@ void BackwardEulerObjective<T>::Update(const VectorX<T>& dv) {
 }
 
 template <typename T>
-void BackwardEulerObjective<T>::CalcResidual(VectorX<T>* residual) {
+void BackwardEulerObjective<T>::CalcResidual(EigenPtr<VectorX<T>> residual) {
   Eigen::Map<Matrix3X<T>> impulse(residual->data(), 3, residual->size() / 3);
   impulse.setZero();
   const VectorX<T>& mass = fem_data_.get_mass();
@@ -37,15 +37,19 @@ void BackwardEulerObjective<T>::CalcResidual(VectorX<T>* residual) {
   force_.AccumulateScaledDampingForce(dt, v_hat, &impulse);
   // Apply boundary condition.
   Project(&impulse);
+//  for (int i = 0 ; i < impulse.cols(); ++i)
+//  {
+//    impulse.col(i) /= mass(i);
+//  }
   *residual = Eigen::Map<VectorX<T>>(impulse.data(), impulse.size());
 }
 
 template <typename T>
 void BackwardEulerObjective<T>::Multiply(const Eigen::Ref<const Matrix3X<T>>& x,
                                          EigenPtr<Matrix3X<T>> prod) const {
-  DRAKE_DEMAND(prod->cols() == fem_data_.get_mass().size());
-  DRAKE_DEMAND(x.cols() == fem_data_.get_mass().size());
   const VectorX<T>& mass = fem_data_.get_mass();
+  DRAKE_DEMAND(prod->cols() == mass.size());
+  DRAKE_DEMAND(x.cols() == mass.size());
   const T& dt = fem_data_.get_dt();
   // Get M*x.
   for (int i = 0; i < prod->cols(); ++i) {
