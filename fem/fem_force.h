@@ -1,5 +1,7 @@
 #pragma once
 
+#include <vector>
+
 #include <Eigen/Sparse>
 
 #include "drake/common/eigen_types.h"
@@ -12,15 +14,18 @@ class FemForce {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(FemForce)
 
-  FemForce(const std::vector<FemElement<T>>& elements) : elements_(elements) {}
+  explicit FemForce(const std::vector<FemElement<T>>& elements)
+      : elements_(elements) {}
 
-  /** Called by BackwardEulerObjective::CalcResidual. Calculates the elastic forces, scale them by scale, and then add them to the force vector.
-   */
+  /** Called by BackwardEulerObjective::CalcResidual. Calculates the elastic
+  forces, scale them by scale, and then add them to the force vector.  */
   void AccumulateScaledElasticForce(T scale, EigenPtr<Matrix3X<T>> force) const;
 
-    /** Called by BackwardEulerObjective::CalcResidual. Calculates the damping forces, scale them by scale, and then add them to the force vector.
-     */
-  void AccumulateScaledDampingForce(T scale, const Eigen::Ref<const Matrix3X<T>>& v, EigenPtr<Matrix3X<T>> force) const;
+  /** Called by BackwardEulerObjective::CalcResidual. Calculates the damping
+  forces, scale them by scale, and then add them to the force vector.  */
+  void AccumulateScaledDampingForce(T scale,
+                                    const Eigen::Ref<const Matrix3X<T>>& v,
+                                    EigenPtr<Matrix3X<T>> force) const;
 
   /** Called by BackwardEulerObjective::Multiply. Calculates the K*dx where K is
     the stiffness matrix, scale the result by scale, and then add it to the
@@ -47,9 +52,10 @@ class FemForce {
       }
     }
   }
+
   /** Called by BackwardEulerObjective::Multiply. Calculates the D*dx where D =
-  alpha * M + beta * K is   the damping matrix, scale the result by scale, and
-  then add it to the   force_differential vector. */
+alpha * M + beta * K is the damping matrix, scale the result by scale, and
+then add it to the force_differential vector. */
   void AccumulateScaledDampingForceDifferential(
       T scale, const Eigen::Ref<const Matrix3X<T>>& dx,
       EigenPtr<Matrix3X<T>> force_differential) const {

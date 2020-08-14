@@ -1,10 +1,9 @@
 #pragma once
 
-#include "drake/fem/backward_euler_objective.h"
-#include "drake/fem/eigen_conjugate_gradient_solver.h"
-
 #include "drake/common/default_scalars.h"
 #include "drake/common/eigen_types.h"
+#include "drake/fem/backward_euler_objective.h"
+#include "drake/fem/eigen_conjugate_gradient_solver.h"
 
 namespace drake {
 namespace fem {
@@ -26,16 +25,16 @@ class NewtonSolver {
 
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(NewtonSolver);
 
-  NewtonSolver(BackwardEulerObjective<T>& objective) : objective_(objective), linear_solver_(objective) {}
+  explicit NewtonSolver(BackwardEulerObjective<T>* objective)
+      : objective_(*objective), linear_solver_(*objective) {}
   /** Takes in an initial guess for the solution and overwrites it with the
       actual solution. */
   NewtonSolverStatus Solve(EigenPtr<VectorX<T>> x) {
     dx_.resizeLike(*x);
     residual_.resizeLike(*x);
-    // if (UpdateAndEvalResidual(*x)) return NewtonSolverStatus::Success;
     UpdateAndEvalResidual(*x);
     for (int i = 0; i < max_iterations_; ++i) {
-        std::cout << "Newton iteration: " << i << std::endl;
+      std::cout << "Newton iteration: " << i + 1 << std::endl;
       linear_solver_.SetUp();
       linear_solver_.Solve(residual_, &dx_);
       *x += dx_;
@@ -44,22 +43,16 @@ class NewtonSolver {
     return NewtonSolverStatus::NoConvergence;
   }
 
-  bool UpdateAndEvalResidual(const VectorX<T>& x) {
+  bool UpdateAndEvalResidual(const Eigen::Ref<const VectorX<T>>& x) {
     objective_.Update(x);
     objective_.CalcResidual(&residual_);
     // Make sure there is no NAN in the residual.
     DRAKE_DEMAND(residual_ == residual_);
     return norm(residual_) < tolerance_;
-  //  Eigen::JacobiSVD<Matrix3<T>> svd(R_, Eigen::ComputeFullU | Eigen::ComputeFullV);
-//  R_ = svd.matrixU() * svd.matrixV().transpose();
-}
+  }
 
   // TODO(xuchenhan-tri): provide more customized norm than l2.
-  T norm(const VectorX<T>& x)
-  {
-      return x.template lpNorm<Eigen::Infinity>();
-    // return x.norm();
-  }
+  T norm(const Eigen::Ref<const VectorX<T>>& x) { return objective_.norm(x); }
 
   int max_iteration() const { return max_iterations_; }
 
