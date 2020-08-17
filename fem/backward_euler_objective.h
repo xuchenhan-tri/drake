@@ -138,6 +138,8 @@ class BackwardEulerObjective {
 
   int get_num_dofs() const;
 
+  const VectorX<T>& get_mass() const { return fem_data_.get_mass(); }
+
   T norm(const Eigen::Ref<const VectorX<T>>& x) const {
     // Input has unit of impulse. Convert to the unit of velocity by dividing by
     // mass.
