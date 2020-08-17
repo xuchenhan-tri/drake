@@ -265,6 +265,9 @@ drake_cc_binary(
         [
             "run_pancake.cc",
         ],
+    data = [
+        "//fem/models:pancake.vtk",
+    ],
     deps =
         [
             ":fem_system",
