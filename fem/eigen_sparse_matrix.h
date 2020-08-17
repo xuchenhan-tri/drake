@@ -89,7 +89,11 @@ class EigenSparseMatrix : public Eigen::EigenBase<EigenSparseMatrix<T>> {
     // TODO
   }
 
-  // For non-matrix free operations only. Fill the matrix using Jacobian from
+  const BackwardEulerObjective<T>& get_objective() const {
+       return objective_;
+  }
+
+    // For non-matrix free operations only. Fill the matrix using Jacobian from
   // the objective. Needs to be called every time step.
   void BuildMatrix() {
     objective_.BuildJacobian();

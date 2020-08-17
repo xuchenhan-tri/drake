@@ -37,10 +37,6 @@ void BackwardEulerObjective<T>::CalcResidual(EigenPtr<VectorX<T>> residual) {
   force_.AccumulateScaledDampingForce(dt, v_hat, &impulse);
   // Apply boundary condition.
   Project(&impulse);
-//  for (int i = 0 ; i < impulse.cols(); ++i)
-//  {
-//    impulse.col(i) /= mass(i);
-//  }
   *residual = Eigen::Map<VectorX<T>>(impulse.data(), impulse.size());
 }
 

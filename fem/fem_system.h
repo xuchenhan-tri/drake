@@ -33,8 +33,7 @@ class FemSystem final : public systems::LeafSystem<T> {
     DRAKE_DEMAND(object_added_ == false);
 
     std::vector<Vector4<int>> vertex_indices;
-    Matrix3X<T> initial_positions;
-    parser_.Parse(vtk);
+    Matrix3X<T> initial_positions = parser_.Parse(vtk, &vertex_indices);
     int object_id =
         solver_.AddUndeformedObject(vertex_indices, initial_positions, config);
     solver_.SetInitialStates(object_id, position_transform, velocity_transform);
