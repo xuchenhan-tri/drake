@@ -92,6 +92,16 @@ drake_lcm_cc_library(
 )
 
 drake_lcm_cc_library(
+    name = "deformable_mesh",
+    lcm_package = "drake",
+    lcm_srcs = [
+        "lcmt_deformable_tri.lcm",
+        "lcmt_deformable_tri_mesh_init.lcm",
+        "lcmt_deformable_tri_mesh_update.lcm"
+    ],
+)
+
+drake_lcm_cc_library(
     name = "desired_body_motion",
     lcm_package = "drake",
     lcm_srcs = ["lcmt_desired_body_motion.lcm"],

@@ -10,6 +10,7 @@
 #include "drake/common/find_resource.h"
 #include "drake/fem/fem_system.h"
 #include "drake/fem/obj_writer.h"
+#include "drake/fem/deformable_visualizer.h"
 #include "drake/systems/analysis/simulator_gflags.h"
 #include "drake/systems/framework/diagram.h"
 #include "drake/systems/framework/diagram_builder.h"
@@ -60,13 +61,15 @@ int DoMain() {
                           static_cast<double>(ny) / 2 * mesh_spacing,
                           static_cast<double>(nz) / 2 * mesh_spacing);
     };
-
     fem_system->AddRectangularBlock(nx, ny, nz, mesh_spacing, config,
                                     position_transform, velocity_transform, bc);
   }
-  auto* obj_writer = builder.AddSystem<ObjWriter<double>>(*fem_system);
-  builder.Connect(fem_system->get_output_port(0),
-                  obj_writer->get_input_port(0));
+    auto& visualizer = *builder.AddSystem<DeformableVisualizer>(
+            dt, "pancake", fem_system->get_indices());
+    builder.Connect(*fem_system, visualizer);
+//    auto* obj_writer = builder.AddSystem<ObjWriter<double>>(*fem_system);
+//  builder.Connect(fem_system->get_output_port(0),
+//                  obj_writer->get_input_port(0));
   auto diagram = builder.Build();
   auto context = diagram->CreateDefaultContext();
   auto simulator =
