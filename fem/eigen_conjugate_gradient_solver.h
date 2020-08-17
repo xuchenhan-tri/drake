@@ -5,6 +5,78 @@
 #include "drake/fem/eigen_sparse_matrix.h"
 #include "drake/fem/linear_system_solver.h"
 
+namespace Eigen {
+template <typename T>
+class MassPreconditioner {
+  typedef T Scalar;
+  typedef drake::VectorX<T> Vector;
+
+ public:
+  typedef typename Vector::StorageIndex StorageIndex;
+  enum {
+    ColsAtCompileTime = Eigen::Dynamic,
+    MaxColsAtCompileTime = Eigen::Dynamic
+  };
+
+  MassPreconditioner() : initialized_(false) {}
+
+  template <typename MatType>
+  explicit MassPreconditioner(const MatType& mat) : inv_mass_(mat.cols()) {
+    compute(mat);
+  }
+
+  Index rows() const { return inv_mass_.size(); }
+  Index cols() const { return inv_mass_.size(); }
+
+  template <typename MatType>
+  MassPreconditioner& analyzePattern(const MatType&) {
+    return *this;
+  }
+
+  template <typename MatType>
+  MassPreconditioner& factorize(const MatType& mat) {
+    return compute(mat);
+  }
+
+  template <typename MatType>
+  MassPreconditioner& compute(const MatType& mat) {
+    const drake::VectorX<T>& mass = mat.get_objective().get_mass();
+    inv_mass_.resize(3 * mass.size());
+    for (int i = 0; i < static_cast<int>(mass.size()); ++i) {
+      T one_over_mass =
+          (mass(i) == static_cast<T>(0)) ? 1.0 : (static_cast<T>(1) / mass(i));
+      for (int d = 0; d < 3; ++d) {
+        inv_mass_(3 * i + d) = one_over_mass;
+      }
+    }
+    initialized_ = true;
+    return *this;
+  }
+
+  /** \internal */
+  template <typename Rhs, typename Dest>
+  void _solve_impl(const Rhs& b, Dest& x) const {
+    x = inv_mass_.array() * b.array();
+  }
+
+  template <typename Rhs>
+  inline const Solve<MassPreconditioner, Rhs> solve(
+      const MatrixBase<Rhs>& b) const {
+    eigen_assert(initialized_ && "MassPreconditioner is not initialized.");
+    eigen_assert(inv_mass_.size() == b.rows() &&
+                 "MassPreconditioner::solve(): invalid number of rows of the "
+                 "right hand side matrix b");
+    return Solve<MassPreconditioner, Rhs>(*this, b.derived());
+  }
+
+  Eigen::ComputationInfo info() { return Eigen::Success; }
+
+ protected:
+  drake::VectorX<T> inv_mass_;
+  bool initialized_;
+};
+}  // namespace Eigen
+
 namespace drake {
 namespace fem {
 // TODO(xuchenhan-tri): This can be made more general to handle all Eigen
@@ -29,8 +101,7 @@ class EigenConjugateGradientSolver : public LinearSystemSolver<T> {
 
   /** Set up the equation A*x = rhs. */
   virtual void SetUp() {
-    cg_.setTolerance(1e-5);
-    cg_.setMaxIterations(300);
+    cg_.setMaxIterations(matrix_.cols());
     matrix_.BuildMatrix();
     cg_.compute(matrix_);
   }
@@ -41,11 +112,16 @@ class EigenConjugateGradientSolver : public LinearSystemSolver<T> {
     matrix_.set_matrix_free(matrix_free);
   }
 
+  T get_tolerance() const { return cg_tolerance_; }
+
+  void set_tolerance(T tol) { cg_tolerance_ = tol; }
+
  private:
   EigenSparseMatrix<T> matrix_;
   Eigen::ConjugateGradient<EigenSparseMatrix<T>, Eigen::Lower | Eigen::Upper,
-                           Eigen::IdentityPreconditioner>
+                           Eigen::MassPreconditioner<T>>
       cg_;
+  T cg_tolerance_{1e-3};
 };
 }  // namespace fem
 }  // namespace drake
