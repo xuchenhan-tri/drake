@@ -230,6 +230,19 @@ drake_cc_library(
 )
 
 drake_cc_library(
+    name = "deformable_visualizer",
+    srcs = ["deformable_visualizer.cc"],
+    hdrs = ["deformable_visualizer.h"],
+    deps = [
+        "//common:essential",
+        "//geometry/proximity:sorted_triplet",
+        "//lcm:drake_lcm",
+        "//lcmtypes:deformable_mesh",
+        "//systems/framework:leaf_system",
+    ],
+)
+
+drake_cc_library(
     name = "fem_system",
     hdrs =
         [
@@ -270,6 +283,7 @@ drake_cc_binary(
     ],
     deps =
         [
+            ":deformable_visualizer",
             ":fem_system",
             ":obj_writer",
             "//common:add_text_logging_gflags",
