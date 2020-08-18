@@ -131,7 +131,39 @@ class BackwardEulerObjective {
                 EigenPtr<Matrix3X<T>> prod) const;
 
   /** Build the matrix A = (1+alpha*dt) * M + (beta * dt + dt²) * K. */
-  void BuildJacobian() const { /* TODO(xuchenhan-tri): implement me. */
+  void BuildJacobian(Eigen::SparseMatrix<T>* jacobian) const {
+    const auto& mass = get_mass();
+    const T& dt = fem_data_.get_dt();
+    // The dimension of the matrix should be properly set by the caller and
+    // should be the same as the number of dofs in the system.
+    DRAKE_DEMAND(jacobian->cols() == get_num_dofs());
+    // Clear out old data.
+    for (int k = 0; k < jacobian->outerSize(); ++k)
+      for (typename Eigen::SparseMatrix<T>::InnerIterator it(*jacobian, k); it;
+           ++it) {
+        it.valueRef() = 0.0;
+      }
+    // Add mass to the diagonal entries.
+    for (int i = 0; i < mass.size(); ++i) {
+      for (int d = 0; d < 3; ++d) {
+          jacobian->coeffRef(3 * i + d, 3 * i + d) += mass(i);
+      }
+    }
+    // Add Stiffness and damping matrix to the Jacobian.
+    force_.AccumulateScaledStiffnessMatrix(dt*dt, jacobian);
+    force_.AccumulateScaledDampingMatrix(dt, jacobian);
+  }
+
+  void SetSparsityPattern(Eigen::SparseMatrix<T>* jacobian) const
+  {
+      std::vector<Eigen::Triplet<T>> non_zero_entries(get_num_dofs());
+      // Diagonal entries contains mass and are non-zero.
+      for (int i = 0; i < get_num_dofs(); ++i){
+          non_zero_entries[i] = Eigen::Triplet<T>(i,i,0);
+      }
+      force_.SetSparsityPattern(&non_zero_entries);
+      jacobian->setFromTriplets(non_zero_entries.begin(), non_zero_entries.end());
+      jacobian->makeCompressed();
   }
 
   void Project(EigenPtr<Matrix3X<T>> impulse) const;

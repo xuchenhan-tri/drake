@@ -15,35 +15,38 @@
 #include "drake/systems/framework/diagram.h"
 #include "drake/systems/framework/diagram_builder.h"
 
-DEFINE_double(simulation_time, 5, "How long to simulate the system");
+DEFINE_double(simulation_time, 10, "How long to simulate the system");
 namespace drake {
 namespace fem {
 
 int DoMain() {
   systems::DiagramBuilder<double> builder;
-  const double dt = 0.01;
+  const double dt = 1.0/60.0;
   auto* fem_system = builder.AddSystem<FemSystem<double>>(dt);
   const double mesh_spacing = 0.005;
-  const int nx = 20;
-  const int ny = 20;
+  const int nx = 2;
+  const int ny = 2;
   const int nz = 2;
   FemConfig config;
   config.density = 1e3;
-  config.youngs_modulus = 2e4;
+  config.youngs_modulus = 1e4;
   config.poisson_ratio = 0.4;
-  config.mass_damping = 0;
-  config.stiffness_damping = 0;
+  config.mass_damping = 4;
+  config.stiffness_damping = 0.0;
   auto velocity_transform = [](int vertex_index,
                                EigenPtr<Matrix3X<double>> vel) {
     vel->col(vertex_index).setZero();
   };
   auto bc = [](int index, const Matrix3X<double>& initial_pos,
                EigenPtr<Matrix3X<double>> velocity) {
-    if (initial_pos.col(index).norm() <= 0.01) {
-      velocity->col(index).setZero();
-    }
+    unused(index);
+    unused(initial_pos);
+    unused(velocity);
+//    if (initial_pos.col(index).norm() <= 0.01) {
+//      velocity->col(index).setZero();
+//    }
   };
-  bool use_vtk = true;
+  bool use_vtk = false;
   if (use_vtk) {
     const char* kModelPath = "drake/fem/models/pancake.vtk";
       const std::string vtk = FindResourceOrThrow(kModelPath);
@@ -64,12 +67,15 @@ int DoMain() {
     fem_system->AddRectangularBlock(nx, ny, nz, mesh_spacing, config,
                                     position_transform, velocity_transform, bc);
   }
+#if 0
     auto& visualizer = *builder.AddSystem<DeformableVisualizer>(
             dt, "pancake", fem_system->get_indices());
     builder.Connect(*fem_system, visualizer);
-//    auto* obj_writer = builder.AddSystem<ObjWriter<double>>(*fem_system);
-//  builder.Connect(fem_system->get_output_port(0),
-//                  obj_writer->get_input_port(0));
+#else
+    auto* obj_writer = builder.AddSystem<ObjWriter<double>>(*fem_system);
+  builder.Connect(fem_system->get_output_port(0),
+                  obj_writer->get_input_port(0));
+#endif
   auto diagram = builder.Build();
   auto context = diagram->CreateDefaultContext();
   auto simulator =

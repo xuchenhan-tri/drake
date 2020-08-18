@@ -40,14 +40,27 @@ class MassPreconditioner {
 
   template <typename MatType>
   MassPreconditioner& compute(const MatType& mat) {
-    const drake::VectorX<T>& mass = mat.get_objective().get_mass();
-    inv_mass_.resize(3 * mass.size());
-    for (int i = 0; i < static_cast<int>(mass.size()); ++i) {
-      T one_over_mass =
-          (mass(i) == static_cast<T>(0)) ? 1.0 : (static_cast<T>(1) / mass(i));
-      for (int d = 0; d < 3; ++d) {
-        inv_mass_(3 * i + d) = one_over_mass;
-      }
+    inv_mass_.resize(mat.cols());
+    if (mat.is_matrix_free()) {
+        const drake::VectorX<T> &mass = mat.get_objective().get_mass();
+        for (int i = 0; i < static_cast<int>(mass.size()); ++i) {
+            T one_over_mass =
+                    (mass(i) == static_cast<T>(0)) ? 1.0 : (static_cast<T>(1) / mass(i));
+            for (int d = 0; d < 3; ++d) {
+                inv_mass_(3 * i + d) = one_over_mass;
+            }
+        }
+    }
+    else {
+        const auto& matrix = mat.get_matrix();
+        for (int j = 0; j < matrix.outerSize(); ++j) {
+            typename MatType::InnerIterator it(matrix, j);
+            while (it && it.index() != j) ++it;
+            if (it && it.index() == j && it.value() != Scalar(0))
+                inv_mass_(j) = Scalar(1) / it.value();
+            else
+                inv_mass_(j) = Scalar(1);
+        }
     }
     initialized_ = true;
     return *this;
@@ -88,7 +101,7 @@ class EigenConjugateGradientSolver : public LinearSystemSolver<T> {
 
   explicit EigenConjugateGradientSolver(
       const BackwardEulerObjective<T>& objective)
-      : matrix_(objective) {}
+      : matrix_(objective, false) {}
 
   virtual ~EigenConjugateGradientSolver() {}
 
@@ -101,8 +114,10 @@ class EigenConjugateGradientSolver : public LinearSystemSolver<T> {
 
   /** Set up the equation A*x = rhs. */
   virtual void SetUp() {
-    cg_.setMaxIterations(matrix_.cols());
+    matrix_.Reinitialize();
     matrix_.BuildMatrix();
+    cg_.setTolerance(cg_tolerance_);
+    cg_.setMaxIterations(matrix_.cols());
     cg_.compute(matrix_);
   }
 

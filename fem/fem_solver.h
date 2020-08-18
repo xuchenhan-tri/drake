@@ -36,7 +36,7 @@ class FemSolver {
   void AdvanceOneTimeStep(const Eigen::Ref<const Matrix3X<T>>& q_n) {
     auto& q = data_.get_mutable_q();
     auto& q_hat = data_.get_mutable_q_hat();
-    auto v = data_.get_mutable_v();
+    auto& v = data_.get_mutable_v();
     auto& dv = data_.get_mutable_dv();
     const auto& dt = data_.get_dt();
     T time = data_.get_time();
@@ -138,8 +138,9 @@ class FemSolver {
     for (int i = 0; i < static_cast<int>(element_range.size()); ++i) {
       const auto& element = elements[i];
       const Vector4<int>& local_indices = element.get_indices();
+      const T fraction = 1.0 / static_cast<T>(local_indices.size());
       for (int j = 0; j < static_cast<int>(local_indices.size()); ++j) {
-        mass[local_indices[j]] += density * element.get_element_measure();
+        mass[local_indices[j]] += density * element.get_element_measure() * fraction;
       }
     }
   }

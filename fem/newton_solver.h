@@ -51,7 +51,7 @@ class NewtonSolver {
     return norm(residual_) < tolerance_;
   }
 
-  // TODO(xuchenhan-tri): provide more customized norm than l2.
+  /** The norm calculation is delegated to the objective to support customized norms. */
   T norm(const Eigen::Ref<const VectorX<T>>& x) { return objective_.norm(x); }
 
   int max_iteration() const { return max_iterations_; }

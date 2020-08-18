@@ -42,12 +42,7 @@ class CorotatedLinearElasticity : public ConstitutiveModel<T> {
   Matrix3<T> CalcFirstPiolaDifferential(
       const Eigen::Ref<const Matrix3<T>>& dF) const override;
 
-  Eigen::Matrix<T, 9, 9> CalcFirstPiolaDerivative() const override {
-    // TODO(xuchenhan-tri): implement me.
-    Eigen::Matrix<T, 9, 9> dPdF;
-    DRAKE_ASSERT(false);
-    return dPdF;
-  }
+  Eigen::Matrix<T, 9, 9> CalcFirstPiolaDerivative() const override;
 
   void SetLameParameters(T youngs_modulus, T poisson_ratio) {
     mu_ = youngs_modulus / (2.0 * (1.0 + poisson_ratio));
