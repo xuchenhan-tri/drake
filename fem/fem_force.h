@@ -1,5 +1,6 @@
 #pragma once
 
+#include <iostream>
 #include <vector>
 
 #include <Eigen/Sparse>
@@ -68,6 +69,7 @@ then add it to the force_differential vector. */
       const T& volume = e.get_element_measure();
       const T& density = e.get_density();
       const auto* model = e.get_constitutive_model();
+      const T fraction = 1.0 / static_cast<T>(indices.size());
       Matrix3<T> dF = e.CalcShapeMatrix(indices, dx) * Dm_inv;
       const Matrix3<T>& dP =
           model->CalcFirstPiolaDifferential(dF) * model->get_beta();
@@ -78,8 +80,9 @@ then add it to the force_differential vector. */
         force_differential->col(indices[i]) -=
             negative_element_force_differential.col(i);
         // Mass terms.
-        force_differential->col(indices[i]) +=
-            scale * volume * density * model->get_alpha() * dx.col(indices[i]);
+        force_differential->col(indices[i]) += scale * volume * density *
+                                               fraction * model->get_alpha() *
+                                               dx.col(indices[i]);
       }
     }
   }
@@ -87,8 +90,84 @@ then add it to the force_differential vector. */
   /** Called by BackwardEulerObjective::BuildJacobian. Calculates K where K is
     the stiffness matrix, scale it by scale, and then add it to the
   stiffness_matrix. */
-  void AccumulateScaledStiffnessEntry(
+  void AccumulateScaledStiffnessMatrix(
       T scale, Eigen::SparseMatrix<T>* stiffness_matrix) const;
+
+  /** Called by BackwardEulerObjective::BuildJacobian. Calculates D where D is
+    the stiffness matrix, scale it by scale, and then add it to the
+  stiffness_matrix. */
+  void AccumulateScaledDampingMatrix(
+      T scale, Eigen::SparseMatrix<T>* damping_matrix) const;
+
+  void SetSparsityPattern(
+      std::vector<Eigen::Triplet<T>>* non_zero_entries) const {
+    // Extend the number of nonzero entries.
+    // Each element has 4 vertices, which gives 4x4 nonzero blocks and each
+    // block is of size 3x3. There will be redundancies in the allocation which
+    // the caller will compress away.
+    non_zero_entries->reserve(non_zero_entries->size() +
+                              elements_.size() * 4 * 4 * 3 * 3);
+    for (const auto& e : elements_) {
+      const auto& indices = e.get_indices();
+      for (int i = 0; i < indices.size(); ++i) {
+        for (int k = 0; k < 3; ++k) {
+          int row_index = 3 * i + k;
+          for (int j = 0; j < indices.size(); ++j) {
+            for (int l = 0; l < 3; ++l) {
+              int col_index = 3 * j + l;
+              non_zero_entries->emplace_back(row_index, col_index, 0);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  /** Performs a contraction between a 4th order tensor A and two vectors u and
+     v and returns a matrix B. In Einstein notation, the contraction is:
+         Bᵢₐ = uⱼ Aᵢⱼₐᵦ vᵦ.
+     The 4th order tensor A of dimension 3*3*3*3 is flattened to a
+     9*9 matrix that is organized as following
+
+                      β = 1       β = 2       β = 3
+                  -------------------------------------
+                  |           |           |           |
+        j = 1     |   Aᵢ₁ₐ₁   |   Aᵢ₁ₐ₂   |   Aᵢ₁ₐ₃   |
+                  |           |           |           |
+                  -------------------------------------
+                  |           |           |           |
+        j = 2     |   Aᵢ₂ₐ₁   |   Aᵢ₂ₐ₂   |   Aᵢ₂ₐ₃   |
+                  |           |           |           |
+                  -------------------------------------
+                  |           |           |           |
+        j = 3     |   Aᵢ₃ₐ₁   |   Aᵢ₃ₐ₂   |   Aᵢ₃ₐ₃   |
+                  |           |           |           |
+                  -------------------------------------
+   */
+  static inline Matrix3<T> TensorContraction(
+      const Eigen::Ref<const Eigen::Matrix<T, 9, 9>>& A,
+      const Eigen::Ref<const Vector3<T>>& u,
+      const Eigen::Ref<const Vector3<T>>& v) {
+    Matrix3<T> B = Matrix3<T>::Zero();
+    for (int j = 0; j < 3; ++j) {
+      for (int beta = 0; beta < 3; ++beta) {
+        B += A.template block<3, 3>(3 * j, 3 * beta) * u(j) * v(beta);
+      }
+    }
+    return B;
+  }
+
+  /** Add a 3x3 matrix into the 3x3 block in the sparse matrix 'matrix' with
+   * starting row index 3*m and starting column index 3*n. */
+  static inline void AccumulateSparseMatrixBlock(
+      const Eigen::Ref<const Matrix3<T>> block, const int m, const int n,
+      Eigen::SparseMatrix<T>* matrix) {
+    for (int i = 0; i < 3; ++i) {
+      for (int j = 0; j < 3; ++j) {
+        matrix->coeffRef(3 * m + i, 3 * n + j) += block(i, j);
+      }
+    }
+  }
 
  private:
   const std::vector<FemElement<T>>& elements_;
