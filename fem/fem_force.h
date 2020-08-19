@@ -80,7 +80,7 @@ then add it to the force_differential vector. */
         force_differential->col(indices[i]) -=
             negative_element_force_differential.col(i);
         // Mass terms.
-        force_differential->col(indices[i]) += scale * volume * density *
+        force_differential->col(indices[i]) -= scale * volume * density *
                                                fraction * model->get_alpha() *
                                                dx.col(indices[i]);
       }
