@@ -36,9 +36,13 @@ class FemSolver {
     auto& q_hat = data_.get_mutable_q_hat();
     auto& v = data_.get_mutable_v();
     auto& dv = data_.get_mutable_dv();
+    auto& elements = data_.get_mutable_elements();
     const auto& dt = data_.get_dt();
     T time = data_.get_time();
 
+    for (auto& e : elements){
+        e.UpdateTimeNPositionBasedState(q_n);
+    }
     dv.setZero();
     q_hat = q_n + dt * v;
     Eigen::Map<VectorX<T>> x(dv.data(), dv.size());

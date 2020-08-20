@@ -210,6 +210,7 @@ drake_cc_library(
     deps =
         [
             "//common:essential",
+            "//common:unused",
         ],
 )
 
