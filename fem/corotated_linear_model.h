@@ -32,8 +32,9 @@ class CorotatedLinearElasticity : public ConstitutiveModel<T> {
 
   virtual ~CorotatedLinearElasticity() {}
 
-  void UpdateState(const Eigen::Ref<const Matrix3<T>>& F,
-                   const Eigen::Ref<const Eigen::Matrix<T, 3, 4>>& q) override;
+  void UpdateDeformationBasedState(const Eigen::Ref<const Matrix3<T>>& F) override;
+
+  void UpdateTimeNPositionBasedState(const Eigen::Ref<const Eigen::Matrix<T, 3, 4>>& q) override;
 
   T CalcEnergyDensity() const override;
 

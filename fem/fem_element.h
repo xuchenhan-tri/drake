@@ -34,11 +34,16 @@ class FemElement {
    */
   void UpdateF(const Eigen::Ref<const Matrix3X<T>>& q) {
     F_ = CalcShapeMatrix(vertex_indices_, q) * Dm_inv_;
-    Eigen::Matrix<T, 3, 4> local_q;
-    for (int i = 0; i < 4; ++i) {
-      local_q.col(i) = q.col(vertex_indices_[i]);
-    }
-    constitutive_model_->UpdateState(F_, local_q);
+    constitutive_model_->UpdateDeformationBasedState(F_);
+  }
+
+  void UpdateTimeNPositionBasedState(const Eigen::Ref<const Matrix3X<T>>& q_n)
+  {
+      Eigen::Matrix<T, 3, 4> local_qn;
+      for (int i = 0; i < 4; ++i) {
+          local_qn.col(i) = q_n.col(vertex_indices_[i]);
+      }
+      constitutive_model_->UpdateTimeNPositionBasedState(local_qn);
   }
 
   /** Given index = [i₀, i₁, i₂, i₃], calculates the shape matrix from linear

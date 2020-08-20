@@ -68,8 +68,6 @@ class DerivativeTester {
 
     OutputType difference = (f1_ - f0_) / h;
     OutputType differential = (df1_ + df0_) / 2.0;
-    std::cout << "dffierence = " << difference << std::endl;
-      std::cout << "differential = " <<  differential << std::endl;
     // Setting the scale to be ~2*|f(x)|, which is used as a proxy of (|f(x)| +
     // 1/12 * |f'''(x)|). In the unlikely event where |f(x)|/|f'''(x)| is on the
     // order of h, the test may produce a false failure.
@@ -124,50 +122,112 @@ class FemForceTest : public ::testing::Test {
 
 TEST_F(FemForceTest, EnergyDerivative) {
   // Move vertices to random positions.
-  Matrix3X<double> positions = Matrix3X<double>::Random(3, data_->get_num_vertices());
-  Matrix3X<double> tmp_dx = Matrix3X<double>::Random(3, data_->get_num_vertices());
+  Matrix3X<double> positions =
+      Matrix3X<double>::Random(3, data_->get_num_vertices());
+  Matrix3X<double> tmp_dx =
+      Matrix3X<double>::Random(3, data_->get_num_vertices());
   tmp_dx.normalize();
   DerivativeTester<Matrix3X<double>, Vector1<double>> energy_derivative_tester;
   energy_derivative_tester.set_x(positions);
   energy_derivative_tester.set_dx(tmp_dx);
-  auto compute = [this](const Matrix3X<double>& x,
-                                 const Matrix3X<double>& dx, Vector1<double>* f,
-                                 Vector1<double>* df) {
-    auto& elements = data_->get_mutable_elements();
-    for (auto& e : elements) e.UpdateF(x);
+  // Set q_n to be `positions' and update the states depending on q_n. This
+  // mimics the condition under which we usually do energy and force
+  // calculations, but it is unnecessary for the test to pass.
+  auto& elements = data_->get_mutable_elements();
+  for (auto& e : elements) {
+    e.UpdateTimeNPositionBasedState(positions);
+  }
+  auto compute = [this](const Matrix3X<double>& x, const Matrix3X<double>& dx,
+                        Vector1<double>* f, Vector1<double>* df) {
+    for (auto& e : data_->get_mutable_elements()) {
+      e.UpdateF(x);
+    }
     (*f)(0) = dut_->CalcElasticEnergy();
     Matrix3X<double> elastic_force(3, x.cols());
     elastic_force.setZero();
-    // Force is the negative gradient of energy, so we scale by -1 to get the derivative of the energy.
+    // Force is the negative gradient of energy, so we scale by -1 to get the
+    // derivative of the energy.
     dut_->AccumulateScaledElasticForce(-1, &elastic_force);
     (*df)(0) = (elastic_force.array() * dx.array()).sum();
   };
   energy_derivative_tester.RunTest(compute);
 }
 
-    TEST_F(FemForceTest, ForceDifferential) {
-        // Move vertices to random positions.
-        Matrix3X<double> positions = Matrix3X<double>::Random(3, data_->get_num_vertices());
-        // Matrix3X<double> positions = data_->get_q();
-        Matrix3X<double> tmp_dx = Matrix3X<double>::Random(3, data_->get_num_vertices());
-        tmp_dx.normalize();
-        DerivativeTester<Matrix3X<double>, Matrix3X<double>> force_derivative_tester;
-        force_derivative_tester.set_x(positions);
-        force_derivative_tester.set_dx(tmp_dx);
-        auto compute = [this](const Matrix3X<double>& x,
-                              const Matrix3X<double>& dx, Matrix3X<double>* f,
-                              Matrix3X<double>* df) {
-            auto& elements = data_->get_mutable_elements();
-            for (auto& e : elements) e.UpdateF(x);
-            f->resize(3, x.cols());
-            f->setZero();
-            dut_->AccumulateScaledElasticForce(1, f);
-            df->resize(3, x.cols());
-            df->setZero();
-            dut_->AccumulateScaledElasticForceDifferential(1, dx, df);
-        };
-        force_derivative_tester.RunTest(compute);
+TEST_F(FemForceTest, ForceDifferential) {
+  // Move vertices to random positions.
+  Matrix3X<double> positions =
+      Matrix3X<double>::Random(3, data_->get_num_vertices());
+  // Matrix3X<double> positions = data_->get_q();
+  Matrix3X<double> tmp_dx =
+      Matrix3X<double>::Random(3, data_->get_num_vertices());
+  tmp_dx.normalize();
+  DerivativeTester<Matrix3X<double>, Matrix3X<double>>
+      force_differential_tester;
+  force_differential_tester.set_x(positions);
+  force_differential_tester.set_dx(tmp_dx);
+  // Set q_n to be `positions' and update the states depending on q_n. This
+  // mimics the condition under which we usually do force and force differential
+  // calculations, but it is unnecessary for the test to pass.
+  for (auto& e : data_->get_mutable_elements()) {
+    e.UpdateTimeNPositionBasedState(positions);
+  }
+  auto compute = [this](const Matrix3X<double>& x, const Matrix3X<double>& dx,
+                        Matrix3X<double>* f, Matrix3X<double>* df) {
+    auto& elements = data_->get_mutable_elements();
+    for (auto& e : elements) {
+      e.UpdateF(x);
     }
+    f->resize(3, x.cols());
+    f->setZero();
+    dut_->AccumulateScaledElasticForce(1, f);
+    df->resize(3, x.cols());
+    df->setZero();
+    dut_->AccumulateScaledElasticForceDifferential(1, dx, df);
+  };
+  force_differential_tester.RunTest(compute);
+}
+TEST_F(FemForceTest, ForceDerivative) {
+  // Move vertices to random positions.
+  Matrix3X<double> positions =
+      Matrix3X<double>::Random(3, data_->get_num_vertices());
+  // Matrix3X<double> positions = data_->get_q();
+  Matrix3X<double> tmp_dx =
+      Matrix3X<double>::Random(3, data_->get_num_vertices());
+  tmp_dx.normalize();
+  DerivativeTester<Matrix3X<double>, Matrix3X<double>> force_derivative_tester;
+  force_derivative_tester.set_x(positions);
+  force_derivative_tester.set_dx(tmp_dx);
+  // Set q_n to be `positions' and update the states depending on q_n. This
+  // mimics the condition under which we usually do force and force differential
+  // calculations, but it is unnecessary for the test to pass.
+  for (auto& e : data_->get_mutable_elements()) {
+    e.UpdateTimeNPositionBasedState(positions);
+  }
+  auto compute = [this](const Matrix3X<double>& x, const Matrix3X<double>& dx,
+                        Matrix3X<double>* f, Matrix3X<double>* df) {
+    auto& elements = data_->get_mutable_elements();
+    for (auto& e : elements) {
+      e.UpdateF(x);
+    }
+    f->resize(3, x.cols());
+    f->setZero();
+    dut_->AccumulateScaledElasticForce(1, f);
+    Eigen::SparseMatrix<double> K(x.size(), x.size());
+    std::vector<Eigen::Triplet<double>> non_zero_entries;
+    non_zero_entries.clear();
+    dut_->SetSparsityPattern(&non_zero_entries);
+    K.setFromTriplets(non_zero_entries.begin(), non_zero_entries.end());
+    K.makeCompressed();
+    // Stiffness matrix is the second derivative of the energy density and thus
+    // the negative derivative of the force, so we scale by -1 here.
+    dut_->AccumulateScaledStiffnessMatrix(-1, &K);
+    const VectorX<double>& dx_tmp =
+        Eigen::Map<const VectorX<double>>(dx.data(), dx.size());
+    VectorX<double> df_tmp = K * dx_tmp;
+    *df = Eigen::Map<Matrix3X<double>>(df_tmp.data(), 3, df_tmp.size() / 3);
+  };
+  force_derivative_tester.RunTest(compute);
+}
 }  // namespace
 }  // namespace fem
 }  // namespace drake

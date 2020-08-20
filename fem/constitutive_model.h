@@ -1,6 +1,7 @@
 #pragma once
 
 #include "drake/common/eigen_types.h"
+#include "drake/common/unused.h"
 
 namespace drake {
 namespace fem {
@@ -13,12 +14,18 @@ class ConstitutiveModel {
      @param[in] q  The positions of the vertices belonging to the element that
      the model lives on .
   */
-  ConstitutiveModel(T alpha, T beta) : alpha_(alpha), beta_(beta){}
+  ConstitutiveModel(T alpha, T beta) : alpha_(alpha), beta_(beta) {}
   virtual ~ConstitutiveModel() {}
 
-  virtual void UpdateState(
-      const Eigen::Ref<const Matrix3<T>>& F,
-      const Eigen::Ref<const Eigen::Matrix<T, 3, 4>>& q) = 0;
+  virtual void UpdateDeformationBasedState(
+      const Eigen::Ref<const Matrix3<T>>& F) = 0;
+
+  virtual void UpdateTimeNPositionBasedState(
+      const Eigen::Ref<const Eigen::Matrix<T, 3, 4>>& q) {
+    unused(q);
+    throw std::runtime_error(
+        "UpdateTimeNPositionBasedState must provide an implementation.");
+  }
 
   virtual T get_alpha() const { return alpha_; }
   virtual T get_beta() const { return beta_; }

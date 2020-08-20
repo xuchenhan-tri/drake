@@ -39,14 +39,14 @@ int DoMain() {
   };
   auto bc = [](int index, const Matrix3X<double>& initial_pos,
                EigenPtr<Matrix3X<double>> velocity) {
-    unused(index);
-    unused(initial_pos);
-    unused(velocity);
-//    if (initial_pos.col(index).norm() <= 0.01) {
-//      velocity->col(index).setZero();
-//    }
+//    unused(index);
+//    unused(initial_pos);
+//    unused(velocity);
+    if (initial_pos.col(index).norm() <= 0.01) {
+      velocity->col(index).setZero();
+    }
   };
-  bool use_vtk = false;
+  bool use_vtk = true;
   if (use_vtk) {
     const char* kModelPath = "drake/fem/models/pancake.vtk";
       const std::string vtk = FindResourceOrThrow(kModelPath);
@@ -67,7 +67,7 @@ int DoMain() {
     fem_system->AddRectangularBlock(nx, ny, nz, mesh_spacing, config,
                                     position_transform, velocity_transform, bc);
   }
-#if 0
+#if 1
     auto& visualizer = *builder.AddSystem<DeformableVisualizer>(
             dt, "pancake", fem_system->get_indices());
     builder.Connect(*fem_system, visualizer);
