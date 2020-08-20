@@ -6,8 +6,6 @@
 #include "drake/common/default_scalars.h"
 #include "drake/common/eigen_types.h"
 #include "drake/fem/backward_euler_objective.h"
-#include "drake/fem/constitutive_model.h"
-#include "drake/fem/corotated_linear_model.h"
 #include "drake/fem/fem_config.h"
 #include "drake/fem/fem_data.h"
 #include "drake/fem/fem_element.h"
@@ -63,86 +61,7 @@ class FemSolver {
   int AddUndeformedObject(const std::vector<Vector4<int>>& indices,
                           const Matrix3X<T>& positions,
                           const FemConfig& config) {
-    int num_elements = data_.get_num_elements();
-    int num_vertices = data_.get_num_vertices();
-    int num_objects = data_.get_num_objects();
-    auto& element_indices = data_.get_mutable_element_indices();
-    auto& vertex_indices = data_.get_mutable_vertex_indices();
-    auto& elements = data_.get_mutable_elements();
-    auto& Q = data_.get_mutable_Q();
-    auto& q = data_.get_mutable_q();
-    auto& v = data_.get_mutable_v();
-    auto& dv = data_.get_mutable_dv();
-    auto& mass = data_.get_mutable_mass();
-    auto& mesh = data_.get_mutable_mesh();
-
-    // Add new elements and record the element indices for this object.
-    std::vector<int> local_element_indices(indices.size());
-    Vector4<int> particle_offset{num_vertices, num_vertices, num_vertices,
-                                 num_vertices};
-    for (int i = 0; i < static_cast<int>(indices.size()); ++i) {
-      Matrix3X<T> local_positions(3, 4);
-      for (int j = 0; j < 4; ++j) {
-        local_positions.col(j) = positions.col(indices[i][j]);
-      }
-      mesh.push_back(indices[i] + particle_offset);
-      elements.emplace_back(
-          indices[i] + particle_offset, positions,
-          std::make_unique<CorotatedLinearElasticity<T>>(
-              config.youngs_modulus, config.poisson_ratio, config.mass_damping,
-              config.stiffness_damping, local_positions),
-          config.density);
-      local_element_indices[i] = num_elements++;
-    }
-    element_indices.push_back(local_element_indices);
-
-    // Record the vertex indices for this object.
-    std::vector<int> local_vertex_indices(positions.cols());
-    for (int i = 0; i < positions.cols(); ++i)
-      local_vertex_indices[i] = num_vertices++;
-    vertex_indices.push_back(local_vertex_indices);
-
-    // Allocate for positions and velocities.
-    Q.conservativeResize(3, q.cols() + positions.cols());
-    Q.rightCols(positions.cols()) = positions;
-    q.conservativeResize(3, q.cols() + positions.cols());
-    q.rightCols(positions.cols()) = positions;
-    v.conservativeResize(3, v.cols() + positions.cols());
-    v.rightCols(positions.cols()).setZero();
-    dv.resize(3, v.cols());
-
-    // Set mass.
-    mass.conservativeResize(mass.size() + positions.cols());
-    const int object_id = num_objects;
-    SetMassFromDensity(object_id, config.density);
-    return object_id;
-  }
-  /**
-      Set the initial positions and velocities of a given object.
-      @param[in] object_id     The id the object whose mass is being set.
-      @param[in] density     Mass density of the object.
-      */
-
-  void SetMassFromDensity(const int object_id, const T density) {
-    const auto& vertex_indices = data_.get_vertex_indices();
-    const auto& element_indices = data_.get_element_indices();
-    const auto& elements = data_.get_elements();
-    auto& mass = data_.get_mutable_mass();
-    const auto& vertex_range = vertex_indices[object_id];
-    // Clear old mass values.
-    for (int i = 0; i < static_cast<int>(vertex_range.size()); ++i) {
-      mass[i] = 0;
-    }
-    // Add the mass contribution of each element.
-    const auto& element_range = element_indices[object_id];
-    for (int i = 0; i < static_cast<int>(element_range.size()); ++i) {
-      const auto& element = elements[i];
-      const Vector4<int>& local_indices = element.get_indices();
-      const T fraction = 1.0 / static_cast<T>(local_indices.size());
-      for (int j = 0; j < static_cast<int>(local_indices.size()); ++j) {
-        mass[local_indices[j]] += density * element.get_element_measure() * fraction;
-      }
-    }
+    return data_.AddUndeformedObject(indices, positions, config);
   }
 
   /**

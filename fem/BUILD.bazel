@@ -26,7 +26,6 @@ drake_cc_library(
     deps =
         [
             ":backward_euler_objective",
-            ":corotated_linear_model",
             ":fem_data",
             ":fem_element",
             ":fem_force",
@@ -91,11 +90,25 @@ drake_cc_library(
     name = "fem_data",
     hdrs =
         [
+            "fem_config.h",
             "fem_data.h",
         ],
     deps =
         [
+            ":corotated_linear_model",
             ":fem_element",
+            "//common:essential",
+        ],
+)
+
+drake_cc_library(
+    name = "mesh_utility",
+    hdrs =
+        [
+            "mesh_utility.h",
+        ],
+    deps =
+        [
             "//common:essential",
         ],
 )
@@ -252,6 +265,7 @@ drake_cc_library(
     deps =
         [
             ":fem_solver",
+            ":mesh_utility",
             ":vtk_parser",
             "//common:essential",
             "//systems/framework:leaf_system",
@@ -291,6 +305,15 @@ drake_cc_binary(
             "//systems/analysis:simulator_gflags",
             "//systems/framework:diagram_builder",
         ],
+)
+
+drake_cc_googletest(
+    name = "derivative_test",
+    deps = [
+        ":fem_data",
+        ":fem_force",
+        ":mesh_utility",
+    ],
 )
 
 add_lint_tests()

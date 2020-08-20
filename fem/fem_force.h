@@ -87,6 +87,17 @@ then add it to the force_differential vector. */
     }
   }
 
+  /** Returns the total elastic energy stored in the elements. */
+  T CalcElasticEnergy() const {
+    T elastic_energy = 0;
+    for (const FemElement<T>& e : elements_) {
+      const T& volume = e.get_element_measure();
+      const auto* model = e.get_constitutive_model();
+      T energy_density = model->CalcEnergyDensity();
+      elastic_energy += volume * energy_density;
+    }
+    return elastic_energy;
+  }
   /** Called by BackwardEulerObjective::BuildJacobian. Calculates K where K is
     the stiffness matrix, scale it by scale, and then add it to the
   stiffness_matrix. */
