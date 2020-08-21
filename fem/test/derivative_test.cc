@@ -102,8 +102,8 @@ class FemForceTest : public ::testing::Test {
     config.density = 1e3;
     config.youngs_modulus = 1e4;
     config.poisson_ratio = 0.4;
-    config.mass_damping = 1;
-    config.stiffness_damping = 1;
+    config.mass_damping = 0.3;
+    config.stiffness_damping = 0.5;
     const int nx = 1;
     const int ny = 1;
     const int nz = 1;
@@ -157,7 +157,6 @@ TEST_F(FemForceTest, ForceDifferential) {
   // Move vertices to random positions.
   Matrix3X<double> positions =
       Matrix3X<double>::Random(3, data_->get_num_vertices());
-  // Matrix3X<double> positions = data_->get_q();
   Matrix3X<double> tmp_dx =
       Matrix3X<double>::Random(3, data_->get_num_vertices());
   tmp_dx.normalize();
@@ -186,11 +185,11 @@ TEST_F(FemForceTest, ForceDifferential) {
   };
   force_differential_tester.RunTest(compute);
 }
+
 TEST_F(FemForceTest, ForceDerivative) {
   // Move vertices to random positions.
   Matrix3X<double> positions =
       Matrix3X<double>::Random(3, data_->get_num_vertices());
-  // Matrix3X<double> positions = data_->get_q();
   Matrix3X<double> tmp_dx =
       Matrix3X<double>::Random(3, data_->get_num_vertices());
   tmp_dx.normalize();
@@ -227,6 +226,40 @@ TEST_F(FemForceTest, ForceDerivative) {
     *df = Eigen::Map<Matrix3X<double>>(df_tmp.data(), 3, df_tmp.size() / 3);
   };
   force_derivative_tester.RunTest(compute);
+}
+
+TEST_F(FemForceTest, Damping) {
+  // Move vertices to random positions.
+  Matrix3X<double> positions =
+      Matrix3X<double>::Random(3, data_->get_num_vertices());
+  Matrix3X<double> dv = Matrix3X<double>::Random(3, data_->get_num_vertices());
+  for (auto& e : data_->get_mutable_elements()) {
+    e.UpdateTimeNPositionBasedState(positions);
+    e.UpdateF(positions);
+  }
+  Matrix3X<double> df_matrix_free(3, data_->get_num_vertices());
+  Matrix3X<double> df_direct(3, data_->get_num_vertices());
+  // Calculate the damping force differential through the matrix free method.
+  df_matrix_free.setZero();
+  dut_->AccumulateScaledDampingForceDifferential(1, dv, &df_matrix_free);
+
+  // Calculate the damping force differential through direct multiplication.
+  Eigen::SparseMatrix<double> D(positions.size(), positions.size());
+  std::vector<Eigen::Triplet<double>> non_zero_entries;
+  non_zero_entries.clear();
+  dut_->SetSparsityPattern(&non_zero_entries);
+  D.setFromTriplets(non_zero_entries.begin(), non_zero_entries.end());
+  D.makeCompressed();
+  // Damping force differential = -D * dv.
+  dut_->AccumulateScaledDampingMatrix(-1, &D);
+  const VectorX<double>& dv_tmp =
+      Eigen::Map<const VectorX<double>>(dv.data(), dv.size());
+  VectorX<double> df_direct_tmp = D * dv_tmp;
+  df_direct = Eigen::Map<Matrix3X<double>>(df_direct_tmp.data(), 3,
+                                           df_direct_tmp.size() / 3);
+  double scale = std::max(1.0, df_direct.norm() + df_matrix_free.norm());
+  EXPECT_NEAR((df_direct - df_matrix_free).norm(), 0.0,
+              scale * std::numeric_limits<double>::epsilon());
 }
 }  // namespace
 }  // namespace fem
