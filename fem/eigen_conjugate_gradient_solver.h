@@ -41,26 +41,27 @@ class MassPreconditioner {
   template <typename MatType>
   MassPreconditioner& compute(const MatType& mat) {
     inv_mass_.resize(mat.cols());
-    if (mat.is_matrix_free()) {
-        const drake::VectorX<T> &mass = mat.get_objective().get_mass();
-        for (int i = 0; i < static_cast<int>(mass.size()); ++i) {
-            T one_over_mass =
-                    (mass(i) == static_cast<T>(0)) ? 1.0 : (static_cast<T>(1) / mass(i));
-            for (int d = 0; d < 3; ++d) {
-                inv_mass_(3 * i + d) = one_over_mass;
-            }
+    // if (mat.is_matrix_free()) {
+    if (1) {
+      const drake::VectorX<T>& mass = mat.get_objective().get_mass();
+      for (int i = 0; i < static_cast<int>(mass.size()); ++i) {
+        T one_over_mass = (mass(i) == static_cast<T>(0))
+                              ? 1.0
+                              : (static_cast<T>(1) / mass(i));
+        for (int d = 0; d < 3; ++d) {
+          inv_mass_(3 * i + d) = one_over_mass;
         }
-    }
-    else {
-        const auto& matrix = mat.get_matrix();
-        for (int j = 0; j < matrix.outerSize(); ++j) {
-            typename MatType::InnerIterator it(matrix, j);
-            while (it && it.index() != j) ++it;
-            if (it && it.index() == j && it.value() != Scalar(0))
-                inv_mass_(j) = Scalar(1) / it.value();
-            else
-                inv_mass_(j) = Scalar(1);
-        }
+      }
+    } else {
+      const auto& matrix = mat.get_matrix();
+      for (int j = 0; j < matrix.outerSize(); ++j) {
+        typename MatType::InnerIterator it(matrix, j);
+        while (it && it.index() != j) ++it;
+        if (it && it.index() == j && it.value() != Scalar(0))
+          inv_mass_(j) = Scalar(1) / it.value();
+        else
+          inv_mass_(j) = Scalar(1);
+      }
     }
     initialized_ = true;
     return *this;
@@ -101,7 +102,9 @@ class EigenConjugateGradientSolver : public LinearSystemSolver<T> {
 
   explicit EigenConjugateGradientSolver(
       const BackwardEulerObjective<T>& objective)
-      : matrix_(objective, false) {}
+      : matrix_(objective, false) {
+    cg_.setTolerance(1e-3);
+  }
 
   virtual ~EigenConjugateGradientSolver() {}
 
@@ -116,8 +119,6 @@ class EigenConjugateGradientSolver : public LinearSystemSolver<T> {
   virtual void SetUp() {
     matrix_.Reinitialize();
     matrix_.BuildMatrix();
-    cg_.setTolerance(cg_tolerance_);
-    cg_.setMaxIterations(matrix_.cols());
     cg_.compute(matrix_);
   }
 
@@ -127,16 +128,21 @@ class EigenConjugateGradientSolver : public LinearSystemSolver<T> {
     matrix_.set_matrix_free(matrix_free);
   }
 
-  T get_tolerance() const { return cg_tolerance_; }
+  void get_max_iterations() const { cg_.maxIterations(); }
 
-  void set_tolerance(T tol) { cg_tolerance_ = tol; }
+  void set_max_iterations(int max_iterations) {
+    cg_.setMaxIterations(max_iterations);
+  }
+
+  T get_tolerance() const { return cg_.tolerance(); }
+
+  void set_tolerance(T tol) { cg_.setTolerance(tol); }
 
  private:
   EigenSparseMatrix<T> matrix_;
   Eigen::ConjugateGradient<EigenSparseMatrix<T>, Eigen::Lower | Eigen::Upper,
                            Eigen::MassPreconditioner<T>>
       cg_;
-  T cg_tolerance_{1e-3};
 };
 }  // namespace fem
 }  // namespace drake

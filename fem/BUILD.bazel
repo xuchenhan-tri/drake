@@ -317,4 +317,15 @@ drake_cc_googletest(
     ],
 )
 
+drake_cc_googletest(
+    name = "eigen_conjugate_gradient_solver_test",
+    deps = [
+        ":backward_euler_objective",
+        ":eigen_conjugate_gradient_solver",
+        ":fem_data",
+        ":fem_force",
+        ":mesh_utility",
+    ],
+)
+
 add_lint_tests()
