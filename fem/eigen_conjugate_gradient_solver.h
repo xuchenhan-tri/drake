@@ -134,9 +134,9 @@ class EigenConjugateGradientSolver : public LinearSystemSolver<T> {
     cg_.setMaxIterations(max_iterations);
   }
 
-  T get_tolerance() const { return cg_.tolerance(); }
+  T get_accuracy() const { return cg_.tolerance(); }
 
-  void set_tolerance(T tol) { cg_.setTolerance(tol); }
+  void set_accuracy(T tol) { cg_.setTolerance(tol); }
 
  private:
   EigenSparseMatrix<T> matrix_;

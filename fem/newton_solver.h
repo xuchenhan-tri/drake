@@ -1,6 +1,6 @@
 #pragma once
 
-#include "drake/common/default_scalars.h"
+// #include "drake/common/default_scalars.h"
 #include "drake/common/eigen_types.h"
 #include "drake/fem/backward_euler_objective.h"
 #include "drake/fem/eigen_conjugate_gradient_solver.h"
@@ -59,6 +59,12 @@ class NewtonSolver {
 
   void set_max_iterations(int max_iterations) {
     max_iterations_ = max_iterations;
+  }
+
+  T linear_solver_accuracy() const { return linear_solver_.get_accuracy(); }
+
+  void set_linear_solver_accuracy(T tolerance) {
+    linear_solver_.set_accuracy(tolerance);
   }
 
   // TODO(xuchenhan-tri): a nice doc about what this tolerance measures.

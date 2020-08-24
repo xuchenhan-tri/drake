@@ -1,7 +1,5 @@
 #include "drake/fem/eigen_conjugate_gradient_solver.h"
 
-#include <cmath>
-#include <functional>
 #include <limits>
 #include <memory>
 
