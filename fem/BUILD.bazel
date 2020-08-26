@@ -287,6 +287,61 @@ drake_cc_library(
         ],
 )
 
+drake_cc_library(
+    name = "analytic_level_set",
+    srcs =
+        [
+            "analytic_level_set.cc",
+        ],
+    hdrs =
+        [
+            "analytic_level_set.h",
+        ],
+    deps =
+        [
+            "//common:default_scalars",
+            "//common:essential",
+        ],
+)
+
+drake_cc_library(
+    name = "half_space",
+    srcs =
+        [
+            "half_space.cc",
+        ],
+    hdrs =
+        [
+            "half_space.h",
+        ],
+    deps =
+        [
+            ":analytic_level_set",
+            "//common:default_scalars",
+            "//common:essential",
+            "//common:unused",
+        ],
+)
+
+drake_cc_library(
+    name = "collision_object",
+    srcs =
+        [
+            "collision_object.cc",
+        ],
+    hdrs =
+        [
+            "collision_object.h",
+        ],
+    deps =
+        [
+            ":analytic_level_set",
+            "//common:default_scalars",
+            "//common:essential",
+            "//math:geometric_transform",
+        ],
+)
+
 drake_cc_binary(
     name = "run_pancake",
     srcs =
@@ -336,6 +391,21 @@ drake_cc_googletest(
         ":fem_force",
         ":mesh_utility",
         ":newton_solver",
+    ],
+)
+
+drake_cc_googletest(
+    name = "half_space_test",
+    deps = [
+        ":half_space",
+    ],
+)
+
+drake_cc_googletest(
+    name = "collision_object_test",
+    deps = [
+        ":collision_object",
+        ":half_space",
     ],
 )
 
