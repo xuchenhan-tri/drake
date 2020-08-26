@@ -12,6 +12,7 @@
 #include "drake/fem/fem_force.h"
 #include "drake/fem/fem_system.h"
 #include "drake/fem/newton_solver.h"
+#include "drake/fem/contact_jacobian.h"
 
 namespace drake {
 namespace fem {
@@ -25,7 +26,8 @@ class FemSolver {
       : data_(dt),
         force_(data_.get_elements()),
         objective_(&data_, &force_),
-        newton_solver_(&objective_) {}
+        newton_solver_(&objective_),
+        contact_jacobian_(data_.get_q(), data_.get_collision_objects()){}
   /**
    The internal main loop for the FEM simulation that calls NewtonSolver to
    calculate the discrete velocity change. Update the position and velocity
@@ -140,6 +142,7 @@ class FemSolver {
   FemForce<T> force_;
   BackwardEulerObjective<T> objective_;
   NewtonSolver<T> newton_solver_;
+  ContactJacobian<T> contact_jacobian_;
 };
 
 }  // namespace fem

@@ -26,6 +26,8 @@ drake_cc_library(
     deps =
         [
             ":backward_euler_objective",
+            ":collision_object",
+            ":contact_jacobian",
             ":fem_data",
             ":fem_element",
             ":fem_force",
@@ -95,6 +97,7 @@ drake_cc_library(
         ],
     deps =
         [
+            ":collision_object",
             ":corotated_linear_model",
             ":fem_element",
             "//common:essential",
@@ -342,6 +345,19 @@ drake_cc_library(
         ],
 )
 
+drake_cc_library(
+    name = "contact_jacobian",
+    hdrs =
+        [
+            "contact_jacobian.h",
+        ],
+    deps =
+        [
+            ":collision_object",
+            "//common:essential",
+        ],
+)
+
 drake_cc_binary(
     name = "run_pancake",
     srcs =
@@ -405,6 +421,15 @@ drake_cc_googletest(
     name = "collision_object_test",
     deps = [
         ":collision_object",
+        ":half_space",
+    ],
+)
+
+drake_cc_googletest(
+    name = "contact_jacobian_test",
+    deps = [
+        ":collision_object",
+        ":contact_jacobian",
         ":half_space",
     ],
 )

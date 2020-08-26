@@ -1,8 +1,10 @@
 #pragma once
 
 #include <vector>
+#include <memory>
 
 #include "drake/common/eigen_types.h"
+#include "drake/fem/collision_object.h"
 #include "drake/fem/constitutive_model.h"
 #include "drake/fem/corotated_linear_model.h"
 #include "drake/fem/fem_config.h"
@@ -154,6 +156,18 @@ class FemData {
   int get_num_elements() const { return elements_.size(); }
   int get_num_position_dofs() const { return q_.size(); }
 
+  void add_collision_object(std::unique_ptr<CollisionObject<T>> object) {
+    collision_objects_.push_back(std::move(object));
+  }
+  const std::vector<std::unique_ptr<CollisionObject<T>>>&
+  get_collision_objects() const {
+    return collision_objects_;
+  }
+  std::vector<std::unique_ptr<CollisionObject<T>>>&
+  get_mutable_collision_objects() {
+    return collision_objects_;
+  }
+
  private:
   T dt_;
   std::vector<FemElement<T>> elements_;
@@ -183,6 +197,7 @@ class FemData {
   int num_objects_{0};
   int num_vertices_{0};
   int num_elements_{0};
+  std::vector<std::unique_ptr<CollisionObject<T>>> collision_objects_;
   double time_{0.0};
 };
 
