@@ -46,13 +46,7 @@ class CollisionObject {
   T Query(const Vector3<T>& x, Vector3<T>* normal) const {
     // Transform the point to material coordinate.
     const Vector3<T> X = inverse_transform_ * x;
-    std::cout << "Material space X = " << X << std::endl;
-      std::cout << "translation = " << transform_.translation() << std::endl;
-      std::cout << "rotation = " << transform_.rotation().matrix() << std::endl;
-      std::cout << "inverse_translation = " << inverse_transform_.translation() << std::endl;
-      std::cout << "inverse_rotation = " << inverse_transform_.rotation().matrix() << std::endl;
     T signed_distance = ls_->Query(X, normal);
-//      std::cout << "Material normal = " << *normal << std::endl;
     // Transform the normal to world space.
     *normal = transform_.rotation() * (*normal);
     return signed_distance;
