@@ -5,7 +5,7 @@
 
 #include "drake/common/eigen_types.h"
 #include "drake/fem/collision_object.h"
-#include "drake/fem/constitutive_model.h"
+#include "drake/fem/hyperelastic_constitutive_model.h"
 #include "drake/fem/corotated_linear_model.h"
 #include "drake/fem/fem_config.h"
 #include "drake/fem/fem_element.h"

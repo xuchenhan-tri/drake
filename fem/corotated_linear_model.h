@@ -3,7 +3,7 @@
 #include <memory>
 
 #include "drake/common/eigen_types.h"
-#include "drake/fem/constitutive_model.h"
+#include "drake/fem/hyperelastic_constitutive_model.h"
 
 namespace drake {
 namespace fem {
@@ -20,7 +20,6 @@ class CorotatedLinearElasticity final : public HyperelasticConstitutiveModel<T> 
         F_(Matrix3<T>::Identity()),
         strain_(Matrix3<T>::Identity()),
         trace_strain_(0.0) {
-    SetLameParameters(E_, nu_);
     Matrix4<T> P;
     P.template topLeftCorner<3, 4>() = vertex_positions;
     P.template bottomRows<1>() = Vector4<T>::Ones();
