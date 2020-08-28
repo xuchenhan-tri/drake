@@ -69,6 +69,10 @@ class FemSystem final : public systems::LeafSystem<T> {
     object_added_ = true;
   }
 
+  void AddCollisionObject(std::unique_ptr<CollisionObject<T>> object) {
+      solver_.AddCollisionObject(std::move(object));
+  }
+
   void AdvanceOneTimeStep(const systems::Context<T>& context,
                           systems::DiscreteValues<T>* next_states) const {
     const VectorX<T>& positions =

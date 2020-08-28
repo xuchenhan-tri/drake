@@ -12,6 +12,10 @@ load(
 )
 load("//tools/lint:lint.bzl", "add_lint_tests")
 
+package(
+    default_visibility = ["//visibility:public"],
+)
+
 drake_cc_library(
     name = "fem_solver",
     srcs =
@@ -33,6 +37,11 @@ drake_cc_library(
             ":fem_force",
             ":newton_solver",
             "//common:essential",
+            "//multibody/solvers:inverse_operator",
+            "//multibody/solvers:pgs_solver",
+            "//multibody/solvers:point_contact_data",
+            "//multibody/solvers:sparse_linear_operator",
+            "//multibody/solvers:system_dynamics_data",
         ],
 )
 
@@ -195,25 +204,25 @@ drake_cc_library(
         ],
     deps =
         [
-            ":constitutive_model",
+            ":hyperelastic_constitutive_model",
             "//common:essential",
         ],
 )
 
 drake_cc_library(
-    name = "constitutive_model",
+    name = "hyperelastic_constitutive_model",
     srcs =
         [
-            "constitutive_model.cc",
+            "hyperelastic_constitutive_model.cc",
         ],
     hdrs =
         [
-            "constitutive_model.h",
+            "hyperelastic_constitutive_model.h",
         ],
     deps =
         [
             "//common:essential",
-            "//common:unused",
+            "//common:nice_type_name",
         ],
 )
 
@@ -229,7 +238,7 @@ drake_cc_library(
         ],
     deps =
         [
-            ":constitutive_model",
+            ":hyperelastic_constitutive_model",
             "//common:essential",
         ],
 )
@@ -355,6 +364,7 @@ drake_cc_library(
         [
             ":collision_object",
             "//common:essential",
+            "//math:orthonormal_basis",
         ],
 )
 
@@ -369,8 +379,10 @@ drake_cc_binary(
     ],
     deps =
         [
+            ":collision_object",
             ":deformable_visualizer",
             ":fem_system",
+            ":half_space",
             ":obj_writer",
             "//common:add_text_logging_gflags",
             "//common:find_resource",
@@ -431,6 +443,15 @@ drake_cc_googletest(
         ":collision_object",
         ":contact_jacobian",
         ":half_space",
+    ],
+)
+
+drake_cc_googletest(
+    name = "hyperelastic_constitutive_model_test",
+    deps = [
+        ":hyperelastic_constitutive_model",
+        "//common/test_utilities:eigen_geometry_compare",
+        "//common/test_utilities:expect_throws_message",
     ],
 )
 

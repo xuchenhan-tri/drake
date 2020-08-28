@@ -67,7 +67,7 @@ class FemElement {
 
   const Matrix3<T>& get_F() const { return F_; }
 
-  const ConstitutiveModel<T>* get_constitutive_model() const {
+  const HyperelasticConstitutiveModel<T>* get_constitutive_model() const {
     return constitutive_model_.get();
   }
 

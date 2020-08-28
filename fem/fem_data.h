@@ -191,7 +191,8 @@ class FemData {
   // Time n+1 velocity - Time n velocity.
   Matrix3X<T> dv_;
   VectorX<T> mass_;
-  Vector3<T> gravity_{0, 0, -9.81};
+//  Vector3<T> gravity_{0, 0, -9.81};
+    Vector3<T> gravity_{0, -9.81, 0};
   // Velocity boundary conditions.
   std::vector<BoundaryCondition<T>> v_bc_;
   int num_objects_{0};

@@ -16,6 +16,9 @@ class LinearSystemSolver {
 
   /** Set up the equation A*x = rhs. */
   virtual void SetUp() = 0;
+
+  virtual int rows() const = 0;
+  virtual int cols() const = 0;
 };
 }  // namespace fem
 }  // namespace drake

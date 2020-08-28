@@ -72,6 +72,8 @@ class NewtonSolver {
 
   void set_tolerance(T tolerance) { tolerance_ = tolerance; }
 
+  EigenConjugateGradientSolver<T>& get_linear_solver() { return linear_solver_; }
+
  private:
   BackwardEulerObjective<T>& objective_;
   EigenConjugateGradientSolver<T> linear_solver_;
