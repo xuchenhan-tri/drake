@@ -5,6 +5,7 @@
 
 #include "drake/common/eigen_types.h"
 #include "drake/fem/collision_object.h"
+#include "drake/math/orthonormal_basis.h"
 
 namespace drake {
 namespace fem {
@@ -23,14 +24,13 @@ class ContactJacobian {
   // nc contact points and, v is the vector that concatenates the 3D velocities
   // of all nv vertices in the mesh, then the contact Jacobian Jc is defined
   // such that vc = Jc⋅v. Jc is of size 3nc x 3nv.
-  void QueryContact(Eigen::SparseMatrix<T>* jacobian, Matrix3X<T>* normals,
+  void QueryContact(Eigen::SparseMatrix<T>* jacobian,
                     VectorX<T>* penetration_depth) {
     CalcContact();
     DRAKE_DEMAND(3 * nc_ == jacobian_.rows());
     DRAKE_DEMAND(nc_ == normals_.cols());
     DRAKE_DEMAND(nc_ == penetration_depth_.size());
     *jacobian = jacobian_;
-    *normals = normals_;
     *penetration_depth = penetration_depth_;
   }
 
@@ -62,9 +62,12 @@ class ContactJacobian {
         if (signed_distance <= 0.0) {
           normals.push_back(normal);
           penetration_depth.push_back(signed_distance);
-          triplets.emplace_back(3 * nc_, 3 * i, 1.0);
-          triplets.emplace_back(3 * nc_ + 1, 3 * i + 1, 1.0);
-          triplets.emplace_back(3 * nc_ + 2, 3 * i + 2, 1.0);
+          Matrix3<T> R_LW = drake::math::ComputeBasisFromAxis(2, normal).transpose();
+          for (int k = 0; k < 3; ++k){
+              for (int l = 0; l < 3; ++l) {
+                  triplets.emplace_back(3 * nc_ + k, 3 * i + l, R_LW(k,l));
+              }
+          }
           ++nc_;
         }
       }

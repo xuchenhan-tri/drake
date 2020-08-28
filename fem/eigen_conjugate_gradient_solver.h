@@ -112,7 +112,7 @@ class EigenConjugateGradientSolver : public LinearSystemSolver<T> {
   virtual void Solve(const Eigen::Ref<const VectorX<T>>& rhs,
                      EigenPtr<VectorX<T>> x) {
     *x = cg_.solve(rhs);
-    std::cout << "CG iterations = " << cg_.iterations() << std::endl;
+//    std::cout << "CG iterations = " << cg_.iterations() << std::endl;
   }
 
   /** Set up the equation A*x = rhs. */
@@ -133,6 +133,9 @@ class EigenConjugateGradientSolver : public LinearSystemSolver<T> {
   void set_max_iterations(int max_iterations) {
     cg_.setMaxIterations(max_iterations);
   }
+
+  int rows() const { return matrix_.rows(); }
+  int cols() const { return matrix_.cols(); }
 
   T get_accuracy() const { return cg_.tolerance(); }
 
