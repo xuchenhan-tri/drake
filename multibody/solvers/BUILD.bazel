@@ -10,7 +10,7 @@ load(
 load("//tools/lint:lint.bzl", "add_lint_tests")
 
 package(
-    default_visibility = ["//visibility:private"],
+    default_visibility = ["//visibility:public"],
 )
 
 # The purpose of default_visibility to be private is to be able to develop this
@@ -19,7 +19,7 @@ package(
 # developers working on contact solvers.
 drake_cc_package_library(
     name = "solvers",
-    visibility = ["//visibility:private"],
+    visibility = ["//visibility:public"],
     deps = [
         ":linear_operator",
         ":sparse_linear_operator",
@@ -47,6 +47,87 @@ drake_cc_library(
     ],
 )
 
+drake_cc_library(
+    name = "inverse_operator",
+    srcs = ["inverse_operator.cc"],
+    hdrs = ["inverse_operator.h"],
+    deps = [
+        ":linear_operator",
+        "//common:default_scalars",
+        "//common:essential",
+        "//fem:linear_system_solver",
+    ],
+)
+
+drake_cc_library(
+    name = "contact_solver",
+    srcs = [],
+    hdrs = ["contact_solver.h"],
+    copts = [
+        "-Wno-error=unused-parameter",
+        "-Wno-error=unused-variable",
+    ],
+    deps = [
+        ":point_contact_data",
+        ":system_dynamics_data",
+        "//common:default_scalars",
+    ],
+)
+
+drake_cc_library(
+    name = "contact_solver_utils",
+    srcs = [],
+    hdrs = ["contact_solver_utils.h"],
+    deps = [
+        "//common:essential",
+    ],
+)
+
+drake_cc_library(
+    name = "pgs_solver",
+    srcs = ["pgs_solver.cc"],
+    hdrs = ["pgs_solver.h"],
+    copts = [
+        "-Wno-error=unused-parameter",
+        "-Wno-error=unused-variable",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":contact_solver",
+        ":contact_solver_utils",
+        ":point_contact_data",
+        ":system_dynamics_data",
+        "//common:default_scalars",
+    ],
+)
+
+drake_cc_library(
+    name = "system_dynamics_data",
+    srcs = ["system_dynamics_data.cc"],
+    hdrs = ["system_dynamics_data.h"],
+    copts = [
+        "-Wno-error=unused-parameter",
+        "-Wno-error=unused-variable",
+    ],
+    deps = [
+        ":linear_operator",
+        "//common:default_scalars",
+    ],
+)
+
+drake_cc_library(
+    name = "point_contact_data",
+    srcs = [],
+    hdrs = ["point_contact_data.h"],
+    copts = [
+        "-Wno-error=unused-parameter",
+        "-Wno-error=unused-variable",
+    ],
+    deps = [
+        "//common:default_scalars",
+    ],
+)
+
 drake_cc_googletest(
     name = "linear_operator_test",
     deps = [
@@ -59,6 +140,16 @@ drake_cc_googletest(
     name = "sparse_linear_operator_test",
     deps = [
         ":sparse_linear_operator",
+    ],
+)
+
+drake_cc_googletest(
+    name = "pgs_test",
+    deps = [
+        ":pgs_solver",
+        ":point_contact_data",
+        ":sparse_linear_operator",
+        ":system_dynamics_data",
     ],
 )
 
