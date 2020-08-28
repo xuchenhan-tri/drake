@@ -5,7 +5,7 @@
 namespace drake {
 namespace fem {
 template <typename T>
-void CorotatedLinearElasticity<T>::UpdateDeformationBasedState(const Eigen::Ref<const Matrix3<T>>& F) {
+void CorotatedLinearElasticity<T>::DoUpdateDeformationBasedState(const Eigen::Ref<const Matrix3<T>>& F) {
   F_ = F;
   Matrix3<T> RtF = R_.transpose() * F_;
   strain_ = 0.5 * (RtF + RtF.transpose()) - Matrix3<T>::Identity();
@@ -13,7 +13,7 @@ void CorotatedLinearElasticity<T>::UpdateDeformationBasedState(const Eigen::Ref<
 }
 
     template <typename T>
-    void CorotatedLinearElasticity<T>::UpdateTimeNPositionBasedState(const Eigen::Ref<const Eigen::Matrix<T, 3, 4>>& q) {
+    void CorotatedLinearElasticity<T>::DoUpdatePositionBasedState(const Eigen::Ref<const Eigen::Matrix<T, 3, 4>>& q) {
         Matrix4<T> Q;
         Q.template topLeftCorner<3, 4>() = q;
         Q.template bottomRows<1>() = Vector4<T>::Ones();
@@ -26,9 +26,9 @@ void CorotatedLinearElasticity<T>::UpdateDeformationBasedState(const Eigen::Ref<
 // Energy density ϕ = μεᵢⱼεᵢⱼ + 0.5λtr(ε)², where ε is the corotated strain
 // measure 0.5*(RᵀF + FᵀR) - I.
 template <typename T>
-T CorotatedLinearElasticity<T>::CalcEnergyDensity() const {
-  return mu_ * strain_.squaredNorm() +
-         0.5 * lambda_ * trace_strain_ * trace_strain_;
+T CorotatedLinearElasticity<T>::DoCalcEnergyDensity() const {
+  return this->get_mu() * strain_.squaredNorm() +
+         0.5 * this->get_lambda() * trace_strain_ * trace_strain_;
 }
 
 // First Piola stress P is the derivative of energy density ϕ with respect
@@ -44,16 +44,18 @@ T CorotatedLinearElasticity<T>::CalcEnergyDensity() const {
 //     2μRε + λtr(ε)R.
 
 template <typename T>
-Matrix3<T> CorotatedLinearElasticity<T>::CalcFirstPiola() const {
-  Matrix3<T> P = 2.0 * mu_ * R_ * strain_ + lambda_ * trace_strain_ * R_;
+Matrix3<T> CorotatedLinearElasticity<T>::DoCalcFirstPiola() const {
+  Matrix3<T> P = 2.0 * this->get_mu() * R_ * strain_ + this->get_lambda() * trace_strain_ * R_;
   return P;
 }
 
 template <typename T>
-Matrix3<T> CorotatedLinearElasticity<T>::CalcFirstPiolaDifferential(
+Matrix3<T> CorotatedLinearElasticity<T>::DoCalcFirstPiolaDifferential(
     const Eigen::Ref<const Matrix3<T>>& dF) const {
-  Matrix3<T> dP = mu_ * dF + mu_ * R_ * dF.transpose() * R_ +
-                  lambda_ * (R_.array() * dF.array()).sum() * R_;
+    const T mu = this->get_mu();
+    const T lambda = this->get_lambda();
+  Matrix3<T> dP = mu * dF + mu * R_ * dF.transpose() * R_ +
+                  lambda * (R_.array() * dF.array()).sum() * R_;
   return dP;
 }
 
@@ -87,18 +89,20 @@ Matrix3<T> CorotatedLinearElasticity<T>::CalcFirstPiolaDifferential(
 */
 
 template <typename T>
-Eigen::Matrix<T, 9, 9> CorotatedLinearElasticity<T>::CalcFirstPiolaDerivative()
+Eigen::Matrix<T, 9, 9> CorotatedLinearElasticity<T>::DoCalcFirstPiolaDerivative()
     const {
+            const T mu = this->get_mu();
+            const T lambda = this->get_lambda();
   // Add in μ * δₐᵢδⱼᵦ.
-  Eigen::Matrix<T, 9, 9> dPdF = mu_ * Eigen::Matrix<T, 9, 9>::Identity();
+  Eigen::Matrix<T, 9, 9> dPdF = mu * Eigen::Matrix<T, 9, 9>::Identity();
   for (int i = 0; i < 3; ++i) {
     for (int j = 0; j < 3; ++j) {
       for (int alpha = 0; alpha < 3; ++alpha) {
         for (int beta = 0; beta < 3; ++beta) {
           // Add in  μ *  Rᵢᵦ Rₐⱼ +   λ * Rₐᵦ * Rᵢⱼ
           dPdF(3 * j + i, 3 * beta + alpha) +=
-              mu_ * R_(i, beta) * R_(alpha, j) +
-              lambda_ * R_(alpha, beta) * R_(i, j);
+              mu * R_(i, beta) * R_(alpha, j) +
+              lambda * R_(alpha, beta) * R_(i, j);
         }
       }
     }

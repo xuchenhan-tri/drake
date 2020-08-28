@@ -4,7 +4,7 @@
 #include <utility>
 
 #include "drake/common/eigen_types.h"
-#include "drake/fem/constitutive_model.h"
+#include "drake/fem/hyperelastic_constitutive_model.h"
 
 namespace drake {
 namespace fem {
@@ -14,7 +14,7 @@ class FemElement {
   // class.
  public:
   FemElement(const Vector4<int>& vertex_indices, const Matrix3X<T>& positions,
-             std::unique_ptr<ConstitutiveModel<T>> model, T density)
+             std::unique_ptr<HyperelasticConstitutiveModel<T>> model, T density)
       : vertex_indices_(vertex_indices),
         constitutive_model_(std::move(model)),
         F_(Matrix3<T>::Identity()),
@@ -37,13 +37,12 @@ class FemElement {
     constitutive_model_->UpdateDeformationBasedState(F_);
   }
 
-  void UpdateTimeNPositionBasedState(const Eigen::Ref<const Matrix3X<T>>& q_n)
-  {
-      Eigen::Matrix<T, 3, 4> local_qn;
-      for (int i = 0; i < 4; ++i) {
-          local_qn.col(i) = q_n.col(vertex_indices_[i]);
-      }
-      constitutive_model_->UpdateTimeNPositionBasedState(local_qn);
+  void UpdateTimeNPositionBasedState(const Eigen::Ref<const Matrix3X<T>>& q_n) {
+    Eigen::Matrix<T, 3, 4> local_qn;
+    for (int i = 0; i < 4; ++i) {
+      local_qn.col(i) = q_n.col(vertex_indices_[i]);
+    }
+    constitutive_model_->UpdatePositionBasedState(local_qn);
   }
 
   /** Given index = [i₀, i₁, i₂, i₃], calculates the shape matrix from linear
@@ -73,7 +72,7 @@ class FemElement {
 
  private:
   Vector4<int> vertex_indices_;
-  std::unique_ptr<ConstitutiveModel<T>> constitutive_model_;
+  std::unique_ptr<HyperelasticConstitutiveModel<T>> constitutive_model_;
   Matrix3<T> F_;
   Matrix3<T> Dm_inv_;
   T element_measure_;
