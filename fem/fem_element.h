@@ -4,6 +4,7 @@
 #include <utility>
 
 #include "drake/common/eigen_types.h"
+#include "drake/common/default_scalars.h"
 #include "drake/fem/hyperelastic_constitutive_model.h"
 
 namespace drake {
@@ -12,6 +13,9 @@ template <typename T>
 class FemElement {
   // TODO(xuchenhan-tri): delegate some functionality of this class to a Mesh
   // class.
+  // TODO(xuchenhan-tri): We only support linear tetrahedral elements for the
+  // moment. Consider supporting other element shapes as well as higher-order
+  // elements. class.
  public:
   FemElement(const Vector4<int>& vertex_indices, const Matrix3X<T>& positions,
              std::unique_ptr<HyperelasticConstitutiveModel<T>> model, T density)
@@ -22,11 +26,17 @@ class FemElement {
     Matrix3<T> Dm = CalcShapeMatrix(vertex_indices_, positions);
     T unit_simplex_volume = 1.0 / 6.0;
     element_measure_ = Dm.determinant() * unit_simplex_volume;
-    // Degenerate tetrahedron is not allowed.
+    // Degenerate tetrahedron in the initial configuration is not allowed.
     DRAKE_DEMAND(element_measure_ > 0);
     Eigen::HouseholderQR<Matrix3<T>> qr(Dm);
     Dm_inv_ = qr.solve(Matrix3<T>::Identity());
   }
+
+  // Allow move constructor and assignment, but disable copy constructor and assignment.
+  FemElement(const FemElement&) = delete;
+  FemElement(FemElement&&) = default;
+  FemElement& operator=(const FemElement&) = delete;
+  FemElement& operator=(FemElement&&) = default;
 
   /** Calculates the deformation gradient F of each element and update all
    states that depend on F.
@@ -37,6 +47,11 @@ class FemElement {
     constitutive_model_->UpdateDeformationBasedState(F_);
   }
 
+  /** Update states that explicitly depend on positions at the beginning of a
+   timestep.
+   @param[in] q_n  The positions of the vertices at the beginning of the time
+   step.
+   */
   void UpdateTimeNPositionBasedState(const Eigen::Ref<const Matrix3X<T>>& q_n) {
     Eigen::Matrix<T, 3, 4> local_qn;
     for (int i = 0; i < 4; ++i) {
@@ -81,3 +96,5 @@ class FemElement {
 
 }  // namespace fem
 }  // namespace drake
+DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_NONSYMBOLIC_SCALARS(
+        class ::drake::fem::FemElement)

@@ -5,11 +5,74 @@
 
 #include <Eigen/Sparse>
 
+#include "drake/common/default_scalars.h"
 #include "drake/common/eigen_types.h"
 #include "drake/fem/fem_element.h"
 
 namespace drake {
 namespace fem {
+/**
+FemForce calculates the elastic and damping forces from the constitutive models.
+
+Elastic Force:
+The elastic force comes from an energy E(q), and fₑ(q*) = -dE/dq(q*). The
+discrete energy E takes the form E(q) = ∑ₑ ϕ(Fₑ(q)) Vₑ. Differentiating
+        w.r.t. q, we get
+
+    fₑ(q) = -∑ₑ dϕ/dF * dF/dq * Vₑ = ∑ₑ P(F) * dF/dq * Vₑ.
+
+Notice that dF/dq is a third order tensor. Using Einstein notation for
+dimension indices, the above equation reads:
+
+    fₖ = ∑ₑ PᵢⱼdFᵢⱼ/dqₖ * Vₑ.
+
+Suppose the deformed shape function is q(ξ) and the undeformed shape
+        function is Q(ξ), such that
+
+    q(0,0,0) = q0, q(1,0,0) = q1, q(0,1,0) = q2, q(0,0,1) = q3,
+    Q(0,0,0) = Q0, Q(1,0,0) = Q1, Q(0,1,0) = q2, Q(0,0,1) = Q3.
+
+then qi = FQi+b for i=0,1,2,3.
+Let Ds(q) = [q1-q0;q2-q0;q3-q0] and Dm(Q) = [Q1-Q0;Q2-Q0;Q3-Q0], we have
+
+    Ds = FDm ==> Fᵢⱼ = DsᵢₗDmₗⱼ⁻¹.
+
+For p = 1,2,3:
+
+    dDsᵢₗ/dqpₖ = δᵢₚδₖₗ,
+
+        so,
+
+    dF/dqpₖ = δᵢₚδₖₗDmₗⱼ⁻¹ = δᵢₚDmₖⱼ⁻¹,
+
+so for p = 1,2,3, the force on p is
+
+    fₖ = ∑ₑ PᵢⱼδᵢₚDmₖⱼ⁻¹ * Vₑ = ∑ₑ PₚⱼDmⱼₖ⁻ᵀ * Vₑ.
+
+The force on p = 0 is the -1 times the sum of forces on p = 1,2,3 by force
+balance.
+
+Examining the equation, we see that we only need to calculate P as Dm⁻¹ and
+Vₑ are constants.
+
+Damping force:
+We use Rayleigh damping such that
+fd(q,v) = D*v where D = alpha * M + beta * K(q) and K(q) = d²E/dq².
+Using the fact that dF/dq * Vₑ is constant, we calculate
+
+    Kv = -dfₑ/dq * v = -dfₑ(v) = ∑ₑ dP(dF(v)) * dF/dq * Vₑ,
+
+        where dF(v) = dF/dq * v. For p = 1,2,3
+
+    dFᵢⱼ/dqpₖ vpₖ = δᵢₚδₖₗDmₗⱼ⁻¹ vpₖ= vₚₗDmₗⱼ⁻¹,
+
+A similar computation for p = 0 reveals
+
+    dF(v) = Ds(v)Dm⁻¹.
+
+The only unknown left is dP(dF) which is equal to dP/dF * dF. We delegate
+this computation to the constitutive model.
+ */
 template <typename T>
 class FemForce {
  public:
@@ -33,71 +96,18 @@ class FemForce {
     force_differential vector. */
   void AccumulateScaledElasticForceDifferential(
       T scale, const Eigen::Ref<const Matrix3X<T>>& dx,
-      EigenPtr<Matrix3X<T>> force_differential) const {
-    // Gradient of the shape function is constant for linear interpolation.
-    // TODO(xuchenhan-tri): support non-linear elements.
-    Eigen::Matrix<T, 3, 4> grad_shape;
-    grad_shape.col(0) = -Vector3<T>::Ones();
-    grad_shape.template topRightCorner<3, 3>() = Matrix3<T>::Identity();
-    for (const FemElement<T>& e : elements_) {
-      Matrix3<T> dF = e.CalcShapeMatrix(e.get_indices(), dx) * e.get_Dm_inv();
-      const Matrix3<T>& dP =
-          e.get_constitutive_model()->CalcFirstPiolaDifferential(dF);
-      Eigen::Matrix<T, 3, 4> element_force_differential =
-          scale * e.get_element_measure() * dP * e.get_Dm_inv().transpose() *
-          grad_shape;
-      const Vector4<int>& indices = e.get_indices();
-      for (int i = 0; i < static_cast<int>(indices.size()); ++i) {
-        force_differential->col(indices[i]) -=
-            element_force_differential.col(i);
-      }
-    }
-  }
+      EigenPtr<Matrix3X<T>> force_differential) const;
 
   /** Called by BackwardEulerObjective::Multiply. Calculates the D*dx where D =
-alpha * M + beta * K is the damping matrix, scale the result by scale, and
-then add it to the force_differential vector. */
+      alpha * M + beta * K is the damping matrix, scale the result by scale, and
+      then add it to the force_differential vector. */
   void AccumulateScaledDampingForceDifferential(
       T scale, const Eigen::Ref<const Matrix3X<T>>& dx,
-      EigenPtr<Matrix3X<T>> force_differential) const {
-    Eigen::Matrix<T, 3, 4> grad_shape;
-    grad_shape.col(0) = -Vector3<T>::Ones();
-    grad_shape.template topRightCorner<3, 3>() = Matrix3<T>::Identity();
-    for (const FemElement<T>& e : elements_) {
-      const Vector4<int>& indices = e.get_indices();
-      const Matrix3<T>& Dm_inv = e.get_Dm_inv();
-      const T& volume = e.get_element_measure();
-      const T& density = e.get_density();
-      const auto* model = e.get_constitutive_model();
-      const T fraction = 1.0 / static_cast<T>(indices.size());
-      Matrix3<T> dF = e.CalcShapeMatrix(indices, dx) * Dm_inv;
-      const Matrix3<T>& dP =
-          model->CalcFirstPiolaDifferential(dF) * model->get_beta();
-      Eigen::Matrix<T, 3, 4> negative_element_force_differential =
-          scale * volume * dP * Dm_inv.transpose() * grad_shape;
-      for (int i = 0; i < static_cast<int>(indices.size()); ++i) {
-        // Stiffness terms.
-        force_differential->col(indices[i]) -=
-            negative_element_force_differential.col(i);
-        // Mass terms.
-        force_differential->col(indices[i]) -= scale * volume * density *
-                                               fraction * model->get_alpha() *
-                                               dx.col(indices[i]);
-      }
-    }
-  }
+      EigenPtr<Matrix3X<T>> force_differential) const;
 
   /** Returns the total elastic energy stored in the elements. */
-  T CalcElasticEnergy() const {
-    T elastic_energy = 0;
-    for (const FemElement<T>& e : elements_) {
-      const T& volume = e.get_element_measure();
-      const auto* model = e.get_constitutive_model();
-      T energy_density = model->CalcEnergyDensity();
-      elastic_energy += volume * energy_density;
-    }
-    return elastic_energy;
-  }
+  T CalcElasticEnergy() const;
+
   /** Called by BackwardEulerObjective::BuildJacobian. Calculates K where K is
     the stiffness matrix, scale it by scale, and then add it to the
   stiffness_matrix. */
@@ -110,30 +120,13 @@ then add it to the force_differential vector. */
   void AccumulateScaledDampingMatrix(
       T scale, Eigen::SparseMatrix<T>* damping_matrix) const;
 
+  /** Set the nonzero entries contributed by the damping and stiffness matrix.
+   */
   void SetSparsityPattern(
-      std::vector<Eigen::Triplet<T>>* non_zero_entries) const {
-    // Extend the number of nonzero entries.
-    // Each element has 4 vertices, which gives 4x4 nonzero blocks and each
-    // block is of size 3x3. There will be redundancies in the allocation which
-    // the caller will compress away.
-    non_zero_entries->reserve(non_zero_entries->size() +
-                              elements_.size() * 4 * 4 * 3 * 3);
-    for (const auto& e : elements_) {
-      const auto& indices = e.get_indices();
-      for (int i = 0; i < indices.size(); ++i) {
-        for (int k = 0; k < 3; ++k) {
-          int row_index = 3 * i + k;
-          for (int j = 0; j < indices.size(); ++j) {
-            for (int l = 0; l < 3; ++l) {
-              int col_index = 3 * j + l;
-              non_zero_entries->emplace_back(row_index, col_index, 0);
-            }
-          }
-        }
-      }
-    }
-  }
+      std::vector<Eigen::Triplet<T>>* non_zero_entries) const;
 
+  // TODO(xuchenhan-tri): The following two methods don't really belong to
+  // FemForce. Think of a better place to put them.
   /** Performs a contraction between a 4th order tensor A and two vectors u and
      v and returns a matrix B. In Einstein notation, the contraction is:
          Bᵢₐ = uⱼ Aᵢⱼₐᵦ vᵦ.
@@ -185,3 +178,5 @@ then add it to the force_differential vector. */
 };
 }  // namespace fem
 }  // namespace drake
+DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_NONSYMBOLIC_SCALARS(
+    class ::drake::fem::FemForce)

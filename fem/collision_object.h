@@ -12,11 +12,11 @@ namespace fem {
 template <typename T>
 class CollisionObject {
  public:
-  // Allow move constructor, but disable copy constructor and assignments.
+  // Allow move constructor and assignment, but disable copy constructor and assignment.
   CollisionObject(const CollisionObject&) = delete;
   CollisionObject(CollisionObject&&) = default;
   CollisionObject& operator=(const CollisionObject&) = delete;
-  CollisionObject& operator=(CollisionObject&&) = delete;
+  CollisionObject& operator=(CollisionObject&&) = default;
 
   explicit CollisionObject(std::unique_ptr<AnalyticLevelSet<T>> ls)
       : ls_(std::move(ls)), update_(nullptr) {

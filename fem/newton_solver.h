@@ -1,6 +1,6 @@
 #pragma once
 
-// #include "drake/common/default_scalars.h"
+#include "drake/common/default_scalars.h"
 #include "drake/common/eigen_types.h"
 #include "drake/fem/backward_euler_objective.h"
 #include "drake/fem/eigen_conjugate_gradient_solver.h"
@@ -27,29 +27,13 @@ class NewtonSolver {
 
   explicit NewtonSolver(BackwardEulerObjective<T>* objective)
       : objective_(*objective), linear_solver_(*objective) {}
+
   /** Takes in an initial guess for the solution and overwrites it with the
       actual solution. */
-  NewtonSolverStatus Solve(EigenPtr<VectorX<T>> x) {
-    dx_.resizeLike(*x);
-    residual_.resizeLike(*x);
-    UpdateAndEvalResidual(*x);
-    for (int i = 0; i < max_iterations_; ++i) {
-      std::cout << "Newton iteration: " << i + 1 << std::endl;
-      linear_solver_.SetUp();
-      linear_solver_.Solve(residual_, &dx_);
-      *x += dx_;
-      if (UpdateAndEvalResidual(*x)) return NewtonSolverStatus::Success;
-    }
-    return NewtonSolverStatus::NoConvergence;
-  }
+  NewtonSolverStatus Solve(EigenPtr<VectorX<T>> x);
 
-  bool UpdateAndEvalResidual(const Eigen::Ref<const VectorX<T>>& x) {
-    objective_.Update(x);
-    objective_.CalcResidual(&residual_);
-    // Make sure there is no NAN in the residual.
-    DRAKE_DEMAND(residual_ == residual_);
-    return norm(residual_) < tolerance_;
-  }
+  /** Updates the `x`-dependent states and evaluates the residual -G(x). */
+  bool UpdateAndEvalResidual(const Eigen::Ref<const VectorX<T>>& x);
 
   /** The norm calculation is delegated to the objective to support customized
    * norms. */
@@ -88,3 +72,5 @@ class NewtonSolver {
 
 }  // namespace fem
 }  // namespace drake
+DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_NONSYMBOLIC_SCALARS(
+        class ::drake::fem::NewtonSolver)

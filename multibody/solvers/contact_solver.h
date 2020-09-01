@@ -44,7 +44,7 @@ class ContactSolver {
 
   // TODO: return a more interesting generic success return code.
   // At this level either kFail or kSuccess, maybe kInvalidData.
-  virtual ContactSolverResult SolveWithGuess(double dt,
+  virtual ContactSolverResult SolveWithGuess(T dt,
                                              const VectorX<T>& v_guess) = 0;
 
   virtual const VectorX<T>& GetImpulses() const = 0;

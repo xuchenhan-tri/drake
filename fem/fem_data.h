@@ -1,17 +1,19 @@
 #pragma once
 
-#include <vector>
 #include <memory>
+#include <vector>
 
+#include "drake/common/default_scalars.h"
 #include "drake/common/eigen_types.h"
 #include "drake/fem/collision_object.h"
-#include "drake/fem/hyperelastic_constitutive_model.h"
 #include "drake/fem/corotated_linear_model.h"
 #include "drake/fem/fem_config.h"
 #include "drake/fem/fem_element.h"
+#include "drake/fem/hyperelastic_constitutive_model.h"
 
 namespace drake {
 namespace fem {
+    // TODO(xuchenhan-tri): We currently only support zero Dirichelet BC. Make it more general.
 template <typename T>
 struct BoundaryCondition {
   BoundaryCondition(int object_id_in,
@@ -22,81 +24,24 @@ struct BoundaryCondition {
   std::function<void(int, const Matrix3X<T>&, EigenPtr<Matrix3X<T>>)> bc;
 };
 
+/** A data class that holds FEM vertex states, elements and constants. */
 template <typename T>
 class FemData {
  public:
-  FemData(T dt) : dt_(dt) {}
+  FemData(double dt) : dt_(dt) {}
 
   int AddUndeformedObject(const std::vector<Vector4<int>>& indices,
                           const Matrix3X<T>& positions,
-                          const FemConfig& config) {
-    // Add new elements and record the element indices for this object.
-    std::vector<int> local_element_indices(indices.size());
-    Vector4<int> particle_offset{num_vertices_, num_vertices_, num_vertices_,
-                                 num_vertices_};
-    for (int i = 0; i < static_cast<int>(indices.size()); ++i) {
-      Matrix3X<T> local_positions(3, 4);
-      for (int j = 0; j < 4; ++j) {
-        local_positions.col(j) = positions.col(indices[i][j]);
-      }
-      mesh_.push_back(indices[i] + particle_offset);
-      // TODO(xuchenhan-tri): Support customized constitutive models.
-      elements_.emplace_back(
-          indices[i] + particle_offset, positions,
-          std::make_unique<CorotatedLinearElasticity<T>>(
-              config.youngs_modulus, config.poisson_ratio, config.mass_damping,
-              config.stiffness_damping, local_positions),
-          config.density);
-      local_element_indices[i] = num_elements_++;
-    }
-    element_indices_.push_back(local_element_indices);
-
-    // Record the vertex indices for this object.
-    std::vector<int> local_vertex_indices(positions.cols());
-    for (int i = 0; i < positions.cols(); ++i)
-      local_vertex_indices[i] = num_vertices_++;
-    vertex_indices_.push_back(local_vertex_indices);
-
-    // Allocate for positions and velocities.
-    Q_.conservativeResize(3, q_.cols() + positions.cols());
-    Q_.rightCols(positions.cols()) = positions;
-    q_.conservativeResize(3, q_.cols() + positions.cols());
-    q_.rightCols(positions.cols()) = positions;
-    v_.conservativeResize(3, v_.cols() + positions.cols());
-    v_.rightCols(positions.cols()).setZero();
-    dv_.resize(3, v_.cols());
-
-    // Set mass.
-    mass_.conservativeResize(mass_.size() + positions.cols());
-    const int object_id = num_objects_;
-    SetMassFromDensity(object_id, config.density);
-    return object_id;
-  }
+                          const FemConfig& config);
 
   /**
       Set the initial positions and velocities of a given object.
       @param[in] object_id     The id the object whose mass is being set.
       @param[in] density     Mass density of the object.
-      */
+  */
+  void SetMassFromDensity(const int object_id, const T density);
 
-  void SetMassFromDensity(const int object_id, const T density) {
-    const auto& vertex_range = vertex_indices_[object_id];
-    // Clear old mass values.
-    for (int i = 0; i < static_cast<int>(vertex_range.size()); ++i) {
-      mass_[vertex_range[i]] = 0;
-    }
-    // Add the mass contribution of each element.
-    const auto& element_range = element_indices_[object_id];
-    for (int i = 0; i < static_cast<int>(element_range.size()); ++i) {
-      const auto& element = elements_[i];
-      const Vector4<int>& local_indices = element.get_indices();
-      const T fraction = 1.0 / static_cast<T>(local_indices.size());
-      for (int j = 0; j < static_cast<int>(local_indices.size()); ++j) {
-        mass_[local_indices[j]] +=
-            density * element.get_element_measure() * fraction;
-      }
-    }
-  }
+  // Setters and getters.
 
   const VectorX<T>& get_mass() const { return mass_; }
   VectorX<T>& get_mutable_mass() { return mass_; }
@@ -122,11 +67,11 @@ class FemData {
   const std::vector<FemElement<T>>& get_elements() const { return elements_; }
   std::vector<FemElement<T>>& get_mutable_elements() { return elements_; }
 
-  T get_dt() const { return dt_; }
-  void set_dt(T dt) { dt_ = dt; }
+  double get_dt() const { return dt_; }
+  void set_dt(double dt) { dt_ = dt; }
 
-  T get_time() const { return time_; }
-  void set_time(T time) { time_ = time; }
+  double get_time() const { return time_; }
+  void set_time(double time) { time_ = time; }
 
   const Vector3<T>& get_gravity() const { return gravity_; }
 
@@ -169,7 +114,7 @@ class FemData {
   }
 
  private:
-  T dt_;
+  double dt_;
   std::vector<FemElement<T>> elements_;
   // vertex_indices_[i] gives the global vertex indices corresponding to object
   // i.
@@ -191,8 +136,7 @@ class FemData {
   // Time n+1 velocity - Time n velocity.
   Matrix3X<T> dv_;
   VectorX<T> mass_;
-//  Vector3<T> gravity_{0, 0, -9.81};
-    Vector3<T> gravity_{0, -9.81, 0};
+  Vector3<T> gravity_{0, 0, -9.81};
   // Velocity boundary conditions.
   std::vector<BoundaryCondition<T>> v_bc_;
   int num_objects_{0};
@@ -204,3 +148,5 @@ class FemData {
 
 }  // namespace fem
 }  // namespace drake
+DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_NONSYMBOLIC_SCALARS(
+        class ::drake::fem::FemData)

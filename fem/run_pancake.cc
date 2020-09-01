@@ -18,67 +18,57 @@
 #include "drake/systems/framework/diagram_builder.h"
 
 DEFINE_double(simulation_time, 10, "How long to simulate the system");
+DEFINE_bool(use_pancake, true,
+            "Whether to simulate a pancake geometry or a rectangular block.");
+DEFINE_bool(
+    use_drake_visualizer, true,
+    "Whether to visualize with Drake visualizer or save the frames to file.");
+DEFINE_double(E, 1e4, "Young's modulus of the deformable object.");
+DEFINE_double(nu, 0.35, "Poisson ratio of the deformable object");
+DEFINE_double(density, 1e3, "Mass density of the deformable object");
+DEFINE_double(alpha, 0.2, "Mass damping coefficient.");
+DEFINE_double(beta, 0.002, "Stiffness damping coefficient");
+
 namespace drake {
 namespace fem {
 
 int DoMain() {
   systems::DiagramBuilder<double> builder;
-  const double dt = 1.0 / 60.0;
+  const double dt = 1.0 / 250.0;
   auto* fem_system = builder.AddSystem<FemSystem<double>>(dt);
-
-  auto ground_ls = std::make_unique<HalfSpace<double>>(
-      Vector3<double>(0, -0.2, 0), Vector3<double>(0, 1, 0));
-  auto ground = std::make_unique<CollisionObject<double>>(std::move(ground_ls));
-    fem_system->AddCollisionObject(std::move(ground));
-//  auto pusher_ls = std::make_unique<HalfSpace<double>>(
-//      Vector3<double>(0, -0.06, 0), Vector3<double>(0, 1, 0));
-//  auto pusher_update = [](double time, CollisionObject<double>* cb) {
-//      double translation_velocity = 0.1;
-//      Vector3<double> translation(0, time * translation_velocity, 0);
-//      cb->set_translation(translation);
-//  };
-//    auto pusher = std::make_unique<CollisionObject<double>>(std::move(pusher_ls), pusher_update);
-//  fem_system->AddCollisionObject(std::move(pusher));
-
-  const double mesh_spacing = 0.005;
-  const int nx = 2;
-  const int ny = 2;
-  const int nz = 2;
   FemConfig config;
-  config.density = 1e3;
-  config.youngs_modulus = 5e3;
-  config.poisson_ratio = 0.45;
-  config.mass_damping = 0.0;
-  config.stiffness_damping = 0.0;
-//    config.density = 1e3;
-//    config.youngs_modulus = 1e4;
-//    config.poisson_ratio = 0.4;
-//    config.mass_damping = 4;
-//    config.stiffness_damping = 0.0;
-  auto velocity_transform = [](int vertex_index,
-                               EigenPtr<Matrix3X<double>> vel) {
-    vel->col(vertex_index).setZero();
-  };
-  auto bc = [](int index, const Matrix3X<double>& initial_pos,
-               EigenPtr<Matrix3X<double>> velocity) {
-    unused(index);
-    unused(initial_pos);
-    unused(velocity);
-    //    if (initial_pos.col(index).norm() <= 0.01) {
-    //      velocity->col(index).setZero();
-    //    }
-  };
-  bool use_vtk = true;
-  if (use_vtk) {
+  config.density = FLAGS_density;
+  config.youngs_modulus = FLAGS_E;
+  config.poisson_ratio = FLAGS_nu;
+  config.mass_damping = FLAGS_alpha;
+  config.stiffness_damping = FLAGS_beta;
+  if (FLAGS_use_pancake) {
     const char* kModelPath = "drake/fem/models/pancake.vtk";
     const std::string vtk = FindResourceOrThrow(kModelPath);
     auto position_transform =
-        []([[maybe_unused]] int vertex_index,
-           [[maybe_unused]] EigenPtr<Matrix3X<double>> pos) {};
-    fem_system->AddObjectFromVtkFile(vtk, config, position_transform,
-                                     velocity_transform, bc);
+        [](int vertex_index,
+           EigenPtr<Matrix3X<double>> pos) {
+        Vector3<double> q = pos->col(vertex_index);
+        double tmp_x = q(1);
+        q(1) = -q(2);
+        q(2) = tmp_x;
+        pos->col(vertex_index) = q;
+    };
+    fem_system->AddObjectFromVtkFile(vtk, config, position_transform);
+
+    // Make a ground at z = -0.2 to catch the pancake.
+    auto ground_ls = std::make_unique<HalfSpace<double>>(
+        Vector3<double>(0, 0, -0.2), Vector3<double>(0, 0, 1));
+    auto ground =
+        std::make_unique<CollisionObject<double>>(std::move(ground_ls));
+    fem_system->AddCollisionObject(std::move(ground));
 
   } else {
+      const double mesh_spacing = 0.005;
+      const int nx = 2;
+      const int ny = 2;
+      const int nz = 2;
+    // Move the center of the rectangular block to the origin.
     auto position_transform = [nx, ny, nz, mesh_spacing](
                                   int vertex_index,
                                   EigenPtr<Matrix3X<double>> pos) {
@@ -87,18 +77,26 @@ int DoMain() {
                           static_cast<double>(ny) / 2 * mesh_spacing,
                           static_cast<double>(nz) / 2 * mesh_spacing);
     };
+    // Fix the nodes whose initial positions are near the center of the block.
+    auto bc = [](int index, const Matrix3X<double>& initial_pos,
+                 EigenPtr<Matrix3X<double>> velocity) {
+      if (initial_pos.col(index).norm() <= 0.01) {
+        velocity->col(index).setZero();
+      }
+    };
+    // Make a simple rectangular block geometry.
     fem_system->AddRectangularBlock(nx, ny, nz, mesh_spacing, config,
-                                    position_transform, velocity_transform, bc);
+                                    position_transform, nullptr, bc);
   }
-#if 0
-  auto& visualizer = *builder.AddSystem<DeformableVisualizer>(
-      dt, "pancake", fem_system->get_indices());
-  builder.Connect(*fem_system, visualizer);
-#else
-  auto* obj_writer = builder.AddSystem<ObjWriter<double>>(*fem_system);
-  builder.Connect(fem_system->get_output_port(0),
-                  obj_writer->get_input_port(0));
-#endif
+  if (FLAGS_use_drake_visualizer) {
+    auto& visualizer = *builder.AddSystem<DeformableVisualizer>(
+        dt, "pancake", fem_system->get_indices());
+    builder.Connect(*fem_system, visualizer);
+  } else {
+    auto* obj_writer = builder.AddSystem<ObjWriter<double>>(*fem_system);
+    builder.Connect(fem_system->get_output_port(0),
+                    obj_writer->get_input_port(0));
+  }
   auto diagram = builder.Build();
   auto context = diagram->CreateDefaultContext();
   auto simulator =
@@ -108,7 +106,7 @@ int DoMain() {
   simulator->AdvanceTo(FLAGS_simulation_time);
   end = std::chrono::system_clock::now();
   std::chrono::duration<double> elapsed_seconds = end - start;
-  std::cout << "elapsed time: " << elapsed_seconds.count() << "s\n";
+  std::cout << "Total simulation time: " << elapsed_seconds.count() << "s\n";
   return 0;
 }
 
