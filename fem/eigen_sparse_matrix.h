@@ -2,6 +2,7 @@
 
 #include "drake/fem/backward_euler_objective.h"
 
+//TODO(xuchenhan-tri): Move implementaions to a .cc file.
 namespace drake {
 namespace fem {
 template <typename T>
@@ -11,7 +12,8 @@ class EigenSparseMatrix;
 
 namespace Eigen {
 namespace internal {
-    /* Minimum required trait for a custom sparse matrix to be used in a Eigen sparse iterative solver. */
+/* Minimum required trait for a custom sparse matrix to be used in a Eigen
+ * sparse iterative solver. */
 template <typename T>
 struct traits<drake::fem::EigenSparseMatrix<T>> {
   typedef T Scalar;
@@ -23,7 +25,7 @@ struct traits<drake::fem::EigenSparseMatrix<T>> {
     ColsAtCompileTime = Dynamic,
     MaxRowsAtCompileTime = Dynamic,
     MaxColsAtCompileTime = Dynamic,
-      Flags = 0
+    Flags = 0
   };
 };
 }  // namespace internal

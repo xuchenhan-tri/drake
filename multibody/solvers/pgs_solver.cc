@@ -17,7 +17,7 @@ void PgsSolver<T>::SetPointContactData(const PointContactData<T>* data) {
 }
 
 template <typename T>
-ContactSolverResult PgsSolver<T>::SolveWithGuess(double dt,
+ContactSolverResult PgsSolver<T>::SolveWithGuess(T dt,
                                                  const VectorX<T>& v_guess) {
   PreProcessData(dt);
   // Aliases to pre-processed (const) data.
@@ -31,7 +31,7 @@ ContactSolverResult PgsSolver<T>::SolveWithGuess(double dt,
 
   // Aliases to parameters.
   const int max_iters = parameters_.max_iterations;
-  const double omega = parameters_.relaxation;
+  const T omega = parameters_.relaxation;
 
   // Set initial guess.
   v = v_guess;
@@ -48,46 +48,37 @@ ContactSolverResult PgsSolver<T>::SolveWithGuess(double dt,
   vc_ = vc_star;  // Contact velocity at state_, intialized to when gamma = 0.
   VectorX<T> vc_kp(3 * num_contacts());  // Contact velocity at state_kp.
   for (int k = 0; k < max_iters; ++k) {
-    std::cout << "ITERATION " << k+1 << std::endl;
-    // N.B. This is more of a "Projected Jacobi" update since we are not using
-    // the already updated values. A small variation from PGS ok for testing
-    // purposes.
-    gamma_kp = gamma - omega * Dinv.asDiagonal() * vc_;
-//    std::cout << "Dinv = \n " << Dinv.transpose() << std::endl;
-//    std::cout << "vc = \n " << vc_.transpose() << std::endl;
-//    std::cout << "gamma = \n" << gamma.transpose() << std::endl;
-//    std::cout << "gamma_kp = \n" << gamma_kp.transpose() << std::endl;
-    ProjectAllImpulses(vc_, &gamma_kp);
-    // Update generalized velocities; v = v* + M⁻¹⋅Jᵀ⋅γ.
-    get_Jc().MultiplyByTranspose(gamma_kp, &tau_c_);  // tau_c = Jᵀ⋅γ
-//    std::cout << "tau_c = \n" << tau_c_.transpose() << std::endl;
-    get_Minv().Multiply(tau_c_, &v_kp);  // v_kp = M⁻¹⋅Jᵀ⋅γ
-//    std::cout << "v1 = " << v_kp.transpose() << std::endl;
-    v_kp += v_star;                      // v_kp = v* + M⁻¹⋅Jᵀ⋅γ
-//    std::cout << "v2 = " << v_kp.transpose() << std::endl;
-    // Update contact velocities; vc = J⋅v.
-    get_Jc().Multiply(v_kp, &vc_kp);
+      // N.B. This is more of a "Projected Jacobi" update since we are not using
+      // the already updated values. A small variation from PGS ok for testing
+      // purposes.
+      gamma_kp = gamma - omega * Dinv.asDiagonal() * vc_;
+      ProjectAllImpulses(vc_, &gamma_kp);
+      // Update generalized velocities; v = v* + M⁻¹⋅Jᵀ⋅γ.
+      get_Jc().MultiplyByTranspose(gamma_kp, &tau_c_);  // tau_c = Jᵀ⋅γ
+      get_Minv().Multiply(tau_c_, &v_kp);  // v_kp = M⁻¹⋅Jᵀ⋅γ
+      v_kp += v_star;                      // v_kp = v* + M⁻¹⋅Jᵀ⋅γ
+      // Update contact velocities; vc = J⋅v.
+      get_Jc().Multiply(v_kp, &vc_kp);
 
-    // Verify convergence.
-    const bool converged = VerifyConvergenceCriteria(
-        vc_, vc_kp, gamma, gamma_kp, &stats_.vc_err, &stats_.gamma_err);
-    stats_.iterations++;
-//    std::cout << "vc_err = " << std::endl;
-    std::cout << stats_.vc_err << std::endl;
+      // Verify convergence.
+      const bool converged = VerifyConvergenceCriteria(
+              vc_, vc_kp, gamma, gamma_kp, &stats_.vc_err, &stats_.gamma_err);
+      stats_.iterations++;
 
-    // Update state for the next iteration.
-    state_ = state_kp;
-    vc_ = vc_kp;
-//    std::cout << "vc = " << vc_.transpose() << std::endl;
-    if (converged) {
-      return ContactSolverResult::kSuccess;
-    }
+      // Update state for the next iteration.
+      state_ = state_kp;
+      vc_ = vc_kp;
+      if (converged) {
+          std::cout << "PGS iterations = " << k + 1 << std::endl;
+          return ContactSolverResult::kSuccess;
+      }
   }
-  return ContactSolverResult::kFailure;
+    std::cout << "PGS iterations = " << max_iters << std::endl;
+    return ContactSolverResult::kFailure;
 }
 
 template <typename T>
-void PgsSolver<T>::PreProcessData(double dt) {
+void PgsSolver<T>::PreProcessData(T dt) {
   const int nc = num_contacts();
   const int nv = num_velocities();
   state_.Resize(nv, nc);
@@ -107,7 +98,6 @@ void PgsSolver<T>::PreProcessData(double dt) {
 
     auto& N = pre_proc_data_.N;
     this->FormDelassusOperatorMatrix(get_Jc(), get_Minv(), get_Jc(), &N);
-//    PRINT_VARn(N);
 
     // Compute scaling factors, one per contact.
     auto& Nii_norm = pre_proc_data_.Nii_norm;
@@ -122,15 +112,12 @@ void PgsSolver<T>::PreProcessData(double dt) {
       Dinv.template segment<3>(3 * i).setConstant(1.0 / Nii_norm(i));
       Dinv.template segment<3>(3 * i) = Vector3<T>(tmp_inv(0,0), tmp_inv(1,1), tmp_inv(2,2));
     }
-//    PRINT_VAR(Nii_norm.transpose());
-
-//    PRINT_VAR(Dinv.transpose());
   }
 }
 template <typename T>
 bool PgsSolver<T>::VerifyConvergenceCriteria(
     const VectorX<T>& vc, const VectorX<T>& vc_kp, const VectorX<T>& gamma,
-    const VectorX<T>& gamma_kp, double* vc_err, double* gamma_err) const {
+    const VectorX<T>& gamma_kp, T* vc_err, T* gamma_err) const {
   using std::max;
   const auto& Nii_norm = pre_proc_data_.Nii_norm;
   bool converged = true;
@@ -193,8 +180,8 @@ Vector3<T> PgsSolver<T>::ProjectImpulse(
   using std::sqrt;
   // We use the absolute tolerance as a velocity scale to use in a velocity
   // soft norm.
-  const double v_eps = parameters_.abs_tolerance;
-  const double v_eps2 = v_eps * v_eps;
+  const T v_eps = parameters_.abs_tolerance;
+  const T v_eps2 = v_eps * v_eps;
   // Alias to tangential velocity.
   const auto vt = vc.template head<2>();
   // Compute a direction.
@@ -208,5 +195,5 @@ Vector3<T> PgsSolver<T>::ProjectImpulse(
 }  // namespace solvers
 }  // namespace multibody
 }  // namespace drake
-
-template class ::drake::multibody::solvers::PgsSolver<double>;
+DRAKE_DEFINE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_NONSYMBOLIC_SCALARS(
+        class ::drake::multibody::solvers::PgsSolver)

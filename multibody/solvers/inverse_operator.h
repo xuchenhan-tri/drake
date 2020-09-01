@@ -7,14 +7,12 @@
 #include "drake/common/eigen_types.h"
 #include "drake/fem/linear_system_solver.h"
 #include "drake/multibody/solvers/linear_operator.h"
+#include "drake/fem/eigen_conjugate_gradient_solver.h"
 
 namespace drake {
 namespace multibody {
 namespace solvers {
 
-/// A LinearOperator that wraps an existing Eigen::SparseMatrix.
-///
-/// @tparam_nonsymbolic_scalar
 template <typename T>
 class InverseOperator final : public LinearOperator<T> {
  public:
@@ -28,6 +26,7 @@ class InverseOperator final : public LinearOperator<T> {
                   drake::fem::LinearSystemSolver<T>* Ainv)
       : LinearOperator<T>(name), Ainv_(Ainv) {
     DRAKE_DEMAND(Ainv != nullptr);
+    Ainv_->SetUp();
   }
 
   ~InverseOperator() = default;

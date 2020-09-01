@@ -9,7 +9,8 @@ namespace drake {
 namespace fem {
 /** Implements the constitutive model described in [Müller, 2004]. */
 template <typename T>
-class CorotatedLinearElasticity final : public HyperelasticConstitutiveModel<T> {
+class CorotatedLinearElasticity final
+    : public HyperelasticConstitutiveModel<T> {
  public:
   DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(CorotatedLinearElasticity)
 
@@ -20,6 +21,7 @@ class CorotatedLinearElasticity final : public HyperelasticConstitutiveModel<T> 
         F_(Matrix3<T>::Identity()),
         strain_(Matrix3<T>::Identity()),
         trace_strain_(0.0) {
+    // See [Müller, 2004] section 2.4 for definition of P.
     Matrix4<T> P;
     P.template topLeftCorner<3, 4>() = vertex_positions;
     P.template bottomRows<1>() = Vector4<T>::Ones();
@@ -29,27 +31,27 @@ class CorotatedLinearElasticity final : public HyperelasticConstitutiveModel<T> 
 
   virtual ~CorotatedLinearElasticity() {}
 
+ protected:
+  void DoUpdateDeformationBasedState(
+      const Eigen::Ref<const Matrix3<T>>& F) override;
 
+  void DoUpdatePositionBasedState(
+      const Eigen::Ref<const Eigen::Matrix<T, 3, 4>>& q) override;
 
-protected:
-    void DoUpdateDeformationBasedState(const Eigen::Ref<const Matrix3<T>>& F) override;
+  T DoCalcEnergyDensity() const override;
 
-    void DoUpdatePositionBasedState(const Eigen::Ref<const Eigen::Matrix<T, 3, 4>>& q) override;
+  Matrix3<T> DoCalcFirstPiola() const override;
 
-    T DoCalcEnergyDensity() const override;
+  Matrix3<T> DoCalcFirstPiolaDifferential(
+      const Eigen::Ref<const Matrix3<T>>& dF) const override;
 
-    Matrix3<T> DoCalcFirstPiola() const override;
-
-    Matrix3<T> DoCalcFirstPiolaDifferential(
-            const Eigen::Ref<const Matrix3<T>>& dF) const override;
-
-    Eigen::Matrix<T, 9, 9> DoCalcFirstPiolaDerivative() const override;
+  Eigen::Matrix<T, 9, 9> DoCalcFirstPiolaDerivative() const override;
 
  private:
   Matrix3<T> R_;       // Corotation matrix.
   Matrix3<T> F_;       // Deformation gradient.
   Matrix3<T> strain_;  // Corotated Linear strain.
-  T trace_strain_;     // trace of strain_.
+  T trace_strain_;     // Trace of strain_.
   Matrix4<T>
       inv_P_;  // Initial Homogeneous position matrix. See [Müller, 2004].
 };

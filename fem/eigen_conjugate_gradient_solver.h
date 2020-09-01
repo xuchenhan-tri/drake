@@ -6,6 +6,10 @@
 #include "drake/fem/linear_system_solver.h"
 
 namespace Eigen {
+// TODO(xuchenhan-tri): Properly implement both a mass preconditioner and a
+// Jacobi preconditioner for *both* matrixed solver and the matrix-free solver.
+// Currently, mass preconditioning is used for matrix-free solver and Jacobi
+// preconditioning is used for matrixed solver.
 template <typename T>
 class MassPreconditioner {
   typedef T Scalar;
@@ -41,8 +45,8 @@ class MassPreconditioner {
   template <typename MatType>
   MassPreconditioner& compute(const MatType& mat) {
     inv_mass_.resize(mat.cols());
-    // if (mat.is_matrix_free()) {
-    if (1) {
+    // Implements mass preconditioning if the solver is matrix-free.
+    if (mat.is_matrix_free()) {
       const drake::VectorX<T>& mass = mat.get_objective().get_mass();
       for (int i = 0; i < static_cast<int>(mass.size()); ++i) {
         T one_over_mass = (mass(i) == static_cast<T>(0))
@@ -53,6 +57,7 @@ class MassPreconditioner {
         }
       }
     } else {
+      // Implements Jacobi preconditioning if the solver forms the matrix.
       const auto& matrix = mat.get_matrix();
       for (int j = 0; j < matrix.outerSize(); ++j) {
         typename MatType::InnerIterator it(matrix, j);
@@ -112,7 +117,6 @@ class EigenConjugateGradientSolver : public LinearSystemSolver<T> {
   virtual void Solve(const Eigen::Ref<const VectorX<T>>& rhs,
                      EigenPtr<VectorX<T>> x) {
     *x = cg_.solve(rhs);
-//    std::cout << "CG iterations = " << cg_.iterations() << std::endl;
   }
 
   /** Set up the equation A*x = rhs. */

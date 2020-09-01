@@ -12,22 +12,23 @@
 namespace drake {
 namespace multibody {
 namespace solvers {
-
+template <typename T>
 struct PgsSolverParameters {
   // Over-relaxation paramter, in (0, 1]
-  double relaxation{0.02};
+  T relaxation{0.02};
   // Absolute contact velocity tolerance, m/s.
-  double abs_tolerance{1.0e-6};
+  T abs_tolerance{1.0e-6};
   // Relative contact velocity tolerance, unitless.
-  double rel_tolerance{1.0e-4};
+  T rel_tolerance{1.0e-4};
   // Maximum number of PGS iterations.
-  int max_iterations{1000};
+  int max_iterations{100};
 };
 
+template <typename T>
 struct PgsSolverStats {
   int iterations{0};  // Number of PGS iterations.
-  double vc_err{0.0};  // Error in the contact velocities, [m/s].
-  double gamma_err{0.0};  // Error in the contact impulses, [Ns].
+  T vc_err{0.0};  // Error in the contact velocities, [m/s].
+  T gamma_err{0.0};  // Error in the contact impulses, [Ns].
 };
 
 template <typename T>
@@ -62,14 +63,14 @@ class PgsSolver final : public ContactSolver<T> {
   int num_contacts() const final { return contact_data_->num_contacts(); };
   int num_velocities() const final { return dynamics_data_->num_velocities(); }
 
-  void set_parameters(PgsSolverParameters& parameters) {
+  void set_parameters(PgsSolverParameters<T>& parameters) {
     parameters_ = parameters;
   }
 
-  ContactSolverResult SolveWithGuess(double dt,
+  ContactSolverResult SolveWithGuess(T dt,
                                      const VectorX<T>& v_guess) final;
 
-  const PgsSolverStats& get_iteration_stats() const { return stats_; }
+  const PgsSolverStats<T>& get_iteration_stats() const { return stats_; }
 
   const VectorX<T>& GetImpulses() const final { return state_.gamma(); }
   const VectorX<T>& GetVelocities() const final { return state_.v(); }
@@ -107,22 +108,22 @@ class PgsSolver final : public ContactSolver<T> {
   const VectorX<T>& get_phi0() const { return contact_data_->get_phi0(); }
   const VectorX<T>& get_mu() const { return contact_data_->get_mu(); }
 
-  void PreProcessData(double dt);
+  void PreProcessData(T dt);
   bool VerifyConvergenceCriteria(const VectorX<T>& vc, const VectorX<T>& vc_kp,
                                  const VectorX<T>& gamma,
-                                 const VectorX<T>& gamma_kp, double* vc_err,
-                                 double* gamma_err) const;
+                                 const VectorX<T>& gamma_kp, T* vc_err,
+                                 T* gamma_err) const;
   Vector3<T> ProjectImpulse(const Eigen::Ref<const Vector3<T>>& vc,
                             const Eigen::Ref<const Vector3<T>>& gamma,
                             const T& mu) const;
   void ProjectAllImpulses(const VectorX<T>& vc, VectorX<T>* gamma_inout) const;
 
-  PgsSolverParameters parameters_;
+  PgsSolverParameters<T> parameters_;
   const SystemDynamicsData<T>* dynamics_data_{nullptr};
   const PointContactData<T>* contact_data_{nullptr};
   PreProcessedData pre_proc_data_;
   State state_;
-  PgsSolverStats stats_;
+  PgsSolverStats<T> stats_;
   // Workspace (many of these could live in the state as "cached" data.)
   VectorX<T> tau_c_;  // Generalized contact impulses.
   VectorX<T> vc_;  // Contact velocities.  
@@ -131,3 +132,5 @@ class PgsSolver final : public ContactSolver<T> {
 }  // namespace solvers
 }  // namespace multibody
 }  // namespace drake
+DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_NONSYMBOLIC_SCALARS(
+        class ::drake::multibody::solvers::PgsSolver)

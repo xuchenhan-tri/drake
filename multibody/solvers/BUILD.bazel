@@ -55,6 +55,7 @@ drake_cc_library(
         ":linear_operator",
         "//common:default_scalars",
         "//common:essential",
+        "//fem:eigen_conjugate_gradient_solver",
         "//fem:linear_system_solver",
     ],
 )

@@ -18,7 +18,7 @@ class VtkParser {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(VtkParser)
   VtkParser() = default;
-  static Matrix3X<T> Parse(const std::string& vtk_file,
+  static Matrix3X<double> Parse(const std::string& vtk_file,
                     std::vector<Vector4<int>>* indices) {
     std::ifstream fs;
     fs.open(vtk_file);
@@ -30,8 +30,8 @@ class VtkParser {
     int n_tets = 0;
     int position_count = 0;
     int indices_count = 0;
-    Matrix3X<T> positions;
-    Vector3<T> position;
+    Matrix3X<double> positions;
+    Vector3<double> position;
     Vector4<int> index;
     while (std::getline(fs, line)) {
       std::stringstream ss(line);
