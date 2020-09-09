@@ -51,7 +51,7 @@ template <typename T>
 void FemSolver<T>::SolveFreeMotion() {
   auto& q = data_.get_mutable_q();
   const auto& q_n = data_.get_q();
-  auto& q_hat = data_.get_mutable_q_hat();
+  auto& q_hat = data_.get_mutable_q_star();
   auto& v = data_.get_mutable_v();
   auto& dv = data_.get_mutable_dv();
   auto& elements = data_.get_mutable_elements();

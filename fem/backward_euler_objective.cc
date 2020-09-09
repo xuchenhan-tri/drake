@@ -13,7 +13,7 @@ void BackwardEulerObjective<T>::Update(const Eigen::Ref<const VectorX<T>>& dv) {
   const Matrix3X<T>& tmp_q =
       Eigen::Map<const Matrix3X<T>>(dv.data(), 3, dv.size() / 3) *
           fem_data_.get_dt() +
-      fem_data_.get_q_hat();
+      fem_data_.get_q_star();
   auto& elements = fem_data_.get_mutable_elements();
   // Update deformation gradient on all elements.
   for (auto& e : elements) {

@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <vector>
+#include <utility>
 
 #include "drake/common/default_scalars.h"
 #include "drake/common/eigen_types.h"
@@ -13,7 +14,8 @@
 
 namespace drake {
 namespace fem {
-    // TODO(xuchenhan-tri): We currently only support zero Dirichelet BC. Make it more general.
+// TODO(xuchenhan-tri): We currently only support zero Dirichelet BC. Make it
+// more general.
 template <typename T>
 struct BoundaryCondition {
   BoundaryCondition(int object_id_in,
@@ -28,8 +30,19 @@ struct BoundaryCondition {
 template <typename T>
 class FemData {
  public:
-  FemData(double dt) : dt_(dt) {}
+  explicit FemData(double dt) : dt_(dt) {}
 
+  /**
+   Add an object represented by a list of vertices connected by a simplex mesh
+  to the simulation. Multiple calls to this method is allowed and the resulting
+  vertices and elements will be properly indexed.
+  @param[in] indices    The list of indices describing the connectivity of the
+  mesh. @p indices[i] contains the indices of the 4 vertices in the i-th
+  element.
+  @param[in] positions  The list of positions of the vertices in the world frame
+  in the reference configuration.
+  @return The object_id of the newly added_object.
+  */
   int AddUndeformedObject(const std::vector<Vector4<int>>& indices,
                           const Matrix3X<T>& positions,
                           const FemConfig& config);
@@ -58,8 +71,8 @@ class FemData {
   const Matrix3X<T>& get_Q() const { return Q_; }
   Matrix3X<T>& get_mutable_Q() { return Q_; }
 
-  const Matrix3X<T>& get_q_hat() const { return q_hat_; }
-  Matrix3X<T>& get_mutable_q_hat() { return q_hat_; }
+  const Matrix3X<T>& get_q_star() const { return q_star_; }
+  Matrix3X<T>& get_mutable_q_star() { return q_star_; }
 
   void set_q(const Matrix3X<T>& q) { q_ = q; }
   void set_Q(const Matrix3X<T>& Q) { Q_ = Q; }
@@ -75,7 +88,7 @@ class FemData {
 
   const Vector3<T>& get_gravity() const { return gravity_; }
 
-  void set_gravity(Vector3<T>& gravity) { gravity_ = gravity; }
+  void set_gravity(const Vector3<T>& gravity) { gravity_ = gravity; }
 
   const std::vector<BoundaryCondition<T>>& get_v_bc() const { return v_bc_; }
   std::vector<BoundaryCondition<T>>& get_mutable_v_bc() { return v_bc_; }
@@ -116,24 +129,77 @@ class FemData {
  private:
   double dt_;
   std::vector<FemElement<T>> elements_;
+
+  /* There are two sets of indices that we employ for most quantities, local and
+     global. Local indices start from 0 and only index quantities added in a
+    single call to `AddUndeformedObject`. Global indices also start from 0 but
+    index over all the quantities in the FemSolver. The local indices and the
+    global indices only differ if there is more than one object added through
+    `AddUndeformedObject`. The concept of local indices and global indices are
+    illustrated in the following drawing. The local indices are the index
+    outside the parentheses and the global indices are the ones inside the
+    parentheses. There are two objects in this example and we index both the
+    triangles and the vertices.
+
+    _________________________________________________________________________
+    |                                                              object 0 |
+    |                    2(2)           4(4)                     7(7)       |
+    |    0(0) X-----------X-----------X          5(5) X-----------X         |
+    |         |          /|          /                |          /|         |
+    |         |         / |         /                 |         / |         |
+    |         |  0(0)  /  |  2(2)  /                  |  3(3)  /  |         |
+    |         |       /   |       /                   |       /   |         |
+    |         |      /    |      /                    |      /    |         |
+    |         |     /     |     /                     |     /     |         |
+    |         |    /      |    /                      |    /      |         |
+    |         |   /       |   /                       |   /       |         |
+    |         |  /        |  /                        |  /        |         |
+    |         | /   1(1)  | /                         | /   4(4)  |         |
+    |         |/          |/                          |/          |         |
+    |    1(1) X-----------X  3(3)                6(6) X-----------X 8(8)    |
+    |_______________________________________________________________________|
+
+
+    _________________________________________________________________________
+    |                                                              object 1 |
+    |                       2(11)           3(12)                           |
+    |        0(9) X-----------X-----------X                                 |
+    |             \           |          /                                  |
+    |              \          |         /                                   |
+    |               \   0(5)  |  1(6)  /                                    |
+    |                \        |       /                                     |
+    |                 \       |      /                                      |
+    |                  \      |     /                                       |
+    |                   \     |    /                                        |
+    |                    \    |   /                                         |
+    |                     \   |  /                                          |
+    |                      \  | /                                           |
+    |                       \ |/                                            |
+    |                   1(10) X                                             |
+    |_______________________________________________________________________|
+
+     The input data are indexed locally and FemData data converts them to global
+     indices when the data is read in.
+   */
+
   // vertex_indices_[i] gives the global vertex indices corresponding to object
-  // i.
+  // i. vertex_indices_[i] is usually a vector of consecutive indices.
   std::vector<std::vector<int>> vertex_indices_;
   // element_indices_[i] gives the global element indices corresponding to
-  // object i.
+  // object i. element_indices_[i] is usually a vector of consecutive indices.
   std::vector<std::vector<int>> element_indices_;
   // mesh_[i] contains the global indices of the 4 vertices in the i-th
   // tetrahedron.
   std::vector<Vector4<int>> mesh_;
-  // Initial position.
+  // Reference vertex positions.
   Matrix3X<T> Q_;
-  // Time n position.
+  // Vertex positions.
   Matrix3X<T> q_;
-  // Time n position + dt * time n velocity.
-  Matrix3X<T> q_hat_;
-  // Time n velocity.
+  // q₀+ dt * v₀.
+  Matrix3X<T> q_star_;
+  // Vertex velocities.
   Matrix3X<T> v_;
-  // Time n+1 velocity - Time n velocity.
+  // Change in vertex velocities.
   Matrix3X<T> dv_;
   VectorX<T> mass_;
   Vector3<T> gravity_{0, 0, -9.81};
@@ -149,4 +215,4 @@ class FemData {
 }  // namespace fem
 }  // namespace drake
 DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_NONSYMBOLIC_SCALARS(
-        class ::drake::fem::FemData)
+    class ::drake::fem::FemData)

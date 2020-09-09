@@ -1,14 +1,16 @@
 #pragma once
 
 #include <functional>
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "drake/common/drake_copyable.h"
 #include "drake/common/eigen_types.h"
 #include "drake/fem/fem_solver.h"
 #include "drake/fem/mesh_utility.h"
-#include "drake/fem/vtk_parser.h"
+#include "drake/fem/parse_vtk.h"
 #include "drake/systems/framework/leaf_system.h"
 
 namespace drake {
@@ -66,7 +68,6 @@ class FemSystem final : public systems::LeafSystem<T> {
       const Eigen::Ref<const Matrix3X<T>>& initial_position);
 
   mutable FemSolver<T> solver_;
-  VtkParser<T> parser_;
   double dt_{0.01};
   // This flag is turned on when an object has been added to FemSystem.
   bool object_added_{false};
@@ -74,4 +75,4 @@ class FemSystem final : public systems::LeafSystem<T> {
 }  // namespace fem
 }  // namespace drake
 DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_NONSYMBOLIC_SCALARS(
-        class ::drake::fem::FemSystem)
+    class ::drake::fem::FemSystem)
