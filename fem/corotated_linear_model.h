@@ -7,7 +7,12 @@
 
 namespace drake {
 namespace fem {
-/** Implements the constitutive model described in [Müller, 2004]. */
+/** Implements the constitutive model described in [Müller, 2004].
+
+  [Müller, 2004] Müller, Matthias, and Markus H. Gross. "Interactive Virtual
+  Materials." Graphics interface. Vol. 2004. 2004.
+ */
+
 template <typename T>
 class CorotatedLinearElasticity final
     : public HyperelasticConstitutiveModel<T> {

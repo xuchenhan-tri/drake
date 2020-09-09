@@ -217,9 +217,9 @@ drake_cc_library(
 )
 
 drake_cc_library(
-    name = "vtk_parser",
+    name = "parse_vtk",
     hdrs = [
-        "vtk_parser.h",
+        "parse_vtk.h",
     ],
     deps = [
         "//common:essential",
@@ -251,7 +251,7 @@ drake_cc_library(
     deps = [
         ":fem_solver",
         ":mesh_utility",
-        ":vtk_parser",
+        ":parse_vtk",
         "//common:essential",
         "//systems/framework:leaf_system",
     ],

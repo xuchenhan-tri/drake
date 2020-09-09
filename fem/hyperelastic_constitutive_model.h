@@ -9,18 +9,22 @@ namespace fem {
 /** A constitutive model relates the strain to the stress of the material. It
  governs the material response under deformation. For hyperelastic materials,
  the constitutive relation is defined through the potential energy, which
- increases with non-rigid deformation from the initial state.
+ increases with non-rigid deformation from the initial state. For viscous or
+ plastic behavior, we delegate to another class (TODO (xuchenhan-tri): update
+ the comment to be more specific once plasticity is in place.) to modify the
+ deformation gradient instead of directly modifying the stress-strain
+ relationship.
 */
 template <typename T>
 class HyperelasticConstitutiveModel {
  public:
+  DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(HyperelasticConstitutiveModel)
+
   HyperelasticConstitutiveModel(T E, T nu, T alpha, T beta)
       : E_(E), nu_(nu), alpha_(alpha), beta_(beta) {
     VerifyParameterValidity(E, nu, alpha, beta);
     SetLameParameters(E, nu);
   }
-
-  DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(HyperelasticConstitutiveModel)
 
   virtual ~HyperelasticConstitutiveModel() {}
 
@@ -145,19 +149,20 @@ class HyperelasticConstitutiveModel {
   /* Set the Lamé parameters from Young's modulus and Poisson ratio. It's
      important to keep the Lamé Parameters in sync with Young's modulus and
      Poisson ratio as most computations use Lame parameters. */
-  void VerifyParameterValidity(T E, T nu, T alpha, T beta){
-      if (E < 0.0){
-        throw std::logic_error("Young's modulus must be nonnegative.");
-      }
-      if (nu >= 0.5 || nu <= -1){
-          throw std::logic_error("Poisson ratio must be in (-1, 0.5).");
-      }
-      if (alpha < 0.0){
-          throw std::logic_error("Mass damping parameter must be nonnegative.");
-      }
-      if (beta < 0.0){
-          throw std::logic_error("Stiffness damping parameter must be nonnegative.");
-      }
+  void VerifyParameterValidity(T E, T nu, T alpha, T beta) {
+    if (E < 0.0) {
+      throw std::logic_error("Young's modulus must be nonnegative.");
+    }
+    if (nu >= 0.5 || nu <= -1) {
+      throw std::logic_error("Poisson ratio must be in (-1, 0.5).");
+    }
+    if (alpha < 0.0) {
+      throw std::logic_error("Mass damping parameter must be nonnegative.");
+    }
+    if (beta < 0.0) {
+      throw std::logic_error(
+          "Stiffness damping parameter must be nonnegative.");
+    }
   }
 
   void SetLameParameters(T E, T nu) {

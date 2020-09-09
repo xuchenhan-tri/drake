@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <vector>
+#include <utility>
 
 #include "drake/common/default_scalars.h"
 #include "drake/common/eigen_types.h"
@@ -11,7 +12,6 @@
 #include "drake/fem/fem_data.h"
 #include "drake/fem/fem_element.h"
 #include "drake/fem/fem_force.h"
-//#include "drake/fem/fem_system.h"
 #include "drake/fem/newton_solver.h"
 #include "drake/multibody/solvers/inverse_operator.h"
 #include "drake/multibody/solvers/pgs_solver.h"
@@ -46,12 +46,13 @@ class FemSolver {
 
   /**
    Add an object represented by a list of vertices connected by a simplex mesh
-  to the simulation.
+  to the simulation. Multiple calls to this method is allowed and the resulting
+  vertices and elements will be properly indexed.
   @param[in] indices    The list of indices describing the connectivity of the
   mesh. @p indices[i] contains the indices of the 4 vertices in the i-th
   element.
-  @param[in] positions  The list of positions of the vertices in the undeformed
-  configuration.
+  @param[in] positions  The list of positions of the vertices in the world frame
+  in the reference configuration.
   @return The object_id of the newly added_object.
   */
   int AddUndeformedObject(const std::vector<Vector4<int>>& indices,
@@ -107,10 +108,10 @@ class FemSolver {
    * and change the underlying states. */
   void SolveFreeMotion();
 
-      /* Solve for the contact constraint and change the underlying states. */
-      void SolveContact();
+  /* Solve for the contact constraint and change the underlying states. */
+  void SolveContact();
 
-      FemData<T> data_;
+  FemData<T> data_;
   FemForce<T> force_;
   BackwardEulerObjective<T> objective_;
   NewtonSolver<T> newton_solver_;
@@ -120,4 +121,4 @@ class FemSolver {
 }  // namespace fem
 }  // namespace drake
 DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_NONSYMBOLIC_SCALARS(
-        class ::drake::fem::FemSolver)
+    class ::drake::fem::FemSolver)
