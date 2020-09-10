@@ -22,8 +22,7 @@ class EigenConjugateGradientSolverTest : public ::testing::Test {
     force_ = std::make_unique<FemForce<double>>(data_->get_elements());
     objective_ = std::make_unique<BackwardEulerObjective<double>>(data_.get(),
                                                                   force_.get());
-    solver_ =
-        std::make_unique<EigenConjugateGradientSolver<double>>(*objective_);
+    solver_ = std::make_unique<EigenConjugateGradientSolver<double>>();
     FemConfig config;
     config.density = 1e3;
     config.youngs_modulus = 1e4;
@@ -53,7 +52,7 @@ TEST_F(EigenConjugateGradientSolverTest, MatrixVsMatrixFree) {
   Matrix3X<double> positions =
       Matrix3X<double>::Random(3, data_->get_num_vertices());
   // Set the physics states of the system.
-  data_->get_mutable_q_hat() = positions;
+  data_->get_mutable_q_star() = positions;
   // x is the unknown of the linear system.
   VectorX<double> x_direct(positions.size());
   VectorX<double> x_matrix_free(positions.size());
@@ -66,18 +65,20 @@ TEST_F(EigenConjugateGradientSolverTest, MatrixVsMatrixFree) {
   // b is the right hand side of the linear system.
   VectorX<double> b = VectorX<double>::Zero(positions.size());
   objective_->CalcResidual(&b);
-  solver_->set_tolerance(std::numeric_limits<double>::epsilon());
+  solver_->set_accuracy(std::numeric_limits<double>::epsilon());
   // Rounding errors would accumulate over CG iterations, so we limit the number
   // of iterations to 1.
   solver_->set_max_iterations(1);
   std::cerr << "solver1" << std::endl;
   // Get the matrix free solution.
-  solver_->set_matrix_free(true);
-  solver_->SetUp();
+  objective_->set_matrix_free(true);
+  auto J_matrix_free = objective_->GetJacobian();
+  solver_->SetUp(*J_matrix_free);
   solver_->Solve(b, &x_matrix_free);
   // Get the matrix solution.
-  solver_->set_matrix_free(false);
-  solver_->SetUp();
+  objective_->set_matrix_free(false);
+  auto J_matrix = objective_->GetJacobian();
+  solver_->SetUp(*J_matrix);
   solver_->Solve(b, &x_direct);
   double scale = x_direct.norm() + x_matrix_free.norm();
   EXPECT_NEAR((x_direct - x_matrix_free).norm(), 0.0,

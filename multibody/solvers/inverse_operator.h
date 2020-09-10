@@ -19,37 +19,38 @@ class InverseOperator final : public LinearOperator<T> {
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(InverseOperator)
 
   /// Constructs an operator with given `name` implementing the LinearOperator
-  /// interface for inverse of a linear operator `Ainv`.
-  /// This class keeps a reference to inverse `Ainv` and therefore it is
-  /// required that it outlives this object.
+  /// interface for inverse of a linear operator `lop`.
+  /// This class keeps a reference to `lop` and the solver that inverts `lop` and therefore they are
+  /// required that it outlives this InverseOperator.
   InverseOperator(const std::string& name,
-                  drake::fem::LinearSystemSolver<T>* Ainv)
-      : LinearOperator<T>(name), Ainv_(Ainv) {
-    DRAKE_DEMAND(Ainv != nullptr);
-    Ainv_->SetUp();
+                  drake::fem::LinearSystemSolver<T>* solver, const LinearOperator<T>& lop)
+      : LinearOperator<T>(name), solver_(solver), lop_(lop) {
+    DRAKE_DEMAND(solver_ != nullptr);
+    solver_->SetUp(lop);
   }
 
   ~InverseOperator() = default;
 
-  int rows() const final { return Ainv_->rows(); }
-  int cols() const final { return Ainv_->cols(); }
+  int rows() const final { return lop_.rows(); }
+  int cols() const final { return lop_.cols(); }
 
  protected:
   void DoMultiply(const Eigen::Ref<const VectorX<T>>& x,
                   VectorX<T>* y) const final {
-    Ainv_->Solve(x, y);
+    solver_->Solve(x, y);
   };
 
   void DoMultiply(const Eigen::Ref<const Eigen::SparseVector<T>>& x,
                   Eigen::SparseVector<T>* y) const final {
     VectorX<T> dense_x(x);
     VectorX<T> dense_y(dense_x.size());
-    Ainv_->Solve(dense_x, &dense_y);
+    solver_->Solve(dense_x, &dense_y);
     *y = dense_y.sparseView();
   }
 
  private:
-  drake::fem::LinearSystemSolver<T>* Ainv_{nullptr};
+  drake::fem::LinearSystemSolver<T>* solver_{nullptr};
+  const LinearOperator<T>& lop_{nullptr};
 };
 
 }  // namespace solvers
