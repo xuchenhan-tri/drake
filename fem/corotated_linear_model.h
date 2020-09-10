@@ -3,6 +3,7 @@
 #include <memory>
 
 #include "drake/common/eigen_types.h"
+#include "drake/common/default_scalars.h"
 #include "drake/fem/hyperelastic_constitutive_model.h"
 
 namespace drake {
@@ -62,3 +63,5 @@ class CorotatedLinearElasticity final
 };
 }  // namespace fem
 }  // namespace drake
+DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_NONSYMBOLIC_SCALARS(
+        class ::drake::fem::CorotatedLinearElasticity)

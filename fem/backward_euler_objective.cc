@@ -101,7 +101,9 @@ void BackwardEulerObjective<T>::BuildJacobian(
   // Add Stiffness and damping matrix to the Jacobian.
   force_.AccumulateScaledStiffnessMatrix(dt * dt, jacobian);
   force_.AccumulateScaledDampingMatrix(dt, jacobian);
+  std::cout << jacobian->nonZeros() << std::endl;
   Project(jacobian);
+  std::cout << jacobian->nonZeros() << std::endl;
 }
 
 template <typename T>
@@ -132,6 +134,10 @@ void BackwardEulerObjective<T>::Project(
       if (boundary_condition.bc(vertex_range[j], initial_position)) {
         for (int col = 3 * vertex_range[j]; col < 3 * (vertex_range[j] + 1);
              ++col) {
+          // Set everything in the row corresponding to Dirichlet entry to 0.
+          (*jacobian).row(col) *= 0;
+          // Set everything in the column corresponding to Dirichlet entry to 0,
+          // and set the diagonal entry to 1.
           for (typename Eigen::SparseMatrix<T>::InnerIterator it(*jacobian,
                                                                  col);
                it; ++it) {
@@ -139,12 +145,6 @@ void BackwardEulerObjective<T>::Project(
               it.valueRef() = 1.0;
             else
               it.valueRef() = 0.0;
-          }
-          // TODO(xuchenhan-tri): This is extremely inefficient as it allocates
-          // for all the entries in the row 'row'.
-          int row = col;
-          for (int c = 0; c < get_num_dofs(); ++c) {
-            if (c != row) jacobian->coeffRef(row, c) = 0;
           }
         }
       }
