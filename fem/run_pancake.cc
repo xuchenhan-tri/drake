@@ -64,10 +64,10 @@ int DoMain() {
     fem_system->AddCollisionObject(std::move(ground));
 
   } else {
-      const double mesh_spacing = 0.005;
-      const int nx = 2;
-      const int ny = 2;
-      const int nz = 2;
+      const double mesh_spacing = 0.007;
+      const int nx = 5;
+      const int ny = 5;
+      const int nz = 5;
     // Move the center of the rectangular block to the origin.
     auto position_transform = [nx, ny, nz, mesh_spacing](
                                   int vertex_index,
@@ -78,11 +78,11 @@ int DoMain() {
                           static_cast<double>(nz) / 2 * mesh_spacing);
     };
     // Fix the nodes whose initial positions are near the center of the block.
-    auto bc = [](int index, const Matrix3X<double>& initial_pos,
-                 EigenPtr<Matrix3X<double>> velocity) {
+    auto bc = [](int index, const Matrix3X<double>& initial_pos) {
       if (initial_pos.col(index).norm() <= 0.01) {
-        velocity->col(index).setZero();
+          return true;
       }
+      return false;
     };
     // Make a simple rectangular block geometry.
     fem_system->AddRectangularBlock(nx, ny, nz, mesh_spacing, config,

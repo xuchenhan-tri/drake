@@ -40,7 +40,7 @@ void FemSolver<T>::SetInitialStates(
 template <typename T>
 void FemSolver<T>::SetBoundaryCondition(
     const int object_id,
-    std::function<void(int, const Matrix3X<T>&, EigenPtr<Matrix3X<T>>)> bc) {
+    std::function<bool(int, const Matrix3X<T>&)> bc) {
   const int num_objects = data_.get_num_objects();
   auto& v_bc = data_.get_mutable_v_bc();
   DRAKE_DEMAND(object_id < num_objects);

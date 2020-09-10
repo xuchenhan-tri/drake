@@ -83,15 +83,13 @@ class FemSolver {
      new one will be applied.
       @param[in] object_id   The id the object whose initial conditions are
      being set.
-      @param[in] bc          The function that takes an index i and the time t
-     that modifies the position and the velocity of the i-th vertex in the
-     chosen object at time t.
+      @param[in] bc          A function that takes an index i and the reference positions and determines whether the node with index i is under Dirichlet boundary condition.
 
       @pre @p object_id < number of existing objects.
    */
   void SetBoundaryCondition(
       const int object_id,
-      std::function<void(int, const Matrix3X<T>&, EigenPtr<Matrix3X<T>>)> bc);
+      std::function<bool(int, const Matrix3X<T>&)> bc);
 
   void AddCollisionObject(std::unique_ptr<CollisionObject<T>> object) {
     data_.add_collision_object(std::move(object));

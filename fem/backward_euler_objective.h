@@ -3,6 +3,8 @@
 #include "drake/common/eigen_types.h"
 #include "drake/fem/fem_data.h"
 #include "drake/fem/fem_force.h"
+#include "drake/multibody/solvers/linear_operator.h"
+#include "drake/multibody/solvers/sparse_linear_operator.h"
 
 namespace drake {
 namespace fem {
@@ -90,20 +92,32 @@ class BackwardEulerObjective {
   /** Sets the entries corresponding to vertices under Dirichlet boundary
    * conditions to zero. */
   void Project(EigenPtr<Matrix3X<T>> impulse) const;
+  void Project(Eigen::SparseMatrix<T>* jacobian) const;
 
   /** Returns 3 * number of vertices. */
   int get_num_dofs() const { return fem_data_.get_q().size(); }
 
   const VectorX<T>& get_mass() const { return fem_data_.get_mass(); }
 
+  void set_matrix_free(bool matrix_free) { matrix_free_ = matrix_free; }
+
   /** Take in a vector of impulse, divides by the mass of each vertex and return
    * the infinity norm of the resulting vector that has the unit of velocities.
    */
   T norm(const Eigen::Ref<const VectorX<T>>& x) const;
 
+  /** Calculates the Jacobian matrix at the current configuration and returns a
+   * linear operator representing the Jacobian matrix. */
+  std::unique_ptr<multibody::solvers::LinearOperator<T>> GetJacobian();
+
  private:
   FemData<T>& fem_data_;
   FemForce<T>& force_;
+  bool matrix_free_{false};
+  Eigen::SparseMatrix<T> jacobian_;
+  std::function<void(const Eigen::Ref<const Matrix3X<T>>&,
+                     EigenPtr<Matrix3X<T>>)>
+      multiply_;
 };
 }  // namespace fem
 }  // namespace drake
