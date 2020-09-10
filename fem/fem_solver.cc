@@ -87,8 +87,9 @@ void FemSolver<T>::SolveContact() {
   const VectorX<T>& v_free = Eigen::Map<VectorX<T>>(v.data(), v.size());
   VectorX<T> tau = VectorX<T>::Zero(v.size());
   contact_jacobian_.QueryContact(&jacobian, &penetration_depth);
+  auto J = objective_.GetJacobian();
   drake::multibody::solvers::InverseOperator<T> Ainv(
-      "Inverse stiffness matrix", &newton_solver_.get_linear_solver());
+      "Inverse stiffness matrix", &newton_solver_.get_linear_solver(), *J);
   drake::multibody::solvers::SystemDynamicsData<T> dynamics_data(&Ainv, &v_free,
                                                                  &tau);
   drake::multibody::solvers::SparseLinearOperator<T> Jc("Jc", &jacobian);

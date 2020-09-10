@@ -26,7 +26,7 @@ class NewtonSolver {
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(NewtonSolver);
 
   explicit NewtonSolver(BackwardEulerObjective<T>* objective)
-      : objective_(*objective), linear_solver_(*objective) {}
+      : objective_(*objective) {}
 
   /** Takes in an initial guess for the solution and overwrites it with the
       actual solution. */

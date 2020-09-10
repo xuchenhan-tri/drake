@@ -2,8 +2,118 @@
 
 #include "drake/common/eigen_types.h"
 #include "drake/fem/backward_euler_objective.h"
-#include "drake/fem/eigen_sparse_matrix.h"
 #include "drake/fem/linear_system_solver.h"
+#include "drake/multibody/solvers/linear_operator.h"
+
+namespace drake {
+namespace fem {
+namespace internal {
+template <typename T>
+class EigenMatrixReplacement;
+}
+}  // namespace fem
+}  // namespace drake
+
+namespace Eigen {
+namespace internal {
+/* Minimum required trait for a custom sparse matrix to be used in a Eigen
+  sparse iterative solver. */
+template <typename T>
+struct traits<drake::fem::internal::EigenMatrixReplacement<T>> {
+  typedef T Scalar;
+  typedef typename SparseMatrix<T>::StorageIndex StorageIndex;
+  typedef Sparse StorageKind;
+  typedef MatrixXpr XprKind;
+  enum {
+    RowsAtCompileTime = Dynamic,
+    ColsAtCompileTime = Dynamic,
+    MaxRowsAtCompileTime = Dynamic,
+    MaxColsAtCompileTime = Dynamic,
+    Flags = 0
+  };
+};
+}  // namespace internal
+}  // namespace Eigen
+
+namespace drake {
+namespace fem {
+namespace internal {
+/** A wrapper around Eigen:SparseMatrix<T> that supports matrix-free operations.
+ */
+template <typename T>
+class EigenMatrixReplacement
+    : public Eigen::EigenBase<EigenMatrixReplacement<T>> {
+ public:
+  // Required typedefs, constants, and method:
+  typedef T Scalar;
+  typedef T RealScalar;
+  typedef int StorageIndex;
+  typedef typename Eigen::SparseMatrix<T>::InnerIterator InnerIterator;
+  enum {
+    ColsAtCompileTime = Eigen::Dynamic,
+    MaxColsAtCompileTime = Eigen::Dynamic,
+    IsRowMajor = false
+  };
+
+  StorageIndex rows() const { return linear_operator_->rows(); }
+
+  StorageIndex cols() const { return linear_operator_->cols(); }
+
+  template <typename Rhs>
+  Eigen::Product<EigenMatrixReplacement<T>, Rhs, Eigen::AliasFreeProduct>
+  operator*(const Eigen::MatrixBase<Rhs>& x) const {
+    return Eigen::Product<EigenMatrixReplacement<T>, Rhs, Eigen::AliasFreeProduct>(
+        *this, x.derived());
+  }
+
+  // Custom APIs:
+  EigenMatrixReplacement() = default;
+  ~EigenMatrixReplacement() = default;
+
+  // TODO(xuchenhan-tri): linear_operator_ may dangle here if the input lop goes out of scope.
+  void SetUp(const multibody::solvers::LinearOperator<T>& lop) {
+    linear_operator_ = &lop;
+  }
+
+  VectorX<T> Multiply(const Eigen::Ref<const VectorX<T>>& x) const {
+    VectorX<T> y(rows());
+    linear_operator_->Multiply(x, &y);
+    return y;
+  }
+
+ private:
+  const multibody::solvers::LinearOperator<T>* linear_operator_{nullptr};
+};
+}  // namespace internal
+}  // namespace fem
+}  // namespace drake
+
+// Implementation of EigenSparseMatrix * Eigen::DenseVector though a
+// specialization of internal::generic_product_impl:
+namespace Eigen {
+namespace internal {
+template <typename Rhs, typename T>
+struct generic_product_impl<drake::fem::internal::EigenMatrixReplacement<T>,
+                            Rhs, SparseShape, DenseShape,
+                            GemvProduct>  // GEMV stands for matrix-vector
+    : generic_product_impl_base<
+          drake::fem::internal::EigenMatrixReplacement<T>, Rhs,
+          generic_product_impl<drake::fem::internal::EigenMatrixReplacement<T>,
+                               Rhs>> {
+  typedef typename Product<drake::fem::internal::EigenMatrixReplacement<T>,
+                           Rhs>::Scalar Scalar;
+
+  template <typename Dest>
+  static void scaleAndAddTo(
+      Dest& dst, const drake::fem::internal::EigenMatrixReplacement<T>& lhs,
+      const Rhs& rhs, const Scalar& alpha) {
+    // This method should implement "dst += alpha * lhs * rhs" inplace,
+    dst.noalias() += alpha * lhs.Multiply(rhs);
+  }
+};
+
+}  // namespace internal
+}  // namespace Eigen
 
 namespace Eigen {
 // TODO(xuchenhan-tri): Properly implement both a mass preconditioner and a
@@ -44,35 +154,12 @@ class MassPreconditioner {
 
   template <typename MatType>
   MassPreconditioner& compute(const MatType& mat) {
-    inv_mass_.resize(mat.cols());
-    // Implements mass preconditioning if the solver is matrix-free.
-    if (mat.is_matrix_free()) {
-      const drake::VectorX<T>& mass = mat.get_objective().get_mass();
-      for (int i = 0; i < static_cast<int>(mass.size()); ++i) {
-        T one_over_mass = (mass(i) == static_cast<T>(0))
-                              ? 1.0
-                              : (static_cast<T>(1) / mass(i));
-        for (int d = 0; d < 3; ++d) {
-          inv_mass_(3 * i + d) = one_over_mass;
-        }
-      }
-    } else {
-      // Implements Jacobi preconditioning if the solver forms the matrix.
-      const auto& matrix = mat.get_matrix();
-      for (int j = 0; j < matrix.outerSize(); ++j) {
-        typename MatType::InnerIterator it(matrix, j);
-        while (it && it.index() != j) ++it;
-        if (it && it.index() == j && it.value() != Scalar(0))
-          inv_mass_(j) = Scalar(1) / it.value();
-        else
-          inv_mass_(j) = Scalar(1);
-      }
-    }
+    // TODO (xuchenhan-tri): implement me.
+    inv_mass_ = drake::VectorX<T>::Ones(mat.cols());
     initialized_ = true;
     return *this;
   }
 
-  /** \internal */
   template <typename Rhs, typename Dest>
   void _solve_impl(const Rhs& b, Dest& x) const {
     x = inv_mass_.array() * b.array();
@@ -105,11 +192,7 @@ class EigenConjugateGradientSolver : public LinearSystemSolver<T> {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(EigenConjugateGradientSolver)
 
-  explicit EigenConjugateGradientSolver(
-      const BackwardEulerObjective<T>& objective)
-      : matrix_(objective, false) {
-    cg_.setTolerance(1e-3);
-  }
+  EigenConjugateGradientSolver() { cg_.setTolerance(1e-3); }
 
   virtual ~EigenConjugateGradientSolver() {}
 
@@ -120,16 +203,9 @@ class EigenConjugateGradientSolver : public LinearSystemSolver<T> {
   }
 
   /** Set up the equation A*x = rhs. */
-  virtual void SetUp() {
-    matrix_.Reinitialize();
-    matrix_.BuildMatrix();
+  virtual void SetUp(const multibody::solvers::LinearOperator<T>& lop) {
+    matrix_.SetUp(lop);
     cg_.compute(matrix_);
-  }
-
-  bool is_matrix_free() const { return matrix_.is_matrix_free(); }
-
-  void set_matrix_free(bool matrix_free) {
-    matrix_.set_matrix_free(matrix_free);
   }
 
   void get_max_iterations() const { cg_.maxIterations(); }
@@ -146,10 +222,11 @@ class EigenConjugateGradientSolver : public LinearSystemSolver<T> {
   void set_accuracy(T tol) { cg_.setTolerance(tol); }
 
  private:
-  EigenSparseMatrix<T> matrix_;
-  Eigen::ConjugateGradient<EigenSparseMatrix<T>, Eigen::Lower | Eigen::Upper,
-                           Eigen::MassPreconditioner<T>>
-      cg_;
+  internal::EigenMatrixReplacement<T> matrix_;
+  Eigen::ConjugateGradient<internal::EigenMatrixReplacement<T>,
+                           Eigen::Lower | Eigen::Upper,
+                           Eigen::IdentityPreconditioner>
+    cg_;
 };
 }  // namespace fem
 }  // namespace drake

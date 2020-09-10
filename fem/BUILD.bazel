@@ -74,21 +74,9 @@ drake_cc_library(
         ],
     deps =
         [
-            ":eigen_sparse_matrix",
             ":linear_system_solver",
             "//common:essential",
         ],
-)
-
-drake_cc_library(
-    name = "eigen_sparse_matrix",
-    hdrs = [
-        "eigen_sparse_matrix.h",
-    ],
-    deps = [
-        ":backward_euler_objective",
-        "//common:essential",
-    ],
 )
 
 drake_cc_library(
@@ -136,6 +124,8 @@ drake_cc_library(
             ":fem_data",
             ":fem_force",
             "//common:essential",
+            "//multibody/solvers:linear_operator",
+            "//multibody/solvers:sparse_linear_operator",
         ],
 )
 
@@ -147,6 +137,7 @@ drake_cc_library(
     deps = [
         ":backward_euler_objective",
         "//common:essential",
+        "//multibody/solvers:linear_operator",
     ],
 )
 
@@ -212,6 +203,7 @@ drake_cc_library(
     ],
     deps = [
         ":hyperelastic_constitutive_model",
+        "//common:default_scalars",
         "//common:essential",
     ],
 )

@@ -9,7 +9,8 @@ typename NewtonSolver<T>::NewtonSolverStatus NewtonSolver<T>::Solve(
   residual_.resizeLike(*x);
   UpdateAndEvalResidual(*x);
   for (int i = 0; i < max_iterations_; ++i) {
-    linear_solver_.SetUp();
+    std::unique_ptr<multibody::solvers::LinearOperator<T>> J = objective_.GetJacobian();
+    linear_solver_.SetUp(*J);
     linear_solver_.Solve(residual_, &dx_);
     *x += dx_;
     if (UpdateAndEvalResidual(*x)) {

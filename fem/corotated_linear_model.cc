@@ -113,7 +113,7 @@ CorotatedLinearElasticity<T>::DoCalcFirstPiolaDerivative() const {
   }
   return dPdF;
 }
-
-template class CorotatedLinearElasticity<double>;
 }  // namespace fem
 }  // namespace drake
+DRAKE_DEFINE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_NONSYMBOLIC_SCALARS(
+        class ::drake::fem::CorotatedLinearElasticity)
