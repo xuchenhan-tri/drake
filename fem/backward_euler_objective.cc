@@ -101,6 +101,7 @@ void BackwardEulerObjective<T>::BuildJacobian(
   // Add Stiffness and damping matrix to the Jacobian.
   force_.AccumulateScaledStiffnessMatrix(dt * dt, jacobian);
   force_.AccumulateScaledDampingMatrix(dt, jacobian);
+  Project(jacobian);
 }
 
 template <typename T>
@@ -112,7 +113,41 @@ void BackwardEulerObjective<T>::Project(EigenPtr<Matrix3X<T>> impulse) const {
   for (const auto& boundary_condition : bc) {
     const auto& vertex_range = vertex_indices[boundary_condition.object_id];
     for (int j = 0; j < static_cast<int>(vertex_range.size()); ++j) {
-      boundary_condition.bc(vertex_range[j], initial_position, impulse);
+      if (boundary_condition.bc(vertex_range[j], initial_position)) {
+        impulse->col(vertex_range[j]).setZero();
+      }
+    }
+  }
+}
+
+template <typename T>
+void BackwardEulerObjective<T>::Project(
+    Eigen::SparseMatrix<T>* jacobian) const {
+  const auto& bc = fem_data_.get_v_bc();
+  const auto& vertex_indices = fem_data_.get_vertex_indices();
+  const Matrix3X<T>& initial_position = fem_data_.get_Q();
+  for (const auto& boundary_condition : bc) {
+    const auto& vertex_range = vertex_indices[boundary_condition.object_id];
+    for (int j = 0; j < static_cast<int>(vertex_range.size()); ++j) {
+      if (boundary_condition.bc(vertex_range[j], initial_position)) {
+        for (int col = 3 * vertex_range[j]; col < 3 * (vertex_range[j] + 1);
+             ++col) {
+          for (typename Eigen::SparseMatrix<T>::InnerIterator it(*jacobian,
+                                                                 col);
+               it; ++it) {
+            if (it.index() == col)
+              it.valueRef() = 1.0;
+            else
+              it.valueRef() = 0.0;
+          }
+          // TODO(xuchenhan-tri): This is extremely inefficient as it allocates
+          // for all the entries in the row 'row'.
+          int row = col;
+          for (int c = 0; c < get_num_dofs(); ++c) {
+            if (c != row) jacobian->coeffRef(row, c) = 0;
+          }
+        }
+      }
     }
   }
 }
@@ -127,6 +162,31 @@ T BackwardEulerObjective<T>::norm(const Eigen::Ref<const VectorX<T>>& x) const {
   return (tmp_x.array().rowwise() / tmp_mass).abs().maxCoeff();
 }
 
+template <typename T>
+std::unique_ptr<multibody::solvers::LinearOperator<T>>
+BackwardEulerObjective<T>::GetJacobian() {
+  if (matrix_free_) {
+    auto multiply = [this](const Eigen::Ref<const VectorX<T>>& x,
+                           EigenPtr<VectorX<T>> y) {
+      const Matrix3X<T>& tmp_x =
+          Eigen::Map<const Matrix3X<T>>(x.data(), 3, x.size() / 3);
+      Matrix3X<T> tmp_y;
+      tmp_y.resize(3, tmp_x.cols());
+      this->Multiply(tmp_x, &tmp_y);
+      *y = Eigen::Map<VectorX<T>>(tmp_y.data(), tmp_y.size());
+    };
+    return std::make_unique<multibody::solvers::SparseLinearOperator<T>>(
+        "Jacobian", multiply, get_num_dofs(), get_num_dofs());
+  }
+  int num_dofs = get_num_dofs();
+  if (jacobian_.cols() != num_dofs) {
+    jacobian_.resize(num_dofs, num_dofs);
+    SetSparsityPattern(&jacobian_);
+  }
+  BuildJacobian(&jacobian_);
+  return std::make_unique<multibody::solvers::SparseLinearOperator<T>>(
+      "Jacobian", &jacobian_);
+}
 }  // namespace fem
 }  // namespace drake
 

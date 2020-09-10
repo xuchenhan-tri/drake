@@ -8,7 +8,7 @@ void FemSystem<T>::AddObjectFromVtkFile(
     const std::string& vtk, const FemConfig& config,
     std::function<void(int, EigenPtr<Matrix3X<T>>)> position_transform,
     std::function<void(int, EigenPtr<Matrix3X<T>>)> velocity_transform,
-    std::function<void(int, const Matrix3X<T>&, EigenPtr<Matrix3X<T>>)>
+    std::function<bool(int, const Matrix3X<T>&)>
         boundary_condition) {
   // We only allow one object in FEM sim so far.
   DRAKE_DEMAND(object_added_ == false);
@@ -31,7 +31,7 @@ void FemSystem<T>::AddRectangularBlock(
     const FemConfig& config,
     std::function<void(int, EigenPtr<Matrix3X<T>>)> position_transform,
     std::function<void(int, EigenPtr<Matrix3X<T>>)> velocity_transform,
-    std::function<void(int, const Matrix3X<T>&, EigenPtr<Matrix3X<T>>)>
+    std::function<bool(int, const Matrix3X<T>&)>
         boundary_condition) {
   // We only allow one object in FEM sim so far.
   DRAKE_DEMAND(object_added_ == false);

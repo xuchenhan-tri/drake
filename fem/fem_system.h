@@ -35,7 +35,7 @@ class FemSystem final : public systems::LeafSystem<T> {
           nullptr,
       std::function<void(int, EigenPtr<Matrix3X<T>>)> velocity_transform =
           nullptr,
-      std::function<void(int, const Matrix3X<T>&, EigenPtr<Matrix3X<T>>)>
+      std::function<bool(int, const Matrix3X<T>&)>
           boundary_condition = nullptr);
 
   void AddRectangularBlock(
@@ -45,7 +45,7 @@ class FemSystem final : public systems::LeafSystem<T> {
           nullptr,
       std::function<void(int, EigenPtr<Matrix3X<T>>)> velocity_transform =
           nullptr,
-      std::function<void(int, const Matrix3X<T>&, EigenPtr<Matrix3X<T>>)>
+      std::function<bool(int, const Matrix3X<T>&)>
           boundary_condition = nullptr);
 
   void AddCollisionObject(std::unique_ptr<CollisionObject<T>> object) {

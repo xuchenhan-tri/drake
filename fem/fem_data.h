@@ -19,11 +19,10 @@ namespace fem {
 template <typename T>
 struct BoundaryCondition {
   BoundaryCondition(int object_id_in,
-                    const std::function<void(int, const Matrix3X<T>&,
-                                             EigenPtr<Matrix3X<T>>)>& bc_in)
+                    const std::function<int(int, const Matrix3X<T>&)>& bc_in)
       : object_id(object_id_in), bc(bc_in) {}
   int object_id;
-  std::function<void(int, const Matrix3X<T>&, EigenPtr<Matrix3X<T>>)> bc;
+  std::function<bool(int, const Matrix3X<T>&)> bc;
 };
 
 /** A data class that holds FEM vertex states, elements and constants. */
