@@ -3,6 +3,7 @@
 #include "drake/common/eigen_types.h"
 #include "drake/fem/fem_data.h"
 #include "drake/fem/fem_force.h"
+#include "drake/fem/fem_state.h"
 #include "drake/multibody/solvers/linear_operator.h"
 #include "drake/multibody/solvers/sparse_linear_operator.h"
 
@@ -64,38 +65,32 @@ class BackwardEulerObjective {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(BackwardEulerObjective)
 
-  BackwardEulerObjective(FemData<T>* data, FemForce<T>* force)
-      : fem_data_(*data), force_(*force) {}
+  BackwardEulerObjective(const FemData<T>& data, FemState<T>* state,
+                         const FemForce<T>& force)
+      : fem_data_(data), fem_state_(*state), force_(force) {}
 
   /** Move the position of the vertices to tmp_x = q_hat + dt * dv where q_hat =
    * q + v_n * dt, and updates the quantities that depends on vertex positions.
    * @param dv[in] The candidate change of velocity.
    */
-  void Update(const Eigen::Ref<const VectorX<T>>& dv);
+  void UpdateState(const Eigen::Ref<const VectorX<T>>& dv) const;
 
   /** Evaluate -G(x) = -M*x + f(qⁿ + dt * (vⁿ + x), vⁿ + x) * dt, where f = fe +
    * fd + gravity. */
-  void CalcResidual(EigenPtr<VectorX<T>> residual);
+  void CalcResidual(const Eigen::Ref<const VectorX<T>>& dv,
+                    EigenPtr<VectorX<T>> residual) const;
 
   /** Return the product of matrix-vector multiplication A*x where A =
    * (1+alpha*dt) M + (beta * dt + dt²) * K. */
   void Multiply(const Eigen::Ref<const Matrix3X<T>>& x,
                 EigenPtr<Matrix3X<T>> prod) const;
 
-  /** Build the matrix A = (1+alpha*dt) * M + (beta * dt + dt²) * K. */
-  void BuildJacobian(Eigen::SparseMatrix<T>* jacobian) const;
-
   /** Allocate memory for the input Eigen::SparseMatrix for entries that are
    * non-zero in the stiffness and damping matrices. */
-  void SetSparsityPattern(Eigen::SparseMatrix<T>* jacobian) const;
-
-  /** Sets the entries corresponding to vertices under Dirichlet boundary
-   * conditions to zero. */
-  void Project(EigenPtr<Matrix3X<T>> impulse) const;
-  void Project(Eigen::SparseMatrix<T>* jacobian) const;
+  void SetSparsityPattern(Eigen::SparseMatrix<T>* A) const;
 
   /** Returns 3 * number of vertices. */
-  int get_num_dofs() const { return fem_data_.get_q().size(); }
+  int get_num_dofs() const { return fem_data_.get_Q().size(); }
 
   const VectorX<T>& get_mass() const { return fem_data_.get_mass(); }
 
@@ -108,16 +103,23 @@ class BackwardEulerObjective {
 
   /** Calculates the Jacobian matrix at the current configuration and returns a
    * linear operator representing the Jacobian matrix. */
-  std::unique_ptr<multibody::solvers::LinearOperator<T>> GetJacobian();
+  std::unique_ptr<multibody::solvers::LinearOperator<T>> GetA() const;
 
  private:
-  FemData<T>& fem_data_;
-  FemForce<T>& force_;
+  const std::vector<Matrix3<T>>& EvalF() const;
+  const std::vector<std::unique_ptr<HyperelasticCache<T>>>&
+  EvalHyperelasticCache() const;
+  /* Build the matrix A = (1+alpha*dt) * M + (beta * dt + dt²) * K. */
+  void BuildA(Eigen::SparseMatrix<T>* A) const;
+  /* Sets the entries corresponding to vertices under Dirichlet boundary
+    conditions to zero. */
+  void Project(EigenPtr<Matrix3X<T>> impulse) const;
+  void Project(Eigen::SparseMatrix<T>* A) const;
+
+  const FemData<T>& fem_data_;
+  FemState<T>& fem_state_;
+  const FemForce<T>& force_;
   bool matrix_free_{false};
-  Eigen::SparseMatrix<T> jacobian_;
-  std::function<void(const Eigen::Ref<const Matrix3X<T>>&,
-                     EigenPtr<Matrix3X<T>>)>
-      multiply_;
 };
 }  // namespace fem
 }  // namespace drake

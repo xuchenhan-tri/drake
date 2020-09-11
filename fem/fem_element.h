@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <utility>
+#include <array>
 
 #include "drake/common/eigen_types.h"
 #include "drake/common/default_scalars.h"
@@ -21,7 +22,6 @@ class FemElement {
              std::unique_ptr<HyperelasticConstitutiveModel<T>> model, T density)
       : vertex_indices_(vertex_indices),
         constitutive_model_(std::move(model)),
-        F_(Matrix3<T>::Identity()),
         density_(density) {
     Matrix3<T> Dm = CalcShapeMatrix(vertex_indices_, positions);
     T unit_simplex_volume = 1.0 / 6.0;
@@ -38,26 +38,14 @@ class FemElement {
   FemElement& operator=(const FemElement&) = delete;
   FemElement& operator=(FemElement&&) = default;
 
-  /** Calculates the deformation gradient F of each element and update all
-   states that depend on F.
+  /** Calculates the deformation gradient F of each quadrature point in the element.
    @param[in] q  The positions of the vertices.
    */
-  void UpdateF(const Eigen::Ref<const Matrix3X<T>>& q) {
-    F_ = CalcShapeMatrix(vertex_indices_, q) * Dm_inv_;
-    constitutive_model_->UpdateDeformationBasedState(F_);
-  }
-
-  /** Update states that explicitly depend on positions at the beginning of a
-   timestep.
-   @param[in] q_n  The positions of the vertices at the beginning of the time
-   step.
-   */
-  void UpdateTimeNPositionBasedState(const Eigen::Ref<const Matrix3X<T>>& q_n) {
-    Eigen::Matrix<T, 3, 4> local_qn;
-    for (int i = 0; i < 4; ++i) {
-      local_qn.col(i) = q_n.col(vertex_indices_[i]);
-    }
-    constitutive_model_->UpdatePositionBasedState(local_qn);
+  Matrix3<T> CalcF(const Eigen::Ref<const Matrix3X<T>>& q) const {
+      // Linear elements has only one quadrature point
+    Matrix3<T> local_F;
+    local_F = CalcShapeMatrix(vertex_indices_, q) * Dm_inv_;
+    return local_F;
   }
 
   /** Given index = [i₀, i₁, i₂, i₃], calculates the shape matrix from linear
@@ -79,16 +67,14 @@ class FemElement {
 
   const Matrix3<T>& get_Dm_inv() const { return Dm_inv_; }
 
-  const Matrix3<T>& get_F() const { return F_; }
-
   const HyperelasticConstitutiveModel<T>* get_constitutive_model() const {
     return constitutive_model_.get();
   }
 
+
  private:
   Vector4<int> vertex_indices_;
   std::unique_ptr<HyperelasticConstitutiveModel<T>> constitutive_model_;
-  Matrix3<T> F_;
   Matrix3<T> Dm_inv_;
   T element_measure_;
   T density_;

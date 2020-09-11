@@ -2,6 +2,8 @@
 
 #include "drake/common/eigen_types.h"
 #include "drake/common/nice_type_name.h"
+#include "drake/fem/fem_state.h"
+#include "drake/fem/hyperelastic_cache.h"
 
 namespace drake {
 namespace fem {
@@ -32,21 +34,11 @@ class HyperelasticConstitutiveModel {
     @param[in] F  The deformation gradient evaluated at where the constitutive
     model lives.
   */
-  void UpdateDeformationBasedState(const Eigen::Ref<const Matrix3<T>>& F) {
-    DoUpdateDeformationBasedState(F);
-  }
-
-  /** Updates the states that depend on the positions the control vertices of
-    the element that the constitutive model lives on.
-    @param[in] q  The positions of the control vertices of the elements where
-    the constitutive model lives.
-  */
-  /* TODO(xuchenhan-tri): Make the argument type more general to support
-   elements with more than 4 vertices. This should be straightforward when we
-   introduce the FemElement class. */
-  void UpdatePositionBasedState(
-      const Eigen::Ref<const Eigen::Matrix<T, 3, 4>>& q) {
-    DoUpdatePositionBasedState(q);
+  void UpdateHyperelasticCache(const FemState<T>& fem_state, int quadrature_id, std::vector<std::unique_ptr<HyperelasticCache<T>>>* cache) const {
+      DRAKE_DEMAND(fem_state.get_F().size() == cache->size());
+      DRAKE_DEMAND(quadrature_id < static_cast<int>(cache->size()));
+      DRAKE_DEMAND(quadrature_id >= 0);
+    DoUpdateHyperelasticCache(fem_state, quadrature_id, cache);
   }
 
   T get_E() const { return E_; }
@@ -57,16 +49,16 @@ class HyperelasticConstitutiveModel {
   T get_lambda() const { return lambda_; }
 
   /** Calculates the energy density. */
-  T CalcEnergyDensity() const { return DoCalcEnergyDensity(); }
+  T CalcPsi(const HyperelasticCache<T>& cache) const { return DoCalcPsi(cache); }
 
   /** Calculates the First Piola stress under current states. */
-  Matrix3<T> CalcFirstPiola() const { return DoCalcFirstPiola(); }
+  Matrix3<T> CalcFirstPiola(const HyperelasticCache<T>& cache) const { return DoCalcFirstPiola(cache); }
 
   /** Calculates the First Piola stress Differential dP(dF) = dP/dF * dF under
    * current states. */
   Matrix3<T> CalcFirstPiolaDifferential(
-      const Eigen::Ref<const Matrix3<T>>& dF) const {
-    return DoCalcFirstPiolaDifferential(dF);
+      const HyperelasticCache<T>& cache, const Eigen::Ref<const Matrix3<T>>& dF) const {
+    return DoCalcFirstPiolaDifferential(cache, dF);
   }
 
   /** Calculates the First Piola stress derivative dP/dF under current states.
@@ -103,47 +95,45 @@ class HyperelasticConstitutiveModel {
                  |                                |
                  ----------------------------------
    */
-  Eigen::Matrix<T, 9, 9> CalcFirstPiolaDerivative() const {
-    return DoCalcFirstPiolaDerivative();
+  Eigen::Matrix<T, 9, 9> CalcFirstPiolaDerivative(const HyperelasticCache<T>& cache) const {
+    return DoCalcFirstPiolaDerivative(cache);
   }
 
+  /** Create the HyperelasticCache that is used to calculate stress and its derivatives. */
+  std::unique_ptr<HyperelasticCache<T>> CreateCache() const {
+      return DoCreateCache();
+  }
  protected:
   /* Update the states that depend on the deformation gradient F.
     @param[in] F  The deformation gradient evaluated at where the constitutive
     model lives.
   */
-  virtual void DoUpdateDeformationBasedState(
-      const Eigen::Ref<const Matrix3<T>>& F) = 0;
+  virtual void DoUpdateHyperelasticCache(
+      const FemState<T>& fem_state, int quadrature_id, std::vector<std::unique_ptr<HyperelasticCache<T>>>* cache) const = 0;
 
   /* Updates the states that depend on the positions the control vertices of
     the element that the constitutive model lives on.
     @param[in] q  The positions of the control vertices of the elements where
     the constitutive model lives.
   */
-  /* TODO(xuchenhan-tri): Make the argument type more general to support
-   elements with more than 4 vertices. This should be straightforward when we
-   introduce the FemElement class. */
-  virtual void DoUpdatePositionBasedState(
-      const Eigen::Ref<const Eigen::Matrix<T, 3, 4>>&) {
-    throw std::runtime_error("DoUpdatePositionBasedState(): Concrete type " +
-                             NiceTypeName::Get(*this) +
-                             " must provide an implementation.");
-  }
 
   /* Calculates the energy density. */
-  virtual T DoCalcEnergyDensity() const = 0;
+  virtual T DoCalcPsi(const HyperelasticCache<T>& cache) const = 0;
 
   /* Calculates the First Piola stress under current states. */
-  virtual Matrix3<T> DoCalcFirstPiola() const = 0;
+  virtual Matrix3<T> DoCalcFirstPiola(const HyperelasticCache<T>& cache) const = 0;
 
   /* Calculates the First Piola stress Differential dP(dF) = dP/dF * dF under
     current states. */
   virtual Matrix3<T> DoCalcFirstPiolaDifferential(
-      const Eigen::Ref<const Matrix3<T>>& dF) const = 0;
+          const HyperelasticCache<T>& cache, const Eigen::Ref<const Matrix3<T>>& dF) const = 0;
 
   /* Calculates the First Piola stress derivative dP/dF under current states.
    */
-  virtual Eigen::Matrix<T, 9, 9> DoCalcFirstPiolaDerivative() const = 0;
+  virtual Eigen::Matrix<T, 9, 9> DoCalcFirstPiolaDerivative(const HyperelasticCache<T>& cache) const = 0;
+
+  /* Create the HyperelasticCache that is used to calculate stress and its derivatives. */
+  virtual std::unique_ptr<HyperelasticCache<T>> DoCreateCache() const = 0;
 
  private:
   /* Set the Lamé parameters from Young's modulus and Poisson ratio. It's

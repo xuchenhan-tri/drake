@@ -24,23 +24,19 @@ void FemData<T>::SetMassFromDensity(const int object_id, const T density) {
 template <typename T>
 int FemData<T>::AddUndeformedObject(const std::vector<Vector4<int>>& indices,
                                     const Matrix3X<T>& positions,
-                                    const FemConfig& config) {
+                                    const MaterialConfig& config) {
   // Add new elements and record the element indices for this object.
   std::vector<int> local_element_indices(indices.size());
   Vector4<int> particle_offset{num_vertices_, num_vertices_, num_vertices_,
                                num_vertices_};
   for (int i = 0; i < static_cast<int>(indices.size()); ++i) {
-    Matrix3X<T> local_positions(3, 4);
-    for (int j = 0; j < 4; ++j) {
-      local_positions.col(j) = positions.col(indices[i][j]);
-    }
     mesh_.push_back(indices[i] + particle_offset);
     // TODO(xuchenhan-tri): Support customized constitutive models.
     elements_.emplace_back(
         indices[i] + particle_offset, positions,
         std::make_unique<CorotatedLinearElasticity<T>>(
             config.youngs_modulus, config.poisson_ratio, config.mass_damping,
-            config.stiffness_damping, local_positions),
+            config.stiffness_damping),
         config.density);
     local_element_indices[i] = num_elements_++;
   }
@@ -52,14 +48,9 @@ int FemData<T>::AddUndeformedObject(const std::vector<Vector4<int>>& indices,
     local_vertex_indices[i] = num_vertices_++;
   vertex_indices_.push_back(local_vertex_indices);
 
-  // Allocate for positions and velocities.
-  Q_.conservativeResize(3, q_.cols() + positions.cols());
+  // Allocate for reference positions.
+  Q_.conservativeResize(3, Q_.cols() + positions.cols());
   Q_.rightCols(positions.cols()) = positions;
-  q_.conservativeResize(3, q_.cols() + positions.cols());
-  q_.rightCols(positions.cols()) = positions;
-  v_.conservativeResize(3, v_.cols() + positions.cols());
-  v_.rightCols(positions.cols()).setZero();
-  dv_.resize(3, v_.cols());
 
   // Set mass.
   mass_.conservativeResize(mass_.size() + positions.cols());
