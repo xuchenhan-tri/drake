@@ -5,7 +5,7 @@ namespace fem {
 
 template <typename T>
 void FemSystem<T>::AddObjectFromVtkFile(
-    const std::string& vtk, const FemConfig& config,
+    const std::string& vtk, const MaterialConfig& config,
     std::function<void(int, EigenPtr<Matrix3X<T>>)> position_transform,
     std::function<void(int, EigenPtr<Matrix3X<T>>)> velocity_transform,
     std::function<bool(int, const Matrix3X<T>&)>
@@ -28,7 +28,7 @@ void FemSystem<T>::AddObjectFromVtkFile(
 template <typename T>
 void FemSystem<T>::AddRectangularBlock(
     const int nx, const int ny, const int nz, const T h,
-    const FemConfig& config,
+    const MaterialConfig& config,
     std::function<void(int, EigenPtr<Matrix3X<T>>)> position_transform,
     std::function<void(int, EigenPtr<Matrix3X<T>>)> velocity_transform,
     std::function<bool(int, const Matrix3X<T>&)>

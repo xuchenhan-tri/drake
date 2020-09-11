@@ -8,38 +8,42 @@ namespace drake {
 namespace fem {
 
 template <typename T>
-void BackwardEulerObjective<T>::Update(const Eigen::Ref<const VectorX<T>>& dv) {
-  // Move positions states to tmp_q = qₙ + dt * (vₙ + dv).
-  const Matrix3X<T>& tmp_q =
-      Eigen::Map<const Matrix3X<T>>(dv.data(), 3, dv.size() / 3) *
-          fem_data_.get_dt() +
-      fem_data_.get_q_star();
-  auto& elements = fem_data_.get_mutable_elements();
-  // Update deformation gradient on all elements.
-  for (auto& e : elements) {
-    e.UpdateF(tmp_q);
-  }
+void BackwardEulerObjective<T>::UpdateState(
+    const Eigen::Ref<const VectorX<T>>& dv) const {
+  const auto& dv_tmp =
+      Eigen::Map<const Matrix3X<T>>(dv.data(), 3, dv.size() / 3);
+  // Move velocity states to v = vₙ + dv).
+  auto& v = fem_state_.get_mutable_v();
+  const auto& v0 = fem_state_.get_v0();
+  v = v0 + dv_tmp;
+  // Move position states to q = qₙ + dt * v.
+  auto& q = fem_state_.get_mutable_q();
+  q = fem_state_.get_q0() + fem_data_.get_dt() * v;
+  EvalF();
+  EvalHyperelasticCache();
 }
 
 template <typename T>
-void BackwardEulerObjective<T>::CalcResidual(EigenPtr<VectorX<T>> residual) {
+void BackwardEulerObjective<T>::CalcResidual(
+    const Eigen::Ref<const VectorX<T>>& dv,
+    EigenPtr<VectorX<T>> residual) const {
   Eigen::Map<Matrix3X<T>> impulse(residual->data(), 3, residual->size() / 3);
+  Eigen::Map<const Matrix3X<T>> dv_tmp(dv.data(), 3, dv.size() / 3);
   impulse.setZero();
   const VectorX<T>& mass = fem_data_.get_mass();
-  const Matrix3X<T>& dv = fem_data_.get_dv();
   const T& dt = fem_data_.get_dt();
   const Vector3<T>& gravity = fem_data_.get_gravity();
-  const auto& v_hat = fem_data_.get_v() + fem_data_.get_dv();
+  const auto& v = fem_state_.get_v();
 
   // Add -M*x + gravity * dt
   for (int i = 0; i < mass.size(); ++i) {
-    impulse.col(i) -= mass(i) * dv.col(i);
+    impulse.col(i) -= mass(i) * dv_tmp.col(i);
     impulse.col(i) += mass(i) * dt * gravity;
   }
   // Add fe * dt.
   force_.AccumulateScaledElasticForce(dt, &impulse);
   // Add fd * dt.
-  force_.AccumulateScaledDampingForce(dt, v_hat, &impulse);
+  force_.AccumulateScaledDampingForce(dt, v, &impulse);
   // Apply boundary condition.
   Project(&impulse);
   *residual = Eigen::Map<VectorX<T>>(impulse.data(), impulse.size());
@@ -66,7 +70,7 @@ void BackwardEulerObjective<T>::Multiply(const Eigen::Ref<const Matrix3X<T>>& x,
 
 template <typename T>
 void BackwardEulerObjective<T>::SetSparsityPattern(
-    Eigen::SparseMatrix<T>* jacobian) const {
+    Eigen::SparseMatrix<T>* A) const {
   std::vector<Eigen::Triplet<T>> non_zero_entries(get_num_dofs());
   // Diagonal entries contains mass and are non-zero.
   for (int i = 0; i < get_num_dofs(); ++i) {
@@ -74,36 +78,103 @@ void BackwardEulerObjective<T>::SetSparsityPattern(
   }
   // Add in the non-zero entries from the stiffness and damping matrices.
   force_.SetSparsityPattern(&non_zero_entries);
-  jacobian->setFromTriplets(non_zero_entries.begin(), non_zero_entries.end());
-  jacobian->makeCompressed();
+  A->setFromTriplets(non_zero_entries.begin(), non_zero_entries.end());
+  A->makeCompressed();
 }
 
 template <typename T>
-void BackwardEulerObjective<T>::BuildJacobian(
-    Eigen::SparseMatrix<T>* jacobian) const {
+T BackwardEulerObjective<T>::norm(const Eigen::Ref<const VectorX<T>>& x) const {
+  // Input has unit of impulse. Convert to the unit of velocity by dividing by
+  // mass.
+  const auto& tmp_x = Eigen::Map<const Matrix3X<T>>(x.data(), 3, x.size() / 3);
+  DRAKE_DEMAND(tmp_x.cols() == fem_data_.get_mass().size());
+  const auto& tmp_mass = fem_data_.get_mass().transpose().array();
+  return (tmp_x.array().rowwise() / tmp_mass).abs().maxCoeff();
+}
+
+template <typename T>
+std::unique_ptr<multibody::solvers::LinearOperator<T>>
+BackwardEulerObjective<T>::GetA() const {
+  if (matrix_free_) {
+    auto multiply = [this](const Eigen::Ref<const VectorX<T>>& x,
+                           EigenPtr<VectorX<T>> y) {
+      const Matrix3X<T>& tmp_x =
+          Eigen::Map<const Matrix3X<T>>(x.data(), 3, x.size() / 3);
+      Matrix3X<T> tmp_y;
+      tmp_y.resize(3, tmp_x.cols());
+      this->Multiply(tmp_x, &tmp_y);
+      *y = Eigen::Map<VectorX<T>>(tmp_y.data(), tmp_y.size());
+    };
+    return std::make_unique<multibody::solvers::SparseLinearOperator<T>>(
+        "A", multiply, get_num_dofs(), get_num_dofs());
+  }
+  int num_dofs = get_num_dofs();
+  auto& A = fem_state_.get_mutable_A();
+  if (A.cols() != num_dofs) {
+    A.resize(num_dofs, num_dofs);
+    SetSparsityPattern(&A);
+  }
+  BuildA(&A);
+  return std::make_unique<multibody::solvers::SparseLinearOperator<T>>("A", &A);
+}
+
+template <typename T>
+const std::vector<Matrix3<T>>& BackwardEulerObjective<T>::EvalF() const {
+  if (!fem_state_.F_out_of_date()) {
+    return fem_state_.get_F();
+  }
+  const auto& elements = fem_data_.get_elements();
+  const auto& q = fem_state_.get_q();
+  auto& F = fem_state_.get_mutable_F();
+  int quadrature_offset = 0;
+  for (const auto& e : elements) {
+    F[quadrature_offset++] = e.CalcF(q);
+  }
+  fem_state_.set_F_out_of_date(false);
+  return fem_state_.get_F();
+}
+
+template <typename T>
+const std::vector<std::unique_ptr<HyperelasticCache<T>>>&
+BackwardEulerObjective<T>::EvalHyperelasticCache() const {
+  if (!fem_state_.hyperelastic_cache_out_of_date()) {
+    return fem_state_.get_hyperelastic_cache();
+  }
+  DRAKE_DEMAND(!fem_state_.F_out_of_date());
+  DRAKE_DEMAND(!fem_state_.F0_out_of_date());
+  const auto& elements = fem_data_.get_elements();
+  auto& model_cache = fem_state_.get_mutable_hyperelastic_cache();
+  int quadrature_offset = 0;
+  for (const auto& e : elements) {
+    const auto* model = e.get_constitutive_model();
+    model->UpdateHyperelasticCache(fem_state_, quadrature_offset++, &model_cache);
+  }
+  fem_state_.set_hyperelastic_cache_out_of_date(false);
+  return fem_state_.get_hyperelastic_cache();
+}
+
+template <typename T>
+void BackwardEulerObjective<T>::BuildA(Eigen::SparseMatrix<T>* A) const {
   const auto& mass = get_mass();
   const T& dt = fem_data_.get_dt();
   // The dimension of the matrix should be properly set by the caller and
   // should be the same as the number of dofs in the system.
-  DRAKE_DEMAND(jacobian->cols() == get_num_dofs());
+  DRAKE_DEMAND(A->cols() == get_num_dofs());
   // Clear out old data.
-  for (int k = 0; k < jacobian->outerSize(); ++k)
-    for (typename Eigen::SparseMatrix<T>::InnerIterator it(*jacobian, k); it;
-         ++it) {
+  for (int k = 0; k < A->outerSize(); ++k)
+    for (typename Eigen::SparseMatrix<T>::InnerIterator it(*A, k); it; ++it) {
       it.valueRef() = 0.0;
     }
   // Add mass to the diagonal entries.
   for (int i = 0; i < mass.size(); ++i) {
     for (int d = 0; d < 3; ++d) {
-      jacobian->coeffRef(3 * i + d, 3 * i + d) += mass(i);
+      A->coeffRef(3 * i + d, 3 * i + d) += mass(i);
     }
   }
   // Add Stiffness and damping matrix to the Jacobian.
-  force_.AccumulateScaledStiffnessMatrix(dt * dt, jacobian);
-  force_.AccumulateScaledDampingMatrix(dt, jacobian);
-  std::cout << jacobian->nonZeros() << std::endl;
-  Project(jacobian);
-  std::cout << jacobian->nonZeros() << std::endl;
+  force_.AccumulateScaledStiffnessMatrix(dt * dt, A);
+  force_.AccumulateScaledDampingMatrix(dt, A);
+  Project(A);
 }
 
 template <typename T>
@@ -123,8 +194,7 @@ void BackwardEulerObjective<T>::Project(EigenPtr<Matrix3X<T>> impulse) const {
 }
 
 template <typename T>
-void BackwardEulerObjective<T>::Project(
-    Eigen::SparseMatrix<T>* jacobian) const {
+void BackwardEulerObjective<T>::Project(Eigen::SparseMatrix<T>* A) const {
   const auto& bc = fem_data_.get_v_bc();
   const auto& vertex_indices = fem_data_.get_vertex_indices();
   const Matrix3X<T>& initial_position = fem_data_.get_Q();
@@ -135,12 +205,11 @@ void BackwardEulerObjective<T>::Project(
         for (int col = 3 * vertex_range[j]; col < 3 * (vertex_range[j] + 1);
              ++col) {
           // Set everything in the row corresponding to Dirichlet entry to 0.
-          (*jacobian).row(col) *= 0;
+          (*A).row(col) *= 0;
           // Set everything in the column corresponding to Dirichlet entry to 0,
           // and set the diagonal entry to 1.
-          for (typename Eigen::SparseMatrix<T>::InnerIterator it(*jacobian,
-                                                                 col);
-               it; ++it) {
+          for (typename Eigen::SparseMatrix<T>::InnerIterator it(*A, col); it;
+               ++it) {
             if (it.index() == col)
               it.valueRef() = 1.0;
             else
@@ -150,42 +219,6 @@ void BackwardEulerObjective<T>::Project(
       }
     }
   }
-}
-
-template <typename T>
-T BackwardEulerObjective<T>::norm(const Eigen::Ref<const VectorX<T>>& x) const {
-  // Input has unit of impulse. Convert to the unit of velocity by dividing by
-  // mass.
-  const auto& tmp_x = Eigen::Map<const Matrix3X<T>>(x.data(), 3, x.size() / 3);
-  DRAKE_DEMAND(tmp_x.cols() == fem_data_.get_mass().size());
-  const auto& tmp_mass = fem_data_.get_mass().transpose().array();
-  return (tmp_x.array().rowwise() / tmp_mass).abs().maxCoeff();
-}
-
-template <typename T>
-std::unique_ptr<multibody::solvers::LinearOperator<T>>
-BackwardEulerObjective<T>::GetJacobian() {
-  if (matrix_free_) {
-    auto multiply = [this](const Eigen::Ref<const VectorX<T>>& x,
-                           EigenPtr<VectorX<T>> y) {
-      const Matrix3X<T>& tmp_x =
-          Eigen::Map<const Matrix3X<T>>(x.data(), 3, x.size() / 3);
-      Matrix3X<T> tmp_y;
-      tmp_y.resize(3, tmp_x.cols());
-      this->Multiply(tmp_x, &tmp_y);
-      *y = Eigen::Map<VectorX<T>>(tmp_y.data(), tmp_y.size());
-    };
-    return std::make_unique<multibody::solvers::SparseLinearOperator<T>>(
-        "Jacobian", multiply, get_num_dofs(), get_num_dofs());
-  }
-  int num_dofs = get_num_dofs();
-  if (jacobian_.cols() != num_dofs) {
-    jacobian_.resize(num_dofs, num_dofs);
-    SetSparsityPattern(&jacobian_);
-  }
-  BuildJacobian(&jacobian_);
-  return std::make_unique<multibody::solvers::SparseLinearOperator<T>>(
-      "Jacobian", &jacobian_);
 }
 }  // namespace fem
 }  // namespace drake

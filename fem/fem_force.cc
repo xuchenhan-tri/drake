@@ -15,11 +15,15 @@ void FemForce<T>::AccumulateScaledElasticForce(
   grad_shape.col(0) = -Vector3<T>::Ones();
   grad_shape.template topRightCorner<3, 3>() = Matrix3<T>::Identity();
 
-  for (const FemElement<T>& e : elements_) {
-    const Matrix3<T> P = e.get_constitutive_model()->CalcFirstPiola();
-    Eigen::Matrix<T, 3, 4> element_force = scale * e.get_element_measure() * P *
-                                           e.get_Dm_inv().transpose() *
-                                           grad_shape;
+  const auto& elements = fem_data_.get_elements();
+  const auto& P = EvalP();
+  int quadrature_offset = 0;
+  for (const FemElement<T>& e : elements) {
+    //    const Matrix3<T> P =
+    //    e.get_constitutive_model()->CalcFirstPiola(*model_cache[quadrature_offset++]);
+    Eigen::Matrix<T, 3, 4> element_force =
+        scale * e.get_element_measure() * P[quadrature_offset++] *
+        e.get_Dm_inv().transpose() * grad_shape;
     const Vector4<int>& indices = e.get_indices();
     for (int i = 0; i < static_cast<int>(indices.size()); ++i) {
       force->col(indices[i]) -= element_force.col(i);
@@ -43,11 +47,17 @@ void FemForce<T>::AccumulateScaledElasticForceDifferential(
   Eigen::Matrix<T, 3, 4> grad_shape;
   grad_shape.col(0) = -Vector3<T>::Ones();
   grad_shape.template topRightCorner<3, 3>() = Matrix3<T>::Identity();
-  for (const FemElement<T>& e : elements_) {
-    Matrix3<T> dF = e.CalcShapeMatrix(e.get_indices(), dx) * e.get_Dm_inv();
+
+  const auto& elements = fem_data_.get_elements();
+  const auto& model_cache = fem_state_.get_hyperelastic_cache();
+  int quadrature_offset = 0;
+  for (const FemElement<T>& e : elements) {
+    const Matrix3<T> dF =
+        e.CalcShapeMatrix(e.get_indices(), dx) * e.get_Dm_inv();
     const Matrix3<T>& dP =
-        e.get_constitutive_model()->CalcFirstPiolaDifferential(dF);
-    Eigen::Matrix<T, 3, 4> element_force_differential =
+        e.get_constitutive_model()->CalcFirstPiolaDifferential(
+            *model_cache[quadrature_offset++], dF);
+    const Eigen::Matrix<T, 3, 4> element_force_differential =
         scale * e.get_element_measure() * dP * e.get_Dm_inv().transpose() *
         grad_shape;
     const Vector4<int>& indices = e.get_indices();
@@ -64,7 +74,10 @@ void FemForce<T>::AccumulateScaledDampingForceDifferential(
   Eigen::Matrix<T, 3, 4> grad_shape;
   grad_shape.col(0) = -Vector3<T>::Ones();
   grad_shape.template topRightCorner<3, 3>() = Matrix3<T>::Identity();
-  for (const FemElement<T>& e : elements_) {
+  const auto& elements = fem_data_.get_elements();
+  const auto& model_cache = fem_state_.get_hyperelastic_cache();
+  int quadrature_offset = 0;
+  for (const FemElement<T>& e : elements) {
     const Vector4<int>& indices = e.get_indices();
     const Matrix3<T>& Dm_inv = e.get_Dm_inv();
     const T& volume = e.get_element_measure();
@@ -72,8 +85,9 @@ void FemForce<T>::AccumulateScaledDampingForceDifferential(
     const auto* model = e.get_constitutive_model();
     const T fraction = 1.0 / static_cast<T>(indices.size());
     Matrix3<T> dF = e.CalcShapeMatrix(indices, dx) * Dm_inv;
-    const Matrix3<T>& dP =
-        model->CalcFirstPiolaDifferential(dF) * model->get_beta();
+    const Matrix3<T>& dP = model->CalcFirstPiolaDifferential(
+                               *model_cache[quadrature_offset++], dF) *
+                           model->get_beta();
     Eigen::Matrix<T, 3, 4> negative_element_force_differential =
         scale * volume * dP * Dm_inv.transpose() * grad_shape;
     for (int i = 0; i < static_cast<int>(indices.size()); ++i) {
@@ -91,11 +105,12 @@ void FemForce<T>::AccumulateScaledDampingForceDifferential(
 template <typename T>
 T FemForce<T>::CalcElasticEnergy() const {
   T elastic_energy = 0;
-  for (const FemElement<T>& e : elements_) {
-    const T& volume = e.get_element_measure();
-    const auto* model = e.get_constitutive_model();
-    T energy_density = model->CalcEnergyDensity();
-    elastic_energy += volume * energy_density;
+  const auto& elements = fem_data_.get_elements();
+  const auto& psi = EvalPsi();
+  int quadrature_offset = 0;
+  for (const FemElement<T>& e : elements) {
+    const auto& volume = e.get_element_measure();
+    elastic_energy += volume * psi[quadrature_offset++];
   }
   return elastic_energy;
 }
@@ -107,9 +122,10 @@ void FemForce<T>::SetSparsityPattern(
   // Each element has 4 vertices, which gives 4x4 nonzero blocks and each
   // block is of size 3x3. There will be redundancies in the allocation which
   // the caller will compress away.
+  const auto& elements = fem_data_.get_elements();
   non_zero_entries->reserve(non_zero_entries->size() +
-                            elements_.size() * 4 * 4 * 3 * 3);
-  for (const auto& e : elements_) {
+                            elements.size() * 4 * 4 * 3 * 3);
+  for (const auto& e : elements) {
     const auto& indices = e.get_indices();
     for (int i = 0; i < indices.size(); ++i) {
       for (int k = 0; k < 3; ++k) {
@@ -124,6 +140,7 @@ void FemForce<T>::SetSparsityPattern(
     }
   }
 }
+
 /*  The stiffness matrix is the second derivative of the energy w.r.t. the
  * degree of freedoms, i.e.: Kₖₗ = ∑ₑ ∂Fₐᵦ/∂qₗ * ∂Pᵢⱼ/∂Fₐᵦ * ∂Fᵢⱼ/∂qₖ * Vₑ  (1).
  *  The constitutive model is responsible for providing ∂Pᵢⱼ/∂Fₐᵦ.
@@ -147,9 +164,10 @@ void FemForce<T>::AccumulateScaledStiffnessMatrix(
   grad_shape.col(0) = -Vector3<T>::Ones();
   grad_shape.template topRightCorner<3, 3>() = Matrix3<T>::Identity();
 
-  for (const FemElement<T>& e : elements_) {
-    const Eigen::Matrix<T, 9, 9> dPdF =
-        e.get_constitutive_model()->CalcFirstPiolaDerivative();
+  const auto& dPdF = EvaldPdF();
+  int quadrature_offset = 0;
+  const auto& elements = fem_data_.get_elements();
+  for (const FemElement<T>& e : elements) {
     const auto& Dm_inv_transpose = e.get_Dm_inv().transpose();
     const auto& dFdq = Dm_inv_transpose * grad_shape;
     const auto& indices = e.get_indices();
@@ -157,12 +175,13 @@ void FemForce<T>::AccumulateScaledStiffnessMatrix(
 
     for (int p = 0; p < dFdq.cols(); ++p) {
       for (int q = 0; q < dFdq.cols(); ++q) {
-        Matrix3<T> K =
-            TensorContraction(dPdF, dFdq.col(p), dFdq.col(q) * volume * scale);
+        const Matrix3<T> K = TensorContraction(
+            dPdF[quadrature_offset], dFdq.col(p), dFdq.col(q) * volume * scale);
         AccumulateSparseMatrixBlock(K, indices(p), indices(q),
                                     stiffness_matrix);
       }
     }
+    ++quadrature_offset;
   }
 }
 
@@ -174,9 +193,10 @@ void FemForce<T>::AccumulateScaledDampingMatrix(
   grad_shape.col(0) = -Vector3<T>::Ones();
   grad_shape.template topRightCorner<3, 3>() = Matrix3<T>::Identity();
 
-  for (const FemElement<T>& e : elements_) {
-    const Eigen::Matrix<T, 9, 9> dPdF =
-        e.get_constitutive_model()->CalcFirstPiolaDerivative();
+  const auto& dPdF = EvaldPdF();
+  int quadrature_offset = 0;
+  const auto& elements = fem_data_.get_elements();
+  for (const FemElement<T>& e : elements) {
     const auto& Dm_inv_transpose = e.get_Dm_inv().transpose();
     const auto& dFdq = Dm_inv_transpose * grad_shape;
     const auto& indices = e.get_indices();
@@ -189,18 +209,78 @@ void FemForce<T>::AccumulateScaledDampingMatrix(
     // Add in the contribution from the stiffness terms.
     for (int p = 0; p < dFdq.cols(); ++p) {
       for (int q = 0; q < dFdq.cols(); ++q) {
-        Matrix3<T> K = TensorContraction(dPdF, dFdq.col(p),
-                                         dFdq.col(q) * volume * scale * beta);
+        const Matrix3<T> K =
+            TensorContraction(dPdF[quadrature_offset], dFdq.col(p),
+                              dFdq.col(q) * volume * scale * beta);
         AccumulateSparseMatrixBlock(K, indices(p), indices(q), damping_matrix);
       }
     }
+    ++quadrature_offset;
     // Add in the contribution from the mass terms.
-    T local_mass = fraction * volume * density;
-    Matrix3<T> M = Matrix3<T>::Identity() * (alpha * local_mass * scale);
+    const T local_mass = fraction * volume * density;
+    const Matrix3<T> M = Matrix3<T>::Identity() * (alpha * local_mass * scale);
     for (int i = 0; i < indices.size(); ++i) {
       AccumulateSparseMatrixBlock(M, indices(i), indices(i), damping_matrix);
     }
   }
+}
+
+template <typename T>
+const std::vector<T>& FemForce<T>::EvalPsi() const {
+  if (!fem_state_.psi_out_of_date()) {
+    return fem_state_.get_psi();
+  }
+  DRAKE_DEMAND(!fem_state_.hyperelastic_cache_out_of_date());
+  const auto& model_cache = fem_state_.get_hyperelastic_cache();
+  const auto& elements = fem_data_.get_elements();
+  auto& psi = fem_state_.get_mutable_psi();
+  int quadrature_offset = 0;
+  for (const FemElement<T>& e : elements) {
+    psi[quadrature_offset] =
+        e.get_constitutive_model()->CalcPsi(*model_cache[quadrature_offset]);
+    ++quadrature_offset;
+  }
+  fem_state_.set_psi_out_of_date(false);
+  return fem_state_.get_psi();
+}
+
+template <typename T>
+const std::vector<Matrix3<T>>& FemForce<T>::EvalP() const {
+  if (!fem_state_.P_out_of_date()) {
+    return fem_state_.get_P();
+  }
+  DRAKE_DEMAND(!fem_state_.hyperelastic_cache_out_of_date());
+  const auto& model_cache = fem_state_.get_hyperelastic_cache();
+  const auto& elements = fem_data_.get_elements();
+  auto& P = fem_state_.get_mutable_P();
+  int quadrature_offset = 0;
+  for (const FemElement<T>& e : elements) {
+    P[quadrature_offset] = e.get_constitutive_model()->CalcFirstPiola(
+        *model_cache[quadrature_offset]);
+    ++quadrature_offset;
+  }
+  fem_state_.set_P_out_of_date(false);
+  return fem_state_.get_P();
+}
+
+template <typename T>
+const std::vector<Eigen::Matrix<T, 9, 9>>& FemForce<T>::EvaldPdF() const {
+  if (!fem_state_.dPdF_out_of_date()) {
+    return fem_state_.get_dPdF();
+  }
+  DRAKE_DEMAND(!fem_state_.hyperelastic_cache_out_of_date());
+  const auto& model_cache = fem_state_.get_hyperelastic_cache();
+  const auto& elements = fem_data_.get_elements();
+  auto& dPdF = fem_state_.get_mutable_dPdF();
+  int quadrature_offset = 0;
+  for (const FemElement<T>& e : elements) {
+    dPdF[quadrature_offset] =
+        e.get_constitutive_model()->CalcFirstPiolaDerivative(
+            *model_cache[quadrature_offset]);
+    ++quadrature_offset;
+  }
+  fem_state_.set_dPdF_out_of_date(false);
+  return fem_state_.get_dPdF();
 }
 }  // namespace fem
 }  // namespace drake
