@@ -20,46 +20,27 @@ class CorotatedLinearElasticity final
  public:
   DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(CorotatedLinearElasticity)
 
-  CorotatedLinearElasticity(T E, T nu, T alpha, T beta,
-                            const Eigen::Matrix<T, 3, 4>& vertex_positions)
-      : HyperelasticConstitutiveModel<T>(E, nu, alpha, beta),
-        R_(Matrix3<T>::Identity()),
-        F_(Matrix3<T>::Identity()),
-        strain_(Matrix3<T>::Identity()),
-        trace_strain_(0.0) {
-    // See [Müller, 2004] section 2.4 for definition of P.
-    Matrix4<T> P;
-    P.template topLeftCorner<3, 4>() = vertex_positions;
-    P.template bottomRows<1>() = Vector4<T>::Ones();
-    Eigen::HouseholderQR<Matrix4<T>> qr(P);
-    inv_P_ = qr.solve(Matrix4<T>::Identity());
+  CorotatedLinearElasticity(T E, T nu, T alpha, T beta)
+      : HyperelasticConstitutiveModel<T>(E, nu, alpha, beta)
+  {
   }
 
   virtual ~CorotatedLinearElasticity() {}
 
  protected:
-  void DoUpdateDeformationBasedState(
-      const Eigen::Ref<const Matrix3<T>>& F) override;
+  void DoUpdateHyperelasticCache(
+      const FemState<T>& fem_state, int quadrature_id, std::vector<std::unique_ptr<HyperelasticCache<T>>>* cache) const override;
 
-  void DoUpdatePositionBasedState(
-      const Eigen::Ref<const Eigen::Matrix<T, 3, 4>>& q) override;
+  T DoCalcPsi(const HyperelasticCache<T>& cache) const override;
 
-  T DoCalcEnergyDensity() const override;
+  Matrix3<T> DoCalcFirstPiola(const HyperelasticCache<T>& cache) const override;
 
-  Matrix3<T> DoCalcFirstPiola() const override;
-
-  Matrix3<T> DoCalcFirstPiolaDifferential(
+  Matrix3<T> DoCalcFirstPiolaDifferential(const HyperelasticCache<T>& cache,
       const Eigen::Ref<const Matrix3<T>>& dF) const override;
 
-  Eigen::Matrix<T, 9, 9> DoCalcFirstPiolaDerivative() const override;
+  Eigen::Matrix<T, 9, 9> DoCalcFirstPiolaDerivative(const HyperelasticCache<T>& cache) const override;
 
- private:
-  Matrix3<T> R_;       // Corotation matrix.
-  Matrix3<T> F_;       // Deformation gradient.
-  Matrix3<T> strain_;  // Corotated Linear strain.
-  T trace_strain_;     // Trace of strain_.
-  Matrix4<T>
-      inv_P_;  // Initial Homogeneous position matrix. See [Müller, 2004].
+  std::unique_ptr<HyperelasticCache<T>> DoCreateCache() const override;
 };
 }  // namespace fem
 }  // namespace drake

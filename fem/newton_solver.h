@@ -25,19 +25,19 @@ class NewtonSolver {
 
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(NewtonSolver);
 
-  explicit NewtonSolver(BackwardEulerObjective<T>* objective)
-      : objective_(*objective) {}
+  explicit NewtonSolver(const BackwardEulerObjective<T>& objective)
+      : objective_(objective) {}
 
   /** Takes in an initial guess for the solution and overwrites it with the
       actual solution. */
-  NewtonSolverStatus Solve(EigenPtr<VectorX<T>> x);
+  NewtonSolverStatus Solve(EigenPtr<VectorX<T>> z) const;
 
-  /** Updates the `x`-dependent states and evaluates the residual -G(x). */
-  bool UpdateAndEvalResidual(const Eigen::Ref<const VectorX<T>>& x);
+  /** Updates the `x`-dependent states and evaluates the residual -G(z). */
+  bool UpdateAndEvalResidual(const Eigen::Ref<const VectorX<T>>& z) const;
 
   /** The norm calculation is delegated to the objective to support customized
    * norms. */
-  T norm(const Eigen::Ref<const VectorX<T>>& x) { return objective_.norm(x); }
+  T norm(const Eigen::Ref<const VectorX<T>>& z) const { return objective_.norm(z); }
 
   int max_iteration() const { return max_iterations_; }
 
@@ -56,18 +56,19 @@ class NewtonSolver {
 
   void set_tolerance(T tolerance) { tolerance_ = tolerance; }
 
-  EigenConjugateGradientSolver<T>& get_linear_solver() { return linear_solver_; }
+  EigenConjugateGradientSolver<T>& get_linear_solver() const { return linear_solver_; }
 
  private:
-  BackwardEulerObjective<T>& objective_;
-  EigenConjugateGradientSolver<T> linear_solver_;
+  const BackwardEulerObjective<T>& objective_;
+  mutable EigenConjugateGradientSolver<T> linear_solver_;
   int max_iterations_{
       20};  // If Newton's method does not converge in 20 iterations, you should
             // consider either using another method or come up with a better
             // initial guess.
   T tolerance_{1e-3};
-  VectorX<T> dx_;
-  VectorX<T> residual_;
+  // Scratch space for Newton solver.
+  mutable VectorX<T> dz_;
+  mutable VectorX<T> residual_;
 };
 
 }  // namespace fem

@@ -3,7 +3,7 @@
 namespace drake {
 namespace fem {
 // TODO(xuchenhan-tri): Move initialization to a constructor that throws for invalid configurations.
-struct FemConfig {
+struct MaterialConfig {
   double density{0};
   double youngs_modulus{0};
   double poisson_ratio{-2};

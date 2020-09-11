@@ -7,7 +7,8 @@
 
 #include "drake/common/default_scalars.h"
 #include "drake/common/eigen_types.h"
-#include "drake/fem/fem_element.h"
+#include "drake/fem/fem_state.h"
+#include "drake/fem/fem_data.h"
 
 namespace drake {
 namespace fem {
@@ -78,8 +79,8 @@ class FemForce {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(FemForce)
 
-  explicit FemForce(const std::vector<FemElement<T>>& elements)
-      : elements_(elements) {}
+  explicit FemForce(const FemData<T>& data, FemState<T>* state)
+      : fem_data_(data), fem_state_(*state) {}
 
   /** Called by BackwardEulerObjective::CalcResidual. Calculates the elastic
   forces, scale them by scale, and then add them to the force vector.  */
@@ -174,7 +175,15 @@ class FemForce {
   }
 
  private:
-  const std::vector<FemElement<T>>& elements_;
+    // Evaluates the elastic energy density cache.
+    const std::vector<T>& EvalPsi() const;
+  // Evaluates the first Piola stress cache.
+  const std::vector<Matrix3<T>>& EvalP() const;
+    // Evaluates the first Piola stress derivative cache.
+  const std::vector<Eigen::Matrix<T,9,9>>& EvaldPdF() const;
+
+  const FemData<T>& fem_data_;
+  FemState<T>& fem_state_;
 };
 }  // namespace fem
 }  // namespace drake

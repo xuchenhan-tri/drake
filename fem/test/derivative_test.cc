@@ -98,7 +98,7 @@ class FemForceTest : public ::testing::Test {
     // dt does not matter here, setting it to an arbitrary value of 0.1.
     data_ = std::make_unique<FemData<double>>(0.1);
     dut_ = std::make_unique<FemForce<double>>(data_->get_elements());
-    FemConfig config;
+    MaterialConfig config;
     config.density = 1e3;
     config.youngs_modulus = 1e4;
     config.poisson_ratio = 0.4;

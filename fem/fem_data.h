@@ -1,8 +1,8 @@
 #pragma once
 
 #include <memory>
-#include <vector>
 #include <utility>
+#include <vector>
 
 #include "drake/common/default_scalars.h"
 #include "drake/common/eigen_types.h"
@@ -44,7 +44,7 @@ class FemData {
   */
   int AddUndeformedObject(const std::vector<Vector4<int>>& indices,
                           const Matrix3X<T>& positions,
-                          const FemConfig& config);
+                          const MaterialConfig& config);
 
   /**
       Set the initial positions and velocities of a given object.
@@ -53,44 +53,20 @@ class FemData {
   */
   void SetMassFromDensity(const int object_id, const T density);
 
-  // Setters and getters.
+  void AddHyperelasticCache(const std::vector<std::unique_ptr<HyperelasticConstitutiveModel<T>>>& model, std::vector<std::unique_ptr<HyperelasticCache<T>>>* cache)
+  {
+      for (int i = cache->size(); i < static_cast<int>(model.size()); ++i){
+          cache->emplace_back(model[i]->CreateCache());
+      }
+  }
 
+  // Setters and getters.
+  // ---------- Vertex quntities ----------
   const VectorX<T>& get_mass() const { return mass_; }
   VectorX<T>& get_mutable_mass() { return mass_; }
 
-  const Matrix3X<T>& get_dv() const { return dv_; }
-  Matrix3X<T>& get_mutable_dv() { return dv_; }
-
-  const Matrix3X<T>& get_v() const { return v_; }
-  Matrix3X<T>& get_mutable_v() { return v_; }
-
-  const Matrix3X<T>& get_q() const { return q_; }
-  Matrix3X<T>& get_mutable_q() { return q_; }
-
   const Matrix3X<T>& get_Q() const { return Q_; }
   Matrix3X<T>& get_mutable_Q() { return Q_; }
-
-  const Matrix3X<T>& get_q_star() const { return q_star_; }
-  Matrix3X<T>& get_mutable_q_star() { return q_star_; }
-
-  void set_q(const Matrix3X<T>& q) { q_ = q; }
-  void set_Q(const Matrix3X<T>& Q) { Q_ = Q; }
-
-  const std::vector<FemElement<T>>& get_elements() const { return elements_; }
-  std::vector<FemElement<T>>& get_mutable_elements() { return elements_; }
-
-  double get_dt() const { return dt_; }
-  void set_dt(double dt) { dt_ = dt; }
-
-  double get_time() const { return time_; }
-  void set_time(double time) { time_ = time; }
-
-  const Vector3<T>& get_gravity() const { return gravity_; }
-
-  void set_gravity(const Vector3<T>& gravity) { gravity_ = gravity; }
-
-  const std::vector<BoundaryCondition<T>>& get_v_bc() const { return v_bc_; }
-  std::vector<BoundaryCondition<T>>& get_mutable_v_bc() { return v_bc_; }
 
   const std::vector<std::vector<int>>& get_vertex_indices() const {
     return vertex_indices_;
@@ -98,6 +74,14 @@ class FemData {
   std::vector<std::vector<int>>& get_mutable_vertex_indices() {
     return vertex_indices_;
   }
+
+  int get_num_vertices() const { return Q_.cols(); }
+  int get_num_position_dofs() const { return Q_.size(); }
+
+  // ---------- Element quantities ----------
+  const std::vector<FemElement<T>>& get_elements() const { return elements_; }
+  std::vector<FemElement<T>>& get_mutable_elements() { return elements_; }
+
   const std::vector<std::vector<int>>& get_element_indices() const {
     return element_indices_;
   }
@@ -108,10 +92,19 @@ class FemData {
   const std::vector<Vector4<int>>& get_mesh() const { return mesh_; }
   std::vector<Vector4<int>>& get_mutable_mesh() { return mesh_; }
 
-  int get_num_objects() const { return vertex_indices_.size(); }
-  int get_num_vertices() const { return q_.cols(); }
   int get_num_elements() const { return elements_.size(); }
-  int get_num_position_dofs() const { return q_.size(); }
+
+  // ---------- Constants and external quantities ----------
+  double get_dt() const { return dt_; }
+  void set_dt(double dt) { dt_ = dt; }
+
+  const Vector3<T>& get_gravity() const { return gravity_; }
+  void set_gravity(const Vector3<T>& gravity) { gravity_ = gravity; }
+
+  const std::vector<BoundaryCondition<T>>& get_v_bc() const { return v_bc_; }
+  std::vector<BoundaryCondition<T>>& get_mutable_v_bc() { return v_bc_; }
+
+  int get_num_objects() const { return vertex_indices_.size(); }
 
   void add_collision_object(std::unique_ptr<CollisionObject<T>> object) {
     collision_objects_.push_back(std::move(object));
@@ -121,14 +114,13 @@ class FemData {
     return collision_objects_;
   }
   std::vector<std::unique_ptr<CollisionObject<T>>>&
-  get_mutable_collision_objects() {
+  get_mutable_collision_objects() const {
     return collision_objects_;
   }
 
  private:
   double dt_;
   std::vector<FemElement<T>> elements_;
-
   /* There are two sets of indices that we employ for most quantities, local and
      global. Local indices start from 0 and only index quantities added in a
     single call to `AddUndeformedObject`. Global indices also start from 0 but
@@ -192,14 +184,6 @@ class FemData {
   std::vector<Vector4<int>> mesh_;
   // Reference vertex positions.
   Matrix3X<T> Q_;
-  // Vertex positions.
-  Matrix3X<T> q_;
-  // q₀+ dt * v₀.
-  Matrix3X<T> q_star_;
-  // Vertex velocities.
-  Matrix3X<T> v_;
-  // Change in vertex velocities.
-  Matrix3X<T> dv_;
   VectorX<T> mass_;
   Vector3<T> gravity_{0, 0, -9.81};
   // Velocity boundary conditions.
@@ -207,10 +191,9 @@ class FemData {
   int num_objects_{0};
   int num_vertices_{0};
   int num_elements_{0};
-  std::vector<std::unique_ptr<CollisionObject<T>>> collision_objects_;
+  mutable std::vector<std::unique_ptr<CollisionObject<T>>> collision_objects_;
   double time_{0.0};
 };
-
 }  // namespace fem
 }  // namespace drake
 DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_NONSYMBOLIC_SCALARS(

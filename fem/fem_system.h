@@ -30,7 +30,7 @@ class FemSystem final : public systems::LeafSystem<T> {
   }
 
   void AddObjectFromVtkFile(
-      const std::string& vtk, const FemConfig& config,
+      const std::string& vtk, const MaterialConfig& config,
       std::function<void(int, EigenPtr<Matrix3X<T>>)> position_transform =
           nullptr,
       std::function<void(int, EigenPtr<Matrix3X<T>>)> velocity_transform =
@@ -40,7 +40,7 @@ class FemSystem final : public systems::LeafSystem<T> {
 
   void AddRectangularBlock(
       const int nx, const int ny, const int nz, const T h,
-      const FemConfig& config,
+      const MaterialConfig& config,
       std::function<void(int, EigenPtr<Matrix3X<T>>)> position_transform =
           nullptr,
       std::function<void(int, EigenPtr<Matrix3X<T>>)> velocity_transform =

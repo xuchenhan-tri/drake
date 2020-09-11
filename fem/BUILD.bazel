@@ -31,11 +31,11 @@ drake_cc_library(
         [
             ":backward_euler_objective",
             ":collision_object",
-            ":contact_jacobian",
             ":fem_data",
             ":fem_element",
             ":fem_force",
             ":newton_solver",
+            ":query_contact",
             "//common:essential",
             "//multibody/solvers:inverse_operator",
             "//multibody/solvers:pgs_solver",
@@ -92,6 +92,21 @@ drake_cc_library(
         ":collision_object",
         ":corotated_linear_model",
         ":fem_element",
+        "//common:default_scalars",
+        "//common:essential",
+    ],
+)
+
+drake_cc_library(
+    name = "fem_state",
+    srcs = [
+        "fem_state.cc",
+    ],
+    hdrs = [
+        "fem_state.h",
+    ],
+    deps = [
+        ":hyperelastic_cache",
         "//common:default_scalars",
         "//common:essential",
     ],
@@ -161,7 +176,8 @@ drake_cc_library(
         "fem_force.h",
     ],
     deps = [
-        ":fem_element",
+        ":fem_data",
+        ":fem_state",
         "//common:default_scalars",
         "//common:essential",
     ],
@@ -188,8 +204,20 @@ drake_cc_library(
         "hyperelastic_constitutive_model.h",
     ],
     deps = [
+        ":fem_state",
+        ":hyperelastic_cache",
         "//common:essential",
         "//common:nice_type_name",
+    ],
+)
+
+drake_cc_library(
+    name = "hyperelastic_cache",
+    hdrs = [
+        "hyperelastic_cache.h",
+    ],
+    deps = [
+        "//common:essential",
     ],
 )
 
@@ -308,12 +336,9 @@ drake_cc_library(
 )
 
 drake_cc_library(
-    name = "contact_jacobian",
-    srcs = [
-        "contact_jacobian.cc",
-    ],
+    name = "query_contact",
     hdrs = [
-        "contact_jacobian.h",
+        "query_contact.h",
     ],
     deps = [
         ":collision_object",
@@ -391,11 +416,11 @@ drake_cc_googletest(
 )
 
 drake_cc_googletest(
-    name = "contact_jacobian_test",
+    name = "query_contact_test",
     deps = [
         ":collision_object",
-        ":contact_jacobian",
         ":half_space",
+        ":query_contact",
     ],
 )
 

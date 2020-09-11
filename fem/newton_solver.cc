@@ -4,16 +4,16 @@ namespace fem {
 
 template <typename T>
 typename NewtonSolver<T>::NewtonSolverStatus NewtonSolver<T>::Solve(
-    EigenPtr<VectorX<T>> x) {
-  dx_.resizeLike(*x);
-  residual_.resizeLike(*x);
-  UpdateAndEvalResidual(*x);
+    EigenPtr<VectorX<T>> z) const {
+  dz_.resizeLike(*z);
+  residual_.resizeLike(*z);
+  UpdateAndEvalResidual(*z);
   for (int i = 0; i < max_iterations_; ++i) {
-    std::unique_ptr<multibody::solvers::LinearOperator<T>> J = objective_.GetJacobian();
+    std::unique_ptr<multibody::solvers::LinearOperator<T>> J = objective_.GetA();
     linear_solver_.SetUp(*J);
-    linear_solver_.Solve(residual_, &dx_);
-    *x += dx_;
-    if (UpdateAndEvalResidual(*x)) {
+    linear_solver_.Solve(residual_, &dz_);
+    *z += dz_;
+    if (UpdateAndEvalResidual(*z)) {
       std::cout << "Newton converged in " << i + 1 << " iteration(s)."
                 << std::endl;
       return NewtonSolverStatus::Success;
@@ -26,9 +26,9 @@ typename NewtonSolver<T>::NewtonSolverStatus NewtonSolver<T>::Solve(
 
 template <typename T>
 bool NewtonSolver<T>::UpdateAndEvalResidual(
-    const Eigen::Ref<const VectorX<T>>& x) {
-  objective_.Update(x);
-  objective_.CalcResidual(&residual_);
+    const Eigen::Ref<const VectorX<T>>& z) const {
+  objective_.UpdateState(z);
+  objective_.CalcResidual(z, &residual_);
   // Make sure there is no NAN in the residual.
   DRAKE_DEMAND(residual_ == residual_);
   return norm(residual_) < tolerance_;

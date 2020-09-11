@@ -17,7 +17,7 @@
 #include "drake/systems/framework/diagram.h"
 #include "drake/systems/framework/diagram_builder.h"
 
-DEFINE_double(simulation_time, 10, "How long to simulate the system");
+DEFINE_double(simulation_time, 10.0, "How long to simulate the system");
 DEFINE_bool(use_pancake, true,
             "Whether to simulate a pancake geometry or a rectangular block.");
 DEFINE_bool(
@@ -36,7 +36,7 @@ int DoMain() {
   systems::DiagramBuilder<double> builder;
   const double dt = 1.0 / 250.0;
   auto* fem_system = builder.AddSystem<FemSystem<double>>(dt);
-  FemConfig config;
+  MaterialConfig config;
   config.density = FLAGS_density;
   config.youngs_modulus = FLAGS_E;
   config.poisson_ratio = FLAGS_nu;
