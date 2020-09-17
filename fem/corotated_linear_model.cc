@@ -9,8 +9,8 @@ void CorotatedLinearElasticity<T>::DoUpdateHyperelasticCache(
     const FemState<T>& fem_state, const int quadrature_id, std::vector<std::unique_ptr<HyperelasticCache<T>>>* cache) const {
   CorotatedLinearCache<T>* corotated_linear_cache =
       static_cast<CorotatedLinearCache<T>*>((*cache)[quadrature_id].get());
-  const auto& F = fem_state.get_F()[quadrature_id];
-  const auto& F0 = fem_state.get_F0()[quadrature_id];
+  const auto& F = fem_state.get_cache().get_F()[quadrature_id];
+  const auto& F0 = fem_state.get_cache().get_F0()[quadrature_id];
   corotated_linear_cache->F = F;
   Eigen::JacobiSVD<Matrix3<T>> svd(F0,
                                    Eigen::ComputeFullU | Eigen::ComputeFullV);

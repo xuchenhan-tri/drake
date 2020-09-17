@@ -18,7 +18,7 @@
 #include "drake/systems/framework/diagram_builder.h"
 
 DEFINE_double(simulation_time, 10.0, "How long to simulate the system");
-DEFINE_bool(use_pancake, true,
+DEFINE_bool(use_pancake, false,
             "Whether to simulate a pancake geometry or a rectangular block.");
 DEFINE_bool(
     use_drake_visualizer, true,
@@ -65,9 +65,9 @@ int DoMain() {
 
   } else {
       const double mesh_spacing = 0.007;
-      const int nx = 5;
-      const int ny = 5;
-      const int nz = 5;
+      const int nx = 9;
+      const int ny = 9;
+      const int nz = 9;
     // Move the center of the rectangular block to the origin.
     auto position_transform = [nx, ny, nz, mesh_spacing](
                                   int vertex_index,

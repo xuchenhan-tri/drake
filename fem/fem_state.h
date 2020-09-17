@@ -11,45 +11,14 @@
 namespace drake {
 namespace fem {
 template <typename T>
-class FemState {
+class FemCache {
  public:
-  const Matrix3X<T>& get_v0() const { return v0_; }
-  Matrix3X<T>& get_mutable_v0() {
-    set_q_star_out_of_date(true);
-    return v0_;
-  }
-
-  const Matrix3X<T>& get_v_star() const { return v_star_; }
-  Matrix3X<T>& get_mutable_v_star() { return v_star_; }
-
-  const Matrix3X<T>& get_v() const { return v_; }
-  Matrix3X<T>& get_mutable_v() { return v_; }
-
-  const Matrix3X<T>& get_q0() const { return q0_; }
-  Matrix3X<T>& get_mutable_q0() {
-    // Mark dependent cache out of date.
-    set_F0_out_of_date(true);
-    set_q_star_out_of_date(true);
-    return q0_;
-  }
-
-  const Matrix3X<T>& get_q() const { return q_; }
-  Matrix3X<T>& get_mutable_q() {
-    // Mark dependent cache out of date.
-    set_F_out_of_date(true);
-    return q_;
-  }
-
-  const T get_time() const { return time_; }
-  void set_time(T time) { time_ = time; }
-
-  // ----------- Cache -----------
-  // ---------- Vertex quantities ----------
-  const Matrix3X<T>& get_q_star() const { return q_star_; }
-  Matrix3X<T>& get_mutable_q_star() {
-    set_q_star_out_of_date(true);
-    return q_star_;
-  }
+//  // ---------- Vertex quantities ----------
+//  const Matrix3X<T>& get_q_star() const { return q_star_; }
+//  Matrix3X<T>& get_mutable_q_star() {
+//    set_q_star_out_of_date(true);
+//    return q_star_;
+//  }
 
   // ---------- Quadrature quantities ----------
   const std::vector<Matrix3<T>>& get_F() const { return F_; }
@@ -101,7 +70,7 @@ class FemState {
   const Eigen::SparseMatrix<T>& get_Jc() const { return Jc_; }
   Eigen::SparseMatrix<T>& get_mutable_Jc() { return Jc_; }
 
-  void set_q_star_out_of_date(bool flag) { q_star_out_of_date_ = flag; }
+//  void set_q_star_out_of_date(bool flag) { q_star_out_of_date_ = flag; }
   void set_F_out_of_date(bool flag) {
     F_out_of_date_ = flag;
     if (flag) {
@@ -136,33 +105,20 @@ class FemState {
   }
   void set_A_out_of_date(bool flag) { A_out_of_date_ = flag; }
 
-  bool q_star_out_of_date() { return q_star_out_of_date_; }
-  bool F_out_of_date() { return F_out_of_date_; }
-  bool F0_out_of_date() { return F0_out_of_date_; }
-  bool hyperelastic_cache_out_of_date() {
+//  bool q_star_out_of_date() { return q_star_out_of_date_; }
+  bool F_out_of_date() const { return F_out_of_date_; }
+  bool F0_out_of_date() const { return F0_out_of_date_; }
+  bool hyperelastic_cache_out_of_date() const {
     return hyperelastic_cache_out_of_date_;
   }
-  bool psi_out_of_date() { return psi_out_of_date_; }
-  bool P_out_of_date() { return P_out_of_date_; }
-  bool dPdF_out_of_date() { return dPdF_out_of_date_; }
-  bool A_out_of_date() { return A_out_of_date_; }
+  bool psi_out_of_date() const { return psi_out_of_date_; }
+  bool P_out_of_date() const { return P_out_of_date_; }
+  bool dPdF_out_of_date() const { return dPdF_out_of_date_; }
+  bool A_out_of_date() const { return A_out_of_date_; }
 
  private:
-  //  ------------ States --------------
-  // Vertex velocity from previous time step.
-  Matrix3X<T> v0_;
-  // Vertex velocity after dynamics solve.
-  Matrix3X<T> v_star_;
-  // Vertex velocities.
-  Matrix3X<T> v_;
-  // Vertex position from previous time step.
-  Matrix3X<T> q0_;
-  // Vertex positions.
-  Matrix3X<T> q_;
-  T time_{0.0};
-  //  ------------ Cache --------------
   // q* = q₀+ dt * v₀.
-  Matrix3X<T> q_star_;
+//  Matrix3X<T> q_star_;
   bool q_star_out_of_date_{true};
   // Deformation gradient.
   std::vector<Matrix3<T>> F_;
@@ -186,8 +142,57 @@ class FemState {
   Eigen::SparseMatrix<T> A_;
   bool A_out_of_date_{true};
   Eigen::SparseMatrix<T> Jc_;
+  bool Jc_out_of_date_{true};
 };
 
+template <typename T>
+class FemState {
+ public:
+  const Matrix3X<T>& get_v0() const { return v0_; }
+  Matrix3X<T>& get_mutable_v0() {
+    return v0_;
+  }
+
+  const Matrix3X<T>& get_dv() const { return dv_; }
+  Matrix3X<T>& get_mutable_dv() { return dv_; }
+
+  const Matrix3X<T>& get_v() const { return v_; }
+  Matrix3X<T>& get_mutable_v() { return v_; }
+
+  const Matrix3X<T>& get_q0() const { return q0_; }
+  Matrix3X<T>& get_mutable_q0() {
+    // Mark dependent cache out of date.
+    cache_.set_F0_out_of_date(true);
+    return q0_;
+  }
+
+  const Matrix3X<T>& get_q() const { return q_; }
+  Matrix3X<T>& get_mutable_q() {
+    // Mark dependent cache out of date.
+    cache_.set_F_out_of_date(true);
+    return q_;
+  }
+
+  const T get_time() const { return time_; }
+  void set_time(T time) { time_ = time; }
+
+  const FemCache<T>& get_cache() const { return cache_; }
+  FemCache<T>& get_mutable_cache() const { return cache_; }
+
+ private:
+  // Vertex velocity from previous time step.
+  Matrix3X<T> v0_;
+  // Change in vertex velocity in dynamics solve.
+  Matrix3X<T> dv_;
+  // Vertex velocities.
+  Matrix3X<T> v_;
+  // Vertex position from previous time step.
+  Matrix3X<T> q0_;
+  // Vertex positions.
+  Matrix3X<T> q_;
+  T time_{0.0};
+  mutable FemCache<T> cache_;
+};
 }  // namespace fem
 }  // namespace drake
 DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_NONSYMBOLIC_SCALARS(

@@ -8,7 +8,7 @@ namespace drake {
 namespace fem {
 
 template <typename T>
-void FemForce<T>::AccumulateScaledElasticForce(
+void FemForce<T>::AccumulateScaledElasticForce(const FemState<T>& state,
     T scale, EigenPtr<Matrix3X<T>> force) const {
   // Gradient of the shape function is constant for linear interpolation.
   Eigen::Matrix<T, 3, 4> grad_shape;
@@ -16,7 +16,7 @@ void FemForce<T>::AccumulateScaledElasticForce(
   grad_shape.template topRightCorner<3, 3>() = Matrix3<T>::Identity();
 
   const auto& elements = fem_data_.get_elements();
-  const auto& P = EvalP();
+  const auto& P = evaluator_.EvalP(state);
   int quadrature_offset = 0;
   for (const FemElement<T>& e : elements) {
     //    const Matrix3<T> P =
@@ -32,14 +32,15 @@ void FemForce<T>::AccumulateScaledElasticForce(
 }
 
 template <typename T>
-void FemForce<T>::AccumulateScaledDampingForce(
-    T scale, const Eigen::Ref<const Matrix3X<T>>& v,
+void FemForce<T>::AccumulateScaledDampingForce(const FemState<T>& state,
+    T scale,
     EigenPtr<Matrix3X<T>> force) const {
-  AccumulateScaledDampingForceDifferential(scale, v, force);
+    const auto& v = state.get_v();
+  AccumulateScaledDampingForceDifferential(state, scale, v, force);
 }
 
 template <typename T>
-void FemForce<T>::AccumulateScaledElasticForceDifferential(
+void FemForce<T>::AccumulateScaledElasticForceDifferential(const FemState<T>& state,
     T scale, const Eigen::Ref<const Matrix3X<T>>& dx,
     EigenPtr<Matrix3X<T>> force_differential) const {
   // Gradient of the shape function is constant for linear interpolation.
@@ -49,7 +50,7 @@ void FemForce<T>::AccumulateScaledElasticForceDifferential(
   grad_shape.template topRightCorner<3, 3>() = Matrix3<T>::Identity();
 
   const auto& elements = fem_data_.get_elements();
-  const auto& model_cache = fem_state_.get_hyperelastic_cache();
+  const auto& model_cache = evaluator_.EvalHyperelasticCache(state);
   int quadrature_offset = 0;
   for (const FemElement<T>& e : elements) {
     const Matrix3<T> dF =
@@ -68,14 +69,14 @@ void FemForce<T>::AccumulateScaledElasticForceDifferential(
 }
 
 template <typename T>
-void FemForce<T>::AccumulateScaledDampingForceDifferential(
+void FemForce<T>::AccumulateScaledDampingForceDifferential(const FemState<T>& state,
     T scale, const Eigen::Ref<const Matrix3X<T>>& dx,
     EigenPtr<Matrix3X<T>> force_differential) const {
   Eigen::Matrix<T, 3, 4> grad_shape;
   grad_shape.col(0) = -Vector3<T>::Ones();
   grad_shape.template topRightCorner<3, 3>() = Matrix3<T>::Identity();
   const auto& elements = fem_data_.get_elements();
-  const auto& model_cache = fem_state_.get_hyperelastic_cache();
+  const auto& model_cache = evaluator_.EvalHyperelasticCache(state);
   int quadrature_offset = 0;
   for (const FemElement<T>& e : elements) {
     const Vector4<int>& indices = e.get_indices();
@@ -103,10 +104,10 @@ void FemForce<T>::AccumulateScaledDampingForceDifferential(
 }
 
 template <typename T>
-T FemForce<T>::CalcElasticEnergy() const {
+T FemForce<T>::CalcElasticEnergy(const FemState<T>& state) const {
   T elastic_energy = 0;
   const auto& elements = fem_data_.get_elements();
-  const auto& psi = EvalPsi();
+  const auto& psi = evaluator_.EvalPsi(state);
   int quadrature_offset = 0;
   for (const FemElement<T>& e : elements) {
     const auto& volume = e.get_element_measure();
@@ -157,14 +158,14 @@ void FemForce<T>::SetSparsityPattern(
  *      Kᵢₐ = ∑ₑ vpⱼ * ∂Pᵢⱼ/∂Fₐᵦ * vqᵦ * Vₑ.
  */
 template <typename T>
-void FemForce<T>::AccumulateScaledStiffnessMatrix(
+void FemForce<T>::AccumulateScaledStiffnessMatrix(const FemState<T>& state,
     T scale, Eigen::SparseMatrix<T>* stiffness_matrix) const {
   // Gradient of the shape function is constant for linear interpolation.
   Eigen::Matrix<T, 3, 4> grad_shape;
   grad_shape.col(0) = -Vector3<T>::Ones();
   grad_shape.template topRightCorner<3, 3>() = Matrix3<T>::Identity();
 
-  const auto& dPdF = EvaldPdF();
+  const auto& dPdF = evaluator_.EvaldPdF(state);
   int quadrature_offset = 0;
   const auto& elements = fem_data_.get_elements();
   for (const FemElement<T>& e : elements) {
@@ -186,14 +187,14 @@ void FemForce<T>::AccumulateScaledStiffnessMatrix(
 }
 
 template <typename T>
-void FemForce<T>::AccumulateScaledDampingMatrix(
+void FemForce<T>::AccumulateScaledDampingMatrix(const FemState<T>& state,
     T scale, Eigen::SparseMatrix<T>* damping_matrix) const {
   // Gradient of the shape function is constant for linear interpolation.
   Eigen::Matrix<T, 3, 4> grad_shape;
   grad_shape.col(0) = -Vector3<T>::Ones();
   grad_shape.template topRightCorner<3, 3>() = Matrix3<T>::Identity();
 
-  const auto& dPdF = EvaldPdF();
+  const auto& dPdF = evaluator_.EvaldPdF(state);
   int quadrature_offset = 0;
   const auto& elements = fem_data_.get_elements();
   for (const FemElement<T>& e : elements) {
@@ -223,64 +224,6 @@ void FemForce<T>::AccumulateScaledDampingMatrix(
       AccumulateSparseMatrixBlock(M, indices(i), indices(i), damping_matrix);
     }
   }
-}
-
-template <typename T>
-const std::vector<T>& FemForce<T>::EvalPsi() const {
-  if (!fem_state_.psi_out_of_date()) {
-    return fem_state_.get_psi();
-  }
-  DRAKE_DEMAND(!fem_state_.hyperelastic_cache_out_of_date());
-  const auto& model_cache = fem_state_.get_hyperelastic_cache();
-  const auto& elements = fem_data_.get_elements();
-  auto& psi = fem_state_.get_mutable_psi();
-  int quadrature_offset = 0;
-  for (const FemElement<T>& e : elements) {
-    psi[quadrature_offset] =
-        e.get_constitutive_model()->CalcPsi(*model_cache[quadrature_offset]);
-    ++quadrature_offset;
-  }
-  fem_state_.set_psi_out_of_date(false);
-  return fem_state_.get_psi();
-}
-
-template <typename T>
-const std::vector<Matrix3<T>>& FemForce<T>::EvalP() const {
-  if (!fem_state_.P_out_of_date()) {
-    return fem_state_.get_P();
-  }
-  DRAKE_DEMAND(!fem_state_.hyperelastic_cache_out_of_date());
-  const auto& model_cache = fem_state_.get_hyperelastic_cache();
-  const auto& elements = fem_data_.get_elements();
-  auto& P = fem_state_.get_mutable_P();
-  int quadrature_offset = 0;
-  for (const FemElement<T>& e : elements) {
-    P[quadrature_offset] = e.get_constitutive_model()->CalcFirstPiola(
-        *model_cache[quadrature_offset]);
-    ++quadrature_offset;
-  }
-  fem_state_.set_P_out_of_date(false);
-  return fem_state_.get_P();
-}
-
-template <typename T>
-const std::vector<Eigen::Matrix<T, 9, 9>>& FemForce<T>::EvaldPdF() const {
-  if (!fem_state_.dPdF_out_of_date()) {
-    return fem_state_.get_dPdF();
-  }
-  DRAKE_DEMAND(!fem_state_.hyperelastic_cache_out_of_date());
-  const auto& model_cache = fem_state_.get_hyperelastic_cache();
-  const auto& elements = fem_data_.get_elements();
-  auto& dPdF = fem_state_.get_mutable_dPdF();
-  int quadrature_offset = 0;
-  for (const FemElement<T>& e : elements) {
-    dPdF[quadrature_offset] =
-        e.get_constitutive_model()->CalcFirstPiolaDerivative(
-            *model_cache[quadrature_offset]);
-    ++quadrature_offset;
-  }
-  fem_state_.set_dPdF_out_of_date(false);
-  return fem_state_.get_dPdF();
 }
 }  // namespace fem
 }  // namespace drake

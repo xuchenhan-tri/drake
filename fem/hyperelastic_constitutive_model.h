@@ -35,7 +35,6 @@ class HyperelasticConstitutiveModel {
     model lives.
   */
   void UpdateHyperelasticCache(const FemState<T>& fem_state, int quadrature_id, std::vector<std::unique_ptr<HyperelasticCache<T>>>* cache) const {
-      DRAKE_DEMAND(fem_state.get_F().size() == cache->size());
       DRAKE_DEMAND(quadrature_id < static_cast<int>(cache->size()));
       DRAKE_DEMAND(quadrature_id >= 0);
     DoUpdateHyperelasticCache(fem_state, quadrature_id, cache);

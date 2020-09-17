@@ -25,15 +25,27 @@ class NewtonSolver {
 
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(NewtonSolver);
 
-  explicit NewtonSolver(const BackwardEulerObjective<T>& objective)
-      : objective_(objective) {}
+  explicit NewtonSolver(const BackwardEulerObjective<T>& objective, const FemData<T>& data, FemState<T>* state)
+      : objective_(objective), data_(data), state_(*state) {}
 
   /** Takes in an initial guess for the solution and overwrites it with the
       actual solution. */
   NewtonSolverStatus Solve(EigenPtr<VectorX<T>> z) const;
 
-  /** Updates the `x`-dependent states and evaluates the residual -G(z). */
-  bool UpdateAndEvalResidual(const Eigen::Ref<const VectorX<T>>& z) const;
+  /** Update the velocity of the vertices to v = v0 + dt * dv and position of the vertices to q = q0 + dt * v */
+  void UpdateState() const{
+      const auto& v0 = state_.get_v0();
+      const auto& dv = state_.get_dv();
+      auto& v = state_.get_mutable_v();
+      v = v0 + dv;
+      const auto& q0 = state_.get_q0();
+      const auto& dt = data_.get_dt();
+      auto& q = state_.get_mutable_q();
+      q = q0 + dt * v;
+  }
+
+  /** Evaluates the residual -G(z). */
+  bool EvalResidual() const;
 
   /** The norm calculation is delegated to the objective to support customized
    * norms. */
@@ -69,6 +81,8 @@ class NewtonSolver {
   // Scratch space for Newton solver.
   mutable VectorX<T> dz_;
   mutable VectorX<T> residual_;
+  const FemData<T>& data_;
+  FemState<T>& state_;
 };
 
 }  // namespace fem

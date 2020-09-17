@@ -113,6 +113,19 @@ drake_cc_library(
 )
 
 drake_cc_library(
+    name = "fem_cache_evaluator",
+    hdrs = [
+        "fem_cache_evaluator.h",
+    ],
+    deps = [
+        ":fem_data",
+        ":fem_state",
+        "//common:default_scalars",
+        "//common:essential",
+    ],
+)
+
+drake_cc_library(
     name = "mesh_utility",
     hdrs =
         [
@@ -176,6 +189,7 @@ drake_cc_library(
         "fem_force.h",
     ],
     deps = [
+        ":fem_cache_evaluator",
         ":fem_data",
         ":fem_state",
         "//common:default_scalars",
