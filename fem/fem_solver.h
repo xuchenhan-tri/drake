@@ -32,8 +32,8 @@ class FemSolver {
       : data_(dt),
         state_(),
         force_(data_, &state_),
-        objective_(data_, &state_, force_),
-        newton_solver_(objective_){}
+        objective_(data_, force_),
+        newton_solver_(objective_, data_, &state_){}
   /**
    The internal main loop for the FEM simulation that calls NewtonSolver to
    calculate the discrete velocity change. Update the position and velocity
@@ -62,7 +62,7 @@ class FemSolver {
     int object_id = data_.AddUndeformedObject(indices, positions, config);
 
     // Create hyperelastic cache for the new object.
-    auto& hyperelastic_cache = state_.get_mutable_hyperelastic_cache();
+    auto& hyperelastic_cache = state_.get_mutable_cache().get_mutable_hyperelastic_cache();
     const auto& elements = data_.get_elements();
     const auto& element_indices = data_.get_element_indices()[object_id];
     const int num_new_elements = element_indices.size();
@@ -79,22 +79,22 @@ class FemSolver {
     q.conservativeResize(3, q.cols() + num_new_vertices);
     auto& q0 = state_.get_mutable_q0();
     q0.conservativeResize(3, q0.cols() + num_new_vertices);
-    auto& q_star = state_.get_mutable_q_star();
-    q_star.conservativeResize(3, q_star.cols() + num_new_vertices);
     auto& v0 = state_.get_mutable_v0();
     v0.conservativeResize(3, v0.cols() + num_new_vertices);
+    auto& dv = state_.get_mutable_dv();
+    dv.conservativeResize(3, dv.cols() + num_new_vertices);
     auto& v = state_.get_mutable_v();
     v.conservativeResize(3, v.cols() + num_new_vertices);
     // Update size of cache on quadratures.
-    auto& F = state_.get_mutable_F();
+    auto& F = state_.get_mutable_cache().get_mutable_F();
     F.resize(F.size() + num_new_elements);
-    auto& F0 = state_.get_mutable_F0();
+    auto& F0 = state_.get_mutable_cache().get_mutable_F0();
     F0.resize(F0.size() + num_new_elements);
-    auto& psi = state_.get_mutable_psi();
+    auto& psi = state_.get_mutable_cache().get_mutable_psi();
     psi.resize(psi.size() + num_new_elements);
-    auto& P = state_.get_mutable_P();
+    auto& P = state_.get_mutable_cache().get_mutable_P();
     P.resize(P.size() + num_new_elements);
-    auto& dPdF = state_.get_mutable_dPdF();
+    auto& dPdF = state_.get_mutable_cache().get_mutable_dPdF();
     dPdF.resize(dPdF.size() + num_new_elements);
     return object_id;
   }
@@ -147,9 +147,6 @@ class FemSolver {
 
   /* Solve for the contact constraint and change the underlying states. */
   void SolveContact() const;
-
-  const std::vector<Matrix3<T>>& EvalF0() const;
-  const Matrix3X<T>& Evalqstar() const;
 
   FemData<T> data_;
   mutable FemState<T> state_;

@@ -9,6 +9,7 @@
 #include "drake/common/eigen_types.h"
 #include "drake/fem/fem_state.h"
 #include "drake/fem/fem_data.h"
+#include "drake/fem/fem_cache_evaluator.h"
 
 namespace drake {
 namespace fem {
@@ -80,45 +81,44 @@ class FemForce {
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(FemForce)
 
   explicit FemForce(const FemData<T>& data, FemState<T>* state)
-      : fem_data_(data), fem_state_(*state) {}
+      : fem_data_(data), fem_state_(*state), evaluator_(data) {}
 
   /** Called by BackwardEulerObjective::CalcResidual. Calculates the elastic
   forces, scale them by scale, and then add them to the force vector.  */
-  void AccumulateScaledElasticForce(T scale, EigenPtr<Matrix3X<T>> force) const;
+  void AccumulateScaledElasticForce(const FemState<T>& state, T scale, EigenPtr<Matrix3X<T>> force) const;
 
   /** Called by BackwardEulerObjective::CalcResidual. Calculates the damping
   forces, scale them by scale, and then add them to the force vector.  */
-  void AccumulateScaledDampingForce(T scale,
-                                    const Eigen::Ref<const Matrix3X<T>>& v,
+  void AccumulateScaledDampingForce(const FemState<T>& state,T scale,
                                     EigenPtr<Matrix3X<T>> force) const;
 
   /** Called by BackwardEulerObjective::Multiply. Calculates the K*dx where K is
     the stiffness matrix, scale the result by scale, and then add it to the
     force_differential vector. */
-  void AccumulateScaledElasticForceDifferential(
+  void AccumulateScaledElasticForceDifferential(const FemState<T>& state,
       T scale, const Eigen::Ref<const Matrix3X<T>>& dx,
       EigenPtr<Matrix3X<T>> force_differential) const;
 
   /** Called by BackwardEulerObjective::Multiply. Calculates the D*dx where D =
       alpha * M + beta * K is the damping matrix, scale the result by scale, and
       then add it to the force_differential vector. */
-  void AccumulateScaledDampingForceDifferential(
+  void AccumulateScaledDampingForceDifferential(const FemState<T>& state,
       T scale, const Eigen::Ref<const Matrix3X<T>>& dx,
       EigenPtr<Matrix3X<T>> force_differential) const;
 
   /** Returns the total elastic energy stored in the elements. */
-  T CalcElasticEnergy() const;
+  T CalcElasticEnergy(const FemState<T>& state) const;
 
   /** Called by BackwardEulerObjective::BuildJacobian. Calculates K where K is
     the stiffness matrix, scale it by scale, and then add it to the
   stiffness_matrix. */
-  void AccumulateScaledStiffnessMatrix(
+  void AccumulateScaledStiffnessMatrix(const FemState<T>& state,
       T scale, Eigen::SparseMatrix<T>* stiffness_matrix) const;
 
   /** Called by BackwardEulerObjective::BuildJacobian. Calculates D where D is
     the stiffness matrix, scale it by scale, and then add it to the
   stiffness_matrix. */
-  void AccumulateScaledDampingMatrix(
+  void AccumulateScaledDampingMatrix(const FemState<T>& state,
       T scale, Eigen::SparseMatrix<T>* damping_matrix) const;
 
   /** Set the nonzero entries contributed by the damping and stiffness matrix.
@@ -175,15 +175,9 @@ class FemForce {
   }
 
  private:
-    // Evaluates the elastic energy density cache.
-    const std::vector<T>& EvalPsi() const;
-  // Evaluates the first Piola stress cache.
-  const std::vector<Matrix3<T>>& EvalP() const;
-    // Evaluates the first Piola stress derivative cache.
-  const std::vector<Eigen::Matrix<T,9,9>>& EvaldPdF() const;
-
   const FemData<T>& fem_data_;
   FemState<T>& fem_state_;
+  FemCacheEvaluator<T> evaluator_;
 };
 }  // namespace fem
 }  // namespace drake

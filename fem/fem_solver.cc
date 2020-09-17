@@ -51,48 +51,11 @@ void FemSolver<T>::SolveFreeMotion() const {
   v0 = state_.get_v();
   auto& q0 = state_.get_mutable_q0();
   q0 = state_.get_q();
-  EvalF0();
-  Evalqstar();
 
-  // TODO(xuchenhan-tri) consider putting dv in a scratch space to avoid
-  // allocation every time step.
-  Matrix3X<T> dv = Matrix3X<T>::Zero(v0.rows(), v0.cols());
+  auto& dv = state_.get_mutable_dv();
+  dv.setZero();
   Eigen::Map<VectorX<T>> z(dv.data(), dv.size());
   newton_solver_.Solve(&z);
-  dv = Eigen::Map<Matrix3X<T>>(z.data(), dv.rows(), dv.cols());
-
-  auto& v_star = state_.get_mutable_v_star();
-  v_star = v0 + dv;
-}
-
-template <typename T>
-const std::vector<Matrix3<T>>& FemSolver<T>::EvalF0() const {
-  if (!state_.F0_out_of_date()) {
-    return state_.get_F0();
-  }
-  const auto& elements = data_.get_elements();
-  const auto& q0 = state_.get_q0();
-  auto& F0 = state_.get_mutable_F0();
-  int quadrature_offset = 0;
-  for (const auto& e : elements) {
-    F0[quadrature_offset++] = e.CalcF(q0);
-  }
-  state_.set_F0_out_of_date(false);
-  return state_.get_F0();
-}
-
-template <typename T>
-const Matrix3X<T>& FemSolver<T>::Evalqstar() const {
-  if (!state_.q_star_out_of_date()) {
-    return state_.get_q_star();
-  }
-  auto& q_star = state_.get_mutable_q_star();
-  const auto& dt = data_.get_dt();
-  const auto& v0 = state_.get_v0();
-  const auto& q0 = state_.get_q0();
-  q_star = q0 + dt * v0;
-  state_.set_q_star_out_of_date(false);
-  return state_.get_q_star();
 }
 
 template <typename T>
@@ -105,16 +68,16 @@ void FemSolver<T>::SolveContact() const {
   }
   // Fill SystemDynamicsData.
   VectorX<T> penetration_depth;
-  auto A = objective_.GetA();
+  auto A = objective_.GetA(state_);
   drake::multibody::solvers::InverseOperator<T> Ainv(
       "Ainv", &newton_solver_.get_linear_solver(), *A);
-  const auto& v_star = state_.get_v_star();
+  const Matrix3X<T>& v_star = state_.get_v0() + state_.get_dv();
   const VectorX<T>& v_star_tmp = Eigen::Map<const VectorX<T>>(v_star.data(), v_star.size());
   VectorX<T> tau = VectorX<T>::Zero(get_num_position_dofs());
   drake::multibody::solvers::SystemDynamicsData<T> dynamics_data(&Ainv, &v_star_tmp,
                                                                  &tau);
   // Fill PointContactData.
-  auto& Jc = state_.get_mutable_Jc();
+  auto& Jc = state_.get_mutable_cache().get_mutable_Jc();
   const auto& dt = data_.get_dt();
   // Perform contact query at the temporary position q0 + dt * v*.
   Matrix3X<T> tmp_q = state_.get_q0() + dt*v_star;

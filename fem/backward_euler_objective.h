@@ -65,24 +65,19 @@ class BackwardEulerObjective {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(BackwardEulerObjective)
 
-  BackwardEulerObjective(const FemData<T>& data, FemState<T>* state,
+  BackwardEulerObjective(const FemData<T>& data,
                          const FemForce<T>& force)
-      : fem_data_(data), fem_state_(*state), force_(force) {}
+      : fem_data_(data), force_(force) {}
 
-  /** Move the position of the vertices to tmp_x = q_hat + dt * dv where q_hat =
-   * q + v_n * dt, and updates the quantities that depends on vertex positions.
-   * @param dv[in] The candidate change of velocity.
-   */
-  void UpdateState(const Eigen::Ref<const VectorX<T>>& dv) const;
 
   /** Evaluate -G(x) = -M*x + f(qⁿ + dt * (vⁿ + x), vⁿ + x) * dt, where f = fe +
    * fd + gravity. */
-  void CalcResidual(const Eigen::Ref<const VectorX<T>>& dv,
+  void CalcResidual(const FemState<T>& state,
                     EigenPtr<VectorX<T>> residual) const;
 
   /** Return the product of matrix-vector multiplication A*x where A =
    * (1+alpha*dt) M + (beta * dt + dt²) * K. */
-  void Multiply(const Eigen::Ref<const Matrix3X<T>>& x,
+  void Multiply(const FemState<T>& state,const Eigen::Ref<const Matrix3X<T>>& x,
                 EigenPtr<Matrix3X<T>> prod) const;
 
   /** Allocate memory for the input Eigen::SparseMatrix for entries that are
@@ -103,21 +98,20 @@ class BackwardEulerObjective {
 
   /** Calculates the Jacobian matrix at the current configuration and returns a
    * linear operator representing the Jacobian matrix. */
-  std::unique_ptr<multibody::solvers::LinearOperator<T>> GetA() const;
+  std::unique_ptr<multibody::solvers::LinearOperator<T>> GetA(const FemState<T>& state) const;
 
  private:
   const std::vector<Matrix3<T>>& EvalF() const;
   const std::vector<std::unique_ptr<HyperelasticCache<T>>>&
   EvalHyperelasticCache() const;
   /* Build the matrix A = (1+alpha*dt) * M + (beta * dt + dt²) * K. */
-  void BuildA(Eigen::SparseMatrix<T>* A) const;
+  void BuildA(const FemState<T>& state, Eigen::SparseMatrix<T>* A) const;
   /* Sets the entries corresponding to vertices under Dirichlet boundary
     conditions to zero. */
   void Project(EigenPtr<Matrix3X<T>> impulse) const;
   void Project(Eigen::SparseMatrix<T>* A) const;
 
   const FemData<T>& fem_data_;
-  FemState<T>& fem_state_;
   const FemForce<T>& force_;
   bool matrix_free_{false};
 };
