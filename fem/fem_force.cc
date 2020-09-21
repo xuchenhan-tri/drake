@@ -19,8 +19,6 @@ void FemForce<T>::AccumulateScaledElasticForce(const FemState<T>& state,
   const auto& P = evaluator_.EvalP(state);
   int quadrature_offset = 0;
   for (const FemElement<T>& e : elements) {
-    //    const Matrix3<T> P =
-    //    e.get_constitutive_model()->CalcFirstPiola(*model_cache[quadrature_offset++]);
     Eigen::Matrix<T, 3, 4> element_force =
         scale * e.get_element_measure() * P[quadrature_offset++] *
         e.get_Dm_inv().transpose() * grad_shape;
