@@ -104,7 +104,7 @@ class FemData {
   const std::vector<BoundaryCondition<T>>& get_v_bc() const { return v_bc_; }
   std::vector<BoundaryCondition<T>>& get_mutable_v_bc() { return v_bc_; }
 
-  int get_num_objects() const { return vertex_indices_.size(); }
+  int get_num_objects() const { return num_objects_; }
 
   void add_collision_object(std::unique_ptr<CollisionObject<T>> object) {
     collision_objects_.push_back(std::move(object));
