@@ -13,13 +13,6 @@ namespace fem {
 template <typename T>
 class FemCache {
  public:
-//  // ---------- Vertex quantities ----------
-//  const Matrix3X<T>& get_q_star() const { return q_star_; }
-//  Matrix3X<T>& get_mutable_q_star() {
-//    set_q_star_out_of_date(true);
-//    return q_star_;
-//  }
-
   // ---------- Quadrature quantities ----------
   const std::vector<Matrix3<T>>& get_F() const { return F_; }
   std::vector<Matrix3<T>>& get_mutable_F() {
@@ -70,7 +63,6 @@ class FemCache {
   const Eigen::SparseMatrix<T>& get_Jc() const { return Jc_; }
   Eigen::SparseMatrix<T>& get_mutable_Jc() { return Jc_; }
 
-//  void set_q_star_out_of_date(bool flag) { q_star_out_of_date_ = flag; }
   void set_F_out_of_date(bool flag) {
     F_out_of_date_ = flag;
     if (flag) {
@@ -105,7 +97,6 @@ class FemCache {
   }
   void set_A_out_of_date(bool flag) { A_out_of_date_ = flag; }
 
-//  bool q_star_out_of_date() { return q_star_out_of_date_; }
   bool F_out_of_date() const { return F_out_of_date_; }
   bool F0_out_of_date() const { return F0_out_of_date_; }
   bool hyperelastic_cache_out_of_date() const {
@@ -117,9 +108,6 @@ class FemCache {
   bool A_out_of_date() const { return A_out_of_date_; }
 
  private:
-  // q* = q₀+ dt * v₀.
-//  Matrix3X<T> q_star_;
-  bool q_star_out_of_date_{true};
   // Deformation gradient.
   std::vector<Matrix3<T>> F_;
   bool F_out_of_date_{true};
