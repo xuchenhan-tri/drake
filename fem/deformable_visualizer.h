@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "drake/common/drake_copyable.h"
+#include "drake/fem/fem_tetmesh_base.h"
 #include "drake/lcm/drake_lcm_interface.h"
 #include "drake/systems/framework/leaf_system.h"
 
@@ -46,9 +47,10 @@ class DeformableVisualizer : public systems::LeafSystem<double> {
                          alive as long as this class. Otherwise, `this` will
                          create its own instance.
    @pre update_period > 0.  */
-  DeformableVisualizer(double update_period, std::string mesh_name,
-                       const std::vector<Vector4<int>>& tet_mesh,
-                       lcm::DrakeLcmInterface* lcm = nullptr);
+  DeformableVisualizer(
+      double update_period, std::string mesh_name,
+      const std::vector<std::unique_ptr<FemTetMeshBase>>& meshes,
+      lcm::DrakeLcmInterface* lcm = nullptr);
 
   /** Send the mesh initialization message. This can be invoked explicitly but
    is generally not necessary. The initialization method is also called by
@@ -61,11 +63,40 @@ class DeformableVisualizer : public systems::LeafSystem<double> {
   }
 
  private:
-  /* Analyzes the tet mesh topology to do the following:
-    1. Build a surface mesh from the volume mesh.
-    2. Create a mapping from surface vertex to volume vertex.
-    3. Record the expected number of vertices referenced by the tet mesh.  */
-  void AnalyzeTets(const std::vector<Vector4<int>>& tet_mesh);
+  // Take a vector FemTetMeshBase and build
+  // surface_to_volume_vertices_,surface_triangles_, and volume_vertex_count_
+  // that concatenates the corresponding information in each individual
+  // FemTetMeshBase.
+  void Flatten(const std::vector<std::unique_ptr<FemTetMeshBase>>& meshes) {
+    volume_vertex_count_ = 0;
+    surface_to_volume_vertices_.clear();
+    surface_triangles_.clear();
+    int surface_vertex_count = 0;
+    for (const auto& fem_tetmesh_base : meshes) {
+      volume_vertex_count_ += fem_tetmesh_base->get_volume_vertex_count();
+      // Add the surface_to_volume_vertices from this fem_tetmesh_base to the
+      // global one.
+      const int volume_vertex_offset =
+          fem_tetmesh_base->get_volume_vertex_offset();
+      const auto& local_surface_to_volume_vertices =
+          fem_tetmesh_base->get_surface_to_volume_vertices();
+      for (auto volume_vertex : local_surface_to_volume_vertices) {
+        surface_to_volume_vertices_.push_back(volume_vertex_offset +
+                                              volume_vertex);
+      }
+      // Add the surface_triangles from this fem_tetmesh_base to the global one.
+      Vector3<int> surface_vertex_offset(
+          surface_vertex_count, surface_vertex_count, surface_vertex_count);
+      const auto& local_surface_triangles =
+          fem_tetmesh_base->get_surface_triangles();
+      for (const auto& triangle : local_surface_triangles) {
+        surface_triangles_.push_back(triangle + surface_vertex_offset);
+      }
+      // Do not forget to increment the surface_vertex_offset once we are done
+      // with everything from this mesh.
+      surface_vertex_count += local_surface_to_volume_vertices.size();
+    }
+  }
 
   /* Call SendMeshInit in an initialization event. */
   systems::EventStatus PublishMeshInit(const systems::Context<double>&) const;

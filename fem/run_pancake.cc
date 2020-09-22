@@ -42,7 +42,7 @@ int DoMain() {
   config.poisson_ratio = FLAGS_nu;
   config.mass_damping = FLAGS_alpha;
   config.stiffness_damping = FLAGS_beta;
-  if (FLAGS_use_pancake) {
+//  if (FLAGS_use_pancake) {
     const char* kModelPath = "drake/fem/models/pancake.vtk";
     const std::string vtk = FindResourceOrThrow(kModelPath);
     auto position_transform =
@@ -63,13 +63,13 @@ int DoMain() {
         std::make_unique<CollisionObject<double>>(std::move(ground_ls));
     fem_system->AddCollisionObject(std::move(ground));
 
-  } else {
+//  } else {
       const double mesh_spacing = 0.007;
       const int nx = 9;
       const int ny = 9;
       const int nz = 9;
     // Move the center of the rectangular block to the origin.
-    auto position_transform = [nx, ny, nz, mesh_spacing](
+    auto position_transform1 = [nx, ny, nz, mesh_spacing](
                                   int vertex_index,
                                   EigenPtr<Matrix3X<double>> pos) {
       pos->col(vertex_index) -=
@@ -86,11 +86,13 @@ int DoMain() {
     };
     // Make a simple rectangular block geometry.
     fem_system->AddRectangularBlock(nx, ny, nz, mesh_spacing, config,
-                                    position_transform, nullptr, bc);
-  }
+                                    position_transform1, nullptr, bc);
+//  }
+  // Finalize when all objects have been added.
+  fem_system->Finalize();
   if (FLAGS_use_drake_visualizer) {
     auto& visualizer = *builder.AddSystem<DeformableVisualizer>(
-        dt, "pancake", fem_system->get_indices());
+        dt, "pancake", fem_system->get_meshes());
     builder.Connect(*fem_system, visualizer);
   } else {
     auto* obj_writer = builder.AddSystem<ObjWriter<double>>(*fem_system);

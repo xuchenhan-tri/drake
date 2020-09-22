@@ -19,11 +19,11 @@ class FemElement {
   // elements. class.
  public:
   FemElement(const Vector4<int>& vertex_indices, const Matrix3X<T>& positions,
-             std::unique_ptr<HyperelasticConstitutiveModel<T>> model, T density)
-      : vertex_indices_(vertex_indices),
+             std::unique_ptr<HyperelasticConstitutiveModel<T>> model, T density, int vertex_offset)
+      : vertex_indices_(vertex_indices + Vector4<int>::Ones() * vertex_offset),
         constitutive_model_(std::move(model)),
         density_(density) {
-    Matrix3<T> Dm = CalcShapeMatrix(vertex_indices_, positions);
+    Matrix3<T> Dm = CalcShapeMatrix(vertex_indices, positions);
     T unit_simplex_volume = 1.0 / 6.0;
     element_measure_ = Dm.determinant() * unit_simplex_volume;
     // Degenerate tetrahedron in the initial configuration is not allowed.

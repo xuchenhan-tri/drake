@@ -135,10 +135,13 @@ class FemSolver {
   }
 
   int get_num_position_dofs() const { return data_.get_num_position_dofs(); }
+  int get_num_vertices() const { return data_.get_num_vertices(); }
 
   const std::vector<Vector4<int>>& get_mesh() const { return data_.get_mesh(); }
 
   const Matrix3X<T>& get_q() const { return state_.get_q(); }
+
+  const T get_dt() const { return data_.get_dt(); }
 
  private:
   /* Solve for the momentum equation without considering collisions or contact

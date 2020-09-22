@@ -15,6 +15,7 @@ class ObjWriter final : public systems::LeafSystem<T> {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(ObjWriter)
   ObjWriter(const FemSystem<T>& fem) {
+    DRAKE_DEMAND(fem.is_finalized());
     this->DeclareInputPort("vertex_positions", systems::kVectorValued,
                            fem.get_num_position_dofs());
     // Generate boundary faces.

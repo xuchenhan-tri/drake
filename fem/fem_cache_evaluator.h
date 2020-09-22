@@ -62,7 +62,7 @@ public:
     DRAKE_DEMAND(!state.get_cache().F0_out_of_date());
     const auto& elements = data_.get_elements();
     auto& model_cache = state.get_mutable_cache().get_mutable_hyperelastic_cache();
-    DRAKE_DEMAND(state.get_F().size() == model_cache.size());
+    DRAKE_DEMAND(state.get_cache().get_F().size() == model_cache.size());
     int quadrature_offset = 0;
     for (const auto& e : elements) {
       const auto* model = e.get_constitutive_model();

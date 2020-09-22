@@ -11,6 +11,7 @@
 #include "drake/fem/fem_solver.h"
 #include "drake/fem/mesh_utility.h"
 #include "drake/fem/parse_vtk.h"
+#include "drake/fem/fem_tetmesh.h"
 #include "drake/systems/framework/leaf_system.h"
 
 namespace drake {
@@ -25,8 +26,7 @@ class FemSystem final : public systems::LeafSystem<T> {
 
   void CopyPositionStateOut(const systems::Context<T>& context,
                             systems::BasicVector<T>* output) const {
-    output->SetFromVector(
-        context.get_discrete_state().get_vector().get_value());
+      output->SetFromVector(context.get_discrete_state().get_vector().get_value());
   }
 
   void AddObjectFromVtkFile(
@@ -55,22 +55,26 @@ class FemSystem final : public systems::LeafSystem<T> {
   void AdvanceOneTimeStep(const systems::Context<T>&,
                           systems::DiscreteValues<T>* next_states) const;
 
-  T get_dt() const { return dt_; }
-
   const std::vector<Vector4<int>>& get_indices() const {
     return solver_.get_mesh();
   }
 
   int get_num_position_dofs() const { return solver_.get_num_position_dofs(); }
 
- private:
-  void DeclareStatePortUpdate(
-      const Eigen::Ref<const Matrix3X<T>>& initial_position);
+  /** `Finalize` must be called after all deformable objects have been added. It declares output ports for this system and set the discrete update function. */
+  void Finalize();
 
+  bool is_finalized() const { return finalized_; }
+
+  double get_dt() const { return dt_; }
+
+  const std::vector<std::unique_ptr<FemTetMeshBase>>& get_meshes() const {return meshes_;}
+
+ private:
   mutable FemSolver<T> solver_;
-  double dt_{0.01};
-  // This flag is turned on when an object has been added to FemSystem.
-  bool object_added_{false};
+  double dt_{};
+  bool finalized_{false};
+  std::vector<std::unique_ptr<FemTetMeshBase>> meshes_;
 };
 }  // namespace fem
 }  // namespace drake

@@ -17,6 +17,36 @@ package(
 )
 
 drake_cc_library(
+    name = "fem_tetmesh_base",
+    srcs =
+        [
+            "fem_tetmesh_base.cc",
+        ],
+    hdrs =
+        [
+            "fem_tetmesh_base.h",
+        ],
+    deps =
+        [
+            "//common:essential",
+            "//geometry/proximity:sorted_triplet",
+        ],
+)
+
+drake_cc_library(
+    name = "fem_tetmesh",
+    hdrs =
+        [
+            "fem_tetmesh.h",
+        ],
+    deps =
+        [
+            ":fem_tetmesh_base",
+            "//common:essential",
+        ],
+)
+
+drake_cc_library(
     name = "fem_solver",
     srcs =
         [
@@ -265,6 +295,7 @@ drake_cc_library(
     srcs = ["deformable_visualizer.cc"],
     hdrs = ["deformable_visualizer.h"],
     deps = [
+        ":fem_tetmesh_base",
         "//common:essential",
         "//geometry/proximity:sorted_triplet",
         "//lcm:drake_lcm",
@@ -284,6 +315,7 @@ drake_cc_library(
     ],
     deps = [
         ":fem_solver",
+        ":fem_tetmesh",
         ":mesh_utility",
         ":parse_vtk",
         "//common:essential",
