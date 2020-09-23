@@ -17,7 +17,7 @@ using systems::EventStatus;
 
 DeformableVisualizer::DeformableVisualizer(double update_period,
                                            std::string mesh_name,
-                                           const vector<std::unique_ptr<FemTetMeshBase>>& meshes,
+                                           const vector<FemTetMeshBase*>& meshes,
                                            lcm::DrakeLcmInterface* lcm)
     : lcm_(lcm), mesh_name_(std::move(mesh_name)) {
   if (lcm == nullptr) {
