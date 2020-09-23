@@ -1,12 +1,13 @@
 #pragma once
 
+#include <limits>
 #include <memory>
+#include <string>
 #include <utility>
 #include <vector>
 
-#include "drake/common/default_scalars.h"
 #include "drake/common/eigen_types.h"
-#include "drake/fem//fem_tetmesh_base.h"
+#include "drake/fem/fem_tetmesh_base.h"
 
 namespace drake {
 namespace fem {
@@ -14,10 +15,23 @@ template <typename T>
 class FemTetMesh : public FemTetMeshBase {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(FemTetMesh);
+  /** Constructs a FemTetMesh. The mesh topology
+   is given by a collection of tets (each represented by 4 indices into an
+   *implied* ordered set of vertex positions). Allocate memory for data members
+   depending on scalar type.
+
+   @param tet_mesh       The definition of the tetrahedral mesh topology (using
+                         indices starting from 0).
+   @param vertex_offset  The offset of local volume vertex indices into global
+                         indices. In other words, for a given vertex in the tet
+                         mesh, its global index is equal to its local index plus
+                         `vertex_offset`. See fem_data.h for definition of local
+                         vs. global indices. */
   FemTetMesh(const std::vector<Vector4<int>>& tet_mesh, int vertex_offset)
       : FemTetMeshBase(tet_mesh, vertex_offset) {
     surface_vertex_normals_.resize(get_surface_vertex_count());
     surface_vertex_positions_.resize(get_surface_vertex_count());
+    volume_vertex_positions_.resize(get_volume_vertex_count());
   }
 
   /** Evaluates the unit outward normal at face `face_index` at barycentric
@@ -37,22 +51,26 @@ class FemTetMesh : public FemTetMeshBase {
     return normal;
   }
 
-  /** Update surface vertex positions and surface vertex normals given the
-     positions of all vertices. `UpdatePosition` needs to be called every time
-     vertex position changes before `EvalNormal` can be called.
+  /** Update volume_vertex_positions_, surface_vertex_positions_, and
+     surface_vertex_normals_ given the positions of all vertices.
+     `UpdatePosition` needs to be called every time vertex position changes
+     before `EvalNormal` can be called.
      @throws std::runtime_error if the vertex normal of any surface vertex is
      degenerate. The vertex normal of vertex v is the area-weighted average of
      the normals of the face that v belongs to. We say the vertex normal is
      degenerate if it has magnitude smaller than
      `std::numeric_limits<T>::epsilon()`.*/
   void UpdatePosition(const Eigen::Ref<const Matrix3X<T>>& q) {
-    const auto& surface_to_volume = get_surface_to_volume_vertices();
-    for (int i = 0; i < get_surface_vertex_count(); ++i) {
-      const int volume_vertex =
-          surface_to_volume[i] + get_volume_vertex_offset();
+    for (int i = 0; i < get_volume_vertex_count(); ++i) {
+      const int volume_vertex = i + get_volume_vertex_offset();
       DRAKE_DEMAND(volume_vertex >= 0);
       DRAKE_DEMAND(volume_vertex < q.cols());
-      surface_vertex_positions_[i] = q.col(volume_vertex);
+      volume_vertex_positions_[i] = q.col(volume_vertex);
+    }
+    const auto& surface_to_volume = get_surface_to_volume_vertices();
+    for (int i = 0; i < get_surface_vertex_count(); ++i) {
+      const int volume_vertex = surface_to_volume[i];
+      surface_vertex_positions_[i] = volume_vertex_positions_[volume_vertex];
     }
     // Clear the data from previous frame.
     for (auto& n : surface_vertex_normals_) {
@@ -62,7 +80,7 @@ class FemTetMesh : public FemTetMeshBase {
       const Vector3<T>& q_WV0 = surface_vertex_positions_[tri[0]];
       const Vector3<T>& q_WV1 = surface_vertex_positions_[tri[1]];
       const Vector3<T>& q_WV2 = surface_vertex_positions_[tri[2]];
-      Vector3<T> normal = (q_WV2 - q_WV0).cross(q_WV1 - q_WV0);
+      Vector3<T> normal = (q_WV1 - q_WV0).cross(q_WV2 - q_WV0);
       for (int i = 0; i < 3; ++i) {
         surface_vertex_normals_[tri[i]] += normal;
       }
@@ -75,7 +93,16 @@ class FemTetMesh : public FemTetMeshBase {
     }
   }
 
+  const std::vector<Vector3<T>>& get_surface_vertex_positions() const {
+    return surface_vertex_positions_;
+  }
+
+  const std::vector<Vector3<T>>& get_volume_vertex_positions() const {
+    return volume_vertex_positions_;
+  }
+
  private:
+  friend class FemTetMeshTest;
   // Helper to throw a specific exception when a normal vector is degenerate.
   void ThrowIfDegenerate(const Vector3<T>& n, const char* source_method) const {
     if (n.norm() < std::numeric_limits<T>::epsilon()) {
@@ -88,6 +115,7 @@ class FemTetMesh : public FemTetMeshBase {
 
   std::vector<Vector3<T>> surface_vertex_normals_;
   std::vector<Vector3<T>> surface_vertex_positions_;
+  std::vector<Vector3<T>> volume_vertex_positions_;
 };
 }  // namespace fem
 }  // namespace drake
