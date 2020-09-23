@@ -471,6 +471,14 @@ drake_cc_googletest(
 )
 
 drake_cc_googletest(
+    name = "fem_tetmesh_test",
+    deps = [
+        ":fem_tetmesh",
+        "//common/test_utilities:eigen_matrix_compare",
+    ],
+)
+
+drake_cc_googletest(
     name = "hyperelastic_constitutive_model_test",
     deps = [
         ":hyperelastic_constitutive_model",
