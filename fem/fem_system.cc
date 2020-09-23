@@ -52,6 +52,9 @@ void FemSystem<T>::AdvanceOneTimeStep(
     const systems::Context<T>&, systems::DiscreteValues<T>* next_states) const {
   solver_.AdvanceOneTimeStep();
   const auto& new_q = solver_.get_q();
+  for (const auto& mesh : meshes_){
+    mesh->UpdatePosition(new_q);
+  }
   const VectorX<T>& q_vec =
       Eigen::Map<const VectorX<T>>(new_q.data(), new_q.rows() * new_q.cols());
   next_states->get_mutable_vector().SetFromVector(q_vec);

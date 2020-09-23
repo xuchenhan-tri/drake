@@ -49,7 +49,7 @@ class DeformableVisualizer : public systems::LeafSystem<double> {
    @pre update_period > 0.  */
   DeformableVisualizer(
       double update_period, std::string mesh_name,
-      const std::vector<std::unique_ptr<FemTetMeshBase>>& meshes,
+      const std::vector<FemTetMeshBase*>& meshes,
       lcm::DrakeLcmInterface* lcm = nullptr);
 
   /** Send the mesh initialization message. This can be invoked explicitly but
@@ -67,7 +67,7 @@ class DeformableVisualizer : public systems::LeafSystem<double> {
   // surface_to_volume_vertices_,surface_triangles_, and volume_vertex_count_
   // that concatenates the corresponding information in each individual
   // FemTetMeshBase.
-  void Flatten(const std::vector<std::unique_ptr<FemTetMeshBase>>& meshes) {
+  void Flatten(const std::vector<FemTetMeshBase*>& meshes) {
     volume_vertex_count_ = 0;
     surface_to_volume_vertices_.clear();
     surface_triangles_.clear();

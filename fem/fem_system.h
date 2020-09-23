@@ -68,13 +68,19 @@ class FemSystem final : public systems::LeafSystem<T> {
 
   double get_dt() const { return dt_; }
 
-  const std::vector<std::unique_ptr<FemTetMeshBase>>& get_meshes() const {return meshes_;}
+  std::vector<FemTetMeshBase*> get_mesh_base() const {
+      std::vector<FemTetMeshBase*> mesh_base;
+      for (const auto& mesh : meshes_){
+          mesh_base.push_back(mesh.get());
+      }
+      return mesh_base;
+  }
 
  private:
   mutable FemSolver<T> solver_;
   double dt_{};
   bool finalized_{false};
-  std::vector<std::unique_ptr<FemTetMeshBase>> meshes_;
+  std::vector<std::unique_ptr<FemTetMesh<T>>> meshes_;
 };
 }  // namespace fem
 }  // namespace drake

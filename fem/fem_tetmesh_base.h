@@ -12,25 +12,25 @@ class FemTetMeshBase {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(FemTetMeshBase);
   FemTetMeshBase(const std::vector<Vector4<int>>& tet_mesh, int vertex_offset)
-      : volume_vertex_offset_(vertex_offset) {
+      : tet_mesh_(tet_mesh), volume_vertex_offset_(vertex_offset) {
     AnalyzeTets(tet_mesh);
   }
 
-  int get_volume_vertex_count() const {
-      return volume_vertex_count_;
+  int get_volume_vertex_count() const { return volume_vertex_count_; }
+
+  int get_surface_vertex_count() const {
+    return surface_to_volume_vertices_.size();
   }
 
   const std::vector<int>& get_surface_to_volume_vertices() const {
-      return surface_to_volume_vertices_;
+    return surface_to_volume_vertices_;
   }
 
   const std::vector<Vector3<int>>& get_surface_triangles() const {
-      return surface_triangles_;
+    return surface_triangles_;
   }
 
-  int get_volume_vertex_offset() const {
-      return volume_vertex_offset_;
-  }
+  int get_volume_vertex_offset() const { return volume_vertex_offset_; }
 
  private:
   /* Analyzes the tet mesh topology to do the following:
@@ -38,6 +38,9 @@ class FemTetMeshBase {
     2. Create a mapping from local surface vertex to local volume vertex.
     3. Record the expected number of vertices referenced by the tet mesh.  */
   void AnalyzeTets(const std::vector<Vector4<int>>& tet_mesh);
+
+  // Local indices of the tetmesh.
+  std::vector<Vector4<int>> tet_mesh_;
 
   /* An *implicit* map from *surface* vertex indices to volume vertex indices.
    The iᵗʰ surface vertex corresponds to the volume vertex with index
