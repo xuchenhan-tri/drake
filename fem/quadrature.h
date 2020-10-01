@@ -51,11 +51,14 @@ class Quadrature {
 };
 
 /** Calculates the Gaussian quadrature rule for 2D and 3D unit simplices
- (triangles and tetrahedrons up to cubic order. The 2D unit triangle has
- vertices located at (0,0), (1,0) and (0,1). The 3D unit tetrahedron has
- vertices located at (0,0,0), (1,0,0), (0,1,0) and (0,0,1).
+ (triangles and tetrahedrons up to cubic order as described in [Hammer, 1956].
+The 2D unit triangle has vertices located at (0,0), (1,0) and (0,1). The 3D unit
+tetrahedron has vertices located at (0,0,0), (1,0,0), (0,1,0) and (0,0,1).
  @tparam N order of the quadrature rule. Must be 1, 2, or 3.
  @tparam D dimension of the unit simplex. Must be 2, or 3.
+
+[Hammer, 1956] P.C. Hammer, O.P. Marlowe, and A.H. Stroud. Numerical integration
+over simplexes and cones. Math. Tables Aids Comp. 10, 130-7, 1956.
  */
 template <typename T, int N, int D>
 class SimplexGaussianQuadrature : public Quadrature<T, D> {
