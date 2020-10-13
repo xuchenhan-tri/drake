@@ -8,8 +8,15 @@
 #include "drake/common/nice_type_name.h"
 
 namespace drake {
+namespace multibody {
 namespace fem {
 template <typename T, int NaturalDimension>
+/** A class for quadratures that facilitates numerical integrations in FEM. The
+ specification of particular quadrature rules will be provided in the derived
+ classes.
+ @tparam T the scalar type of the function being integrated over.
+ @tparam NaturalDimension dimension of the domain of integration.
+ */
 class Quadrature {
  public:
   DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(Quadrature);
@@ -46,10 +53,12 @@ class Quadrature {
 };
 
 /** Calculates the Gaussian quadrature rule for 2D and 3D unit simplices
- (triangles and tetrahedrons up to cubic order as described in [Hammer, 1956].
+(triangles and tetrahedrons up to cubic order as described in [Hammer, 1956].
 The 2D unit triangle has vertices located at (0,0), (1,0) and (0,1). The 3D unit
 tetrahedron has vertices located at (0,0,0), (1,0,0), (0,1,0) and (0,0,1).
- @tparam QuadratureOrder order of the quadrature rule. Must be 1, 2, or 3.
+ @tparam QuadratureOrder order of the quadrature rule. Must be 1, 2, or 3. The
+quadrature role will be exact for polynomials of degree less than or equal to
+QuadratureOrder.
  @tparam NaturalDimension dimension of the unit simplex. Must be 2, or 3.
 
 [Hammer, 1956] P.C. Hammer, O.P. Marlowe, and A.H. Stroud. Numerical integration
@@ -73,6 +82,10 @@ class SimplexGaussianQuadrature : public Quadrature<T, NaturalDimension> {
         //  (1/3, 1/3)                     1.0
         std::vector<VectorD> points = {{1.0 / 3.0, 1.0 / 3.0}};
         return points;
+        // TODO(xuchenhan-tri): fix the bug in cpplint as described in
+        // https://github.com/google/styleguide/issues/541. A solution has been
+        // proposed at https://github.com/cpplint/cpplint/pull/136.
+        // NOLINTNEXTLINE(readability/braces)
       } else if constexpr (QuadratureOrder == 2) {
         // quadrature point location,  weight/area
         //  (1/6, 1/6)                     1/3
@@ -83,6 +96,7 @@ class SimplexGaussianQuadrature : public Quadrature<T, NaturalDimension> {
         points[1] = {2.0 / 3.0, 1.0 / 6.0};
         points[2] = {1.0 / 6.0, 2.0 / 3.0};
         return points;
+        // NOLINTNEXTLINE(readability/braces)
       } else if constexpr (QuadratureOrder == 3) {
         // quadrature point location,  weight/area
         //  (1/3, 1/3)                     -9/16
@@ -98,6 +112,7 @@ class SimplexGaussianQuadrature : public Quadrature<T, NaturalDimension> {
       } else {
         DRAKE_UNREACHABLE();
       }
+      // NOLINTNEXTLINE(readability/braces)
     } else if constexpr (NaturalDimension == 3) {
       // For a unit tetrahedron, area = 1/6.
       if constexpr (QuadratureOrder == 1) {
@@ -105,6 +120,7 @@ class SimplexGaussianQuadrature : public Quadrature<T, NaturalDimension> {
         //  (1/4, 1/4, 1/4)                1.0
         std::vector<VectorD> points = {{0.25, 0.25, 0.25}};
         return points;
+        // NOLINTNEXTLINE(readability/braces)
       } else if constexpr (QuadratureOrder == 2) {
         // quadrature point location,  weight/area
         //  (a, b, b)                      1/4
@@ -120,6 +136,7 @@ class SimplexGaussianQuadrature : public Quadrature<T, NaturalDimension> {
         points[2] = {b, b, a};
         points[3] = {b, b, b};
         return points;
+        // NOLINTNEXTLINE(readability/braces)
       } else if constexpr (QuadratureOrder == 3) {
         // quadrature point location,  weight/area
         //  (1/4, 1/4, 1/4)               -4/5
@@ -155,6 +172,7 @@ class SimplexGaussianQuadrature : public Quadrature<T, NaturalDimension> {
         //  (1/3, 1/3)                     1.0
         std::vector<T> weights = {0.5};
         return weights;
+        // NOLINTNEXTLINE(readability/braces)
       } else if constexpr (QuadratureOrder == 2) {
         // quadrature point location,  weight/area
         //  (1/6, 1/6)                     1/3
@@ -162,6 +180,7 @@ class SimplexGaussianQuadrature : public Quadrature<T, NaturalDimension> {
         //  (1/6, 2/3)                     1/3
         std::vector<T> weights = {1.0 / 6.0, 1.0 / 6.0, 1.0 / 6.0};
         return weights;
+        // NOLINTNEXTLINE(readability/braces)
       } else if constexpr (QuadratureOrder == 3) {
         // quadrature point location,  weight/area
         //  (1/3, 1/3)                     -9/16
@@ -174,6 +193,7 @@ class SimplexGaussianQuadrature : public Quadrature<T, NaturalDimension> {
       } else {
         DRAKE_UNREACHABLE();
       }
+      // NOLINTNEXTLINE(readability/braces)
     } else if constexpr (NaturalDimension == 3) {
       // For a unit tetrahedron, area = 1/6.
       if constexpr (QuadratureOrder == 1) {
@@ -181,6 +201,7 @@ class SimplexGaussianQuadrature : public Quadrature<T, NaturalDimension> {
         //  (1/4, 1/4, 1/4)                1.0
         std::vector<T> weights = {1.0 / 6.0};
         return weights;
+        // NOLINTNEXTLINE(readability/braces)
       } else if constexpr (QuadratureOrder == 2) {
         // quadrature point location,  weight/area
         //  (a, b, b)                      1/4
@@ -191,6 +212,7 @@ class SimplexGaussianQuadrature : public Quadrature<T, NaturalDimension> {
         std::vector<T> weights = {1.0 / 24.0, 1.0 / 24.0, 1.0 / 24.0,
                                   1.0 / 24.0};
         return weights;
+        // NOLINTNEXTLINE(readability/braces)
       } else if constexpr (QuadratureOrder == 3) {
         // quadrature point location,  weight/area
         //  (1/4, 1/4, 1/4)               -4/5
@@ -211,4 +233,5 @@ class SimplexGaussianQuadrature : public Quadrature<T, NaturalDimension> {
   }
 };
 }  // namespace fem
+}  // namespace multibody
 }  // namespace drake

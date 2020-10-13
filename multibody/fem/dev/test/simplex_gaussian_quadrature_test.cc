@@ -6,6 +6,7 @@
 #include "drake/multibody/fem/dev/quadrature.h"
 
 namespace drake {
+namespace multibody {
 namespace fem {
 namespace {
 
@@ -21,7 +22,7 @@ struct LinearTestFunction2D {
   // evaluated at input x.
   static double Eval(const Vector2d& x) { return a0 + a1 * x(0) + a2 * x(1); }
 
-  static double EvalAnalyticalIntegralOverUnitTriangle(){
+  static double EvalAnalyticalIntegralOverUnitTriangle() {
     // The integral of the monomial 1 and x over the unit triangle with end
     // points at (0,0), (1,0) and (0,1) is
     //     ∫₀¹∫₀¹⁻ˣ 1 dydx =  1/2.
@@ -75,15 +76,14 @@ struct LinearTestFunction3D {
     return a0 + a1 * x(0) + a2 * x(1) + a3 * x(2);
   }
 
-  static double EvalAnalyticalIntegralOverUnitTet(){
+  static double EvalAnalyticalIntegralOverUnitTet() {
     // The integral of the monomial 1 and x over the unit tetrahedron with end
     // points at (0,0,0), (1,0,0), (0,1,0) and (0,0,1) is
     //     ∫₀¹∫₀¹⁻ˣ∫₀¹⁻ˣ⁻ʸ 1 dzdydx =  1/6.
     //     ∫₀¹∫₀¹⁻ˣ∫₀¹⁻ˣ⁻ʸ x dzdydx =  1/24.
     // So the integral of f(x) = a₀ + a₁*x₀ + a₂*x₁ + a₃*x₂ is equal to
     //     1/6 * a₀ + 1/24 * a₁ + 1/24 * a₂ + 1/24 * a₃.
-    return  1.0 / 6.0 * a0 + 1.0 / 24.0 * a1 +
-            1.0 / 24.0 * a2 + 1.0 / 24.0 * a3;
+    return 1.0 / 6.0 * a0 + 1.0 / 24.0 * a1 + 1.0 / 24.0 * a2 + 1.0 / 24.0 * a3;
   }
 };
 
@@ -154,7 +154,7 @@ TEST_F(SimplexGaussianQuadratureTest, Linear2D) {
   // Numerical integral of f = ∑ᵢ wᵢ f(xᵢ) where wᵢ is the weight of the i-th
   // quadrature point and xᵢ is the location of the i-th quadrature point.
   double numerical_integral =
-          Integrate(linear_2d_quadrature_, LinearTestFunction2D::Eval);
+      Integrate(linear_2d_quadrature_, LinearTestFunction2D::Eval);
   EXPECT_NEAR(LinearTestFunction2D::EvalAnalyticalIntegralOverUnitTriangle(),
               numerical_integral, std::numeric_limits<double>::epsilon());
 }
@@ -165,9 +165,9 @@ TEST_F(SimplexGaussianQuadratureTest, Linear3D) {
   // Numerical integral of f = ∑ᵢ wᵢ f(xᵢ) where wᵢ is the weight of the i-th
   // quadrature point and xᵢ is the location of the i-th quadrature point.
   double numerical_integral =
-          Integrate(linear_3d_quadrature_, LinearTestFunction3D::Eval);
+      Integrate(linear_3d_quadrature_, LinearTestFunction3D::Eval);
   EXPECT_NEAR(LinearTestFunction3D::EvalAnalyticalIntegralOverUnitTet(),
-          numerical_integral, std::numeric_limits<double>::epsilon());
+              numerical_integral, std::numeric_limits<double>::epsilon());
 }
 
 TEST_F(SimplexGaussianQuadratureTest, Quadratic2D) {
@@ -178,7 +178,7 @@ TEST_F(SimplexGaussianQuadratureTest, Quadratic2D) {
   double numerical_integral =
       Integrate(quadratic_2d_quadrature_, QuadraticTestFunction2D::Eval);
   EXPECT_NEAR(QuadraticTestFunction2D::EvalAnalyticalIntegralOverUnitTriangle(),
-          numerical_integral, std::numeric_limits<double>::epsilon());
+              numerical_integral, std::numeric_limits<double>::epsilon());
 }
 
 TEST_F(SimplexGaussianQuadratureTest, Quadratic3D) {
@@ -187,7 +187,7 @@ TEST_F(SimplexGaussianQuadratureTest, Quadratic3D) {
   // Numerical integral of f = ∑ᵢ wᵢ f(xᵢ) where wᵢ is the weight of the i-th
   // quadrature point and xᵢ is the location of the i-th quadrature point.
   double numerical_integral =
-          Integrate(quadratic_3d_quadrature_, QuadraticTestFunction3D::Eval);
+      Integrate(quadratic_3d_quadrature_, QuadraticTestFunction3D::Eval);
   EXPECT_NEAR(QuadraticTestFunction3D::EvalAnalyticalIntegralOverUnitTet(),
               numerical_integral, std::numeric_limits<double>::epsilon());
 }
@@ -195,4 +195,5 @@ TEST_F(SimplexGaussianQuadratureTest, Quadratic3D) {
 // TODO(xuchenhan-tri): Add unit tests for cubic rules.
 }  // namespace
 }  // namespace fem
+}  // namespace multibody
 }  // namespace drake
