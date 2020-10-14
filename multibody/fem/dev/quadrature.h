@@ -53,9 +53,10 @@ class Quadrature {
 };
 
 /** Calculates the Gaussian quadrature rule for 2D and 3D unit simplices
-(triangles and tetrahedrons up to cubic order as described in [Hammer, 1956].
-The 2D unit triangle has vertices located at (0,0), (1,0) and (0,1). The 3D unit
-tetrahedron has vertices located at (0,0,0), (1,0,0), (0,1,0) and (0,0,1).
+(triangles and tetrahedrons up to cubic order as described section 3 in [Hammer,
+1956] as well as section 9.10 of [Zienkiewics, 2005]. The 2D unit triangle has
+vertices located at (0,0), (1,0) and (0,1). The 3D unit tetrahedron has vertices
+located at (0,0,0), (1,0,0), (0,1,0) and (0,0,1).
  @tparam QuadratureOrder order of the quadrature rule. Must be 1, 2, or 3. The
 quadrature role will be exact for polynomials of degree less than or equal to
 QuadratureOrder.
@@ -63,6 +64,8 @@ QuadratureOrder.
 
 [Hammer, 1956] P.C. Hammer, O.P. Marlowe, and A.H. Stroud. Numerical integration
 over simplexes and cones. Math. Tables Aids Comp. 10, 130-7, 1956.
+[Zienkiewicz, 2005] Zienkiewicz, Olek C., Robert L. Taylor, and Jian Z. Zhu. The
+finite element method: its basis and fundamentals. Elsevier, 2005.
  */
 template <typename T, int QuadratureOrder, int NaturalDimension>
 class SimplexGaussianQuadrature : public Quadrature<T, NaturalDimension> {
@@ -72,6 +75,7 @@ class SimplexGaussianQuadrature : public Quadrature<T, NaturalDimension> {
   SimplexGaussianQuadrature()
       : Quadrature<T, NaturalDimension>(GetPoints(), GetWeights()) {}
 
+ private:
   std::vector<VectorD> GetPoints() {
     static_assert(1 <= QuadratureOrder && QuadratureOrder <= 3,
                   "Only linear, quadratic and cubic quadratures are supported");
@@ -91,6 +95,9 @@ class SimplexGaussianQuadrature : public Quadrature<T, NaturalDimension> {
         //  (1/6, 1/6)                     1/3
         //  (2/3, 1/6)                     1/3
         //  (1/6, 2/3)                     1/3
+        // Note: Here we choose r=1/2 in section 3 of [Hammer, 1956]. They also
+        // mentioned the other choice with r=-1/2. We do not use r=-1/2 as it
+        // lies out side of the element.
         std::vector<VectorD> points(3);
         points[0] = {1.0 / 6.0, 1.0 / 6.0};
         points[1] = {2.0 / 3.0, 1.0 / 6.0};
