@@ -97,6 +97,16 @@ class ConstitutiveModel {
                                                num_quadrature_points);
   }
 
+  /** Creates a DeformationGradientCache that is compatible with this
+   %ConstitutiveModel. See ElasticityElement for more about the compatibility
+   requirement. */
+  std::unique_ptr<DeformationGradientCache<T>> MakeDeformationGradientCache(
+      ElementIndex element_index, int num_quads) const {
+    DRAKE_DEMAND(element_index.is_valid());
+    DRAKE_DEMAND(num_quads > 0);
+    return DoMakeDeformationGradientCache(element_index, num_quads);
+  }
+
  protected:
   /** Copy constructor for the base ConstitutiveModel class to facilitate
    `DoClone()` in derived classes. */
