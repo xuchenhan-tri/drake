@@ -14,11 +14,11 @@
 #include "drake/fem/fem_force.h"
 #include "drake/fem/fem_state.h"
 #include "drake/fem/newton_solver.h"
-#include "drake/multibody/solvers/inverse_operator.h"
-#include "drake/multibody/solvers/pgs_solver.h"
-#include "drake/multibody/solvers/point_contact_data.h"
-#include "drake/multibody/solvers/sparse_linear_operator.h"
-#include "drake/multibody/solvers/system_dynamics_data.h"
+#include "drake/multibody/contact_solvers/inverse_operator.h"
+#include "drake/multibody/contact_solvers/pgs_solver.h"
+#include "drake/multibody/contact_solvers/point_contact_data.h"
+#include "drake/multibody/contact_solvers/sparse_linear_operator.h"
+#include "drake/multibody/contact_solvers/system_dynamics_data.h"
 
 namespace drake {
 namespace fem {

@@ -1,17 +1,17 @@
 #pragma once
 
+#include <iostream>
 #include <memory>
 
-#include "drake/multibody/solvers/contact_solver.h"
-#include "drake/multibody/solvers/contact_solver_utils.h"
-
-#include <iostream>
-#define PRINT_VAR(a) std::cout << #a": " << a << std::endl;
-#define PRINT_VARn(a) std::cout << #a":\n" << a << std::endl;
+#include "drake/multibody/contact_solvers/contact_solver.h"
+#include "drake/multibody/contact_solvers/contact_solver_utils.h"
+#define PRINT_VAR(a) std::cout << #a ": " << a << std::endl;
+#define PRINT_VARn(a) std::cout << #a ":\n" << a << std::endl;
 
 namespace drake {
 namespace multibody {
-namespace solvers {
+namespace contact_solvers {
+namespace internal {
 template <typename T>
 struct PgsSolverParameters {
   // Over-relaxation paramter, in (0, 1]
@@ -27,14 +27,14 @@ struct PgsSolverParameters {
 template <typename T>
 struct PgsSolverStats {
   int iterations{0};  // Number of PGS iterations.
-  T vc_err{0.0};  // Error in the contact velocities, [m/s].
-  T gamma_err{0.0};  // Error in the contact impulses, [Ns].
+  T vc_err{0.0};      // Error in the contact velocities, [m/s].
+  T gamma_err{0.0};   // Error in the contact impulses, [Ns].
 };
 
 template <typename T>
 class PgsSolver final : public ContactSolver<T> {
  public:
-  class State {    
+  class State {
    public:
     DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(State);
     State() = default;
@@ -56,28 +56,17 @@ class PgsSolver final : public ContactSolver<T> {
 
   virtual ~PgsSolver() = default;
 
-  void SetSystemDynamicsData(const SystemDynamicsData<T>* data) final;
-
-  void SetPointContactData(const PointContactData<T>* data) final;
-
-  int num_contacts() const final { return contact_data_->num_contacts(); };
-  int num_velocities() const final { return dynamics_data_->num_velocities(); }
-
   void set_parameters(PgsSolverParameters<T>& parameters) {
     parameters_ = parameters;
   }
 
-  ContactSolverResult SolveWithGuess(T dt,
-                                     const VectorX<T>& v_guess) final;
+  ContactSolverStatus SolveWithGuess(const T& time_step,
+                                     const SystemDynamicsData<T>& dynamics_data,
+                                     const PointContactData<T>& contact_data,
+                                     const VectorX<T>& v_guess,
+                                     ContactSolverResults<T>* result) final;
 
   const PgsSolverStats<T>& get_iteration_stats() const { return stats_; }
-
-  const VectorX<T>& GetImpulses() const final { return state_.gamma(); }
-  const VectorX<T>& GetVelocities() const final { return state_.v(); }
-  const VectorX<T>& GetGeneralizedContactImpulses() const final {
-    return tau_c_;
-  }
-  const VectorX<T>& GetContactVelocities() const final { return vc_; }
 
  private:
   // All this data must remain const after the call to PreProcessData().
@@ -98,39 +87,31 @@ class PgsSolver final : public ContactSolver<T> {
     }
   };
 
-  // Quick accessors to problem data.
-  const LinearOperator<T>& get_Jc() const { return contact_data_->get_Jc(); }
-  const LinearOperator<T>& get_Minv() const {
-    return dynamics_data_->get_Minv();
-  }
-  const VectorX<T>& get_v0() const { return dynamics_data_->get_v0(); }
-  const VectorX<T>& get_tau() const { return dynamics_data_->get_tau(); }
-  const VectorX<T>& get_phi0() const { return contact_data_->get_phi0(); }
-  const VectorX<T>& get_mu() const { return contact_data_->get_mu(); }
-
-  void PreProcessData(T dt);
-  bool VerifyConvergenceCriteria(const VectorX<T>& vc, const VectorX<T>& vc_kp,
+  void PreProcessData(T dt, const SystemDynamicsData<T>& dynamics_data,
+                      const PointContactData<T>& contact_data);
+  bool VerifyConvergenceCriteria(const PointContactData<T>& contact_data,
+                                 const VectorX<T>& vc, const VectorX<T>& vc_kp,
                                  const VectorX<T>& gamma,
                                  const VectorX<T>& gamma_kp, T* vc_err,
                                  T* gamma_err) const;
   Vector3<T> ProjectImpulse(const Eigen::Ref<const Vector3<T>>& vc,
                             const Eigen::Ref<const Vector3<T>>& gamma,
                             const T& mu) const;
-  void ProjectAllImpulses(const VectorX<T>& vc, VectorX<T>* gamma_inout) const;
+  void ProjectAllImpulses(const PointContactData<T>& contact_data,
+                          const VectorX<T>& vc, VectorX<T>* gamma_inout) const;
 
   PgsSolverParameters<T> parameters_;
-  const SystemDynamicsData<T>* dynamics_data_{nullptr};
-  const PointContactData<T>* contact_data_{nullptr};
   PreProcessedData pre_proc_data_;
   State state_;
   PgsSolverStats<T> stats_;
   // Workspace (many of these could live in the state as "cached" data.)
   VectorX<T> tau_c_;  // Generalized contact impulses.
-  VectorX<T> vc_;  // Contact velocities.  
+  VectorX<T> vc_;     // Contact velocities.
 };
 
-}  // namespace solvers
+}  // namespace internal
+}  // namespace contact_solvers
 }  // namespace multibody
 }  // namespace drake
 DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_NONSYMBOLIC_SCALARS(
-        class ::drake::multibody::solvers::PgsSolver)
+    class ::drake::multibody::contact_solvers::internal::PgsSolver)

@@ -8,7 +8,7 @@ typename NewtonSolver<T>::NewtonSolverStatus NewtonSolver<T>::Solve(EigenPtr<Vec
   UpdateState();
   EvalResidual();
   for (int i = 0; i < max_iterations_; ++i) {
-    std::unique_ptr<multibody::solvers::LinearOperator<T>> J = objective_.GetA(state_);
+    std::unique_ptr<multibody::contact_solvers::internal::LinearOperator<T>> J = objective_.GetA(state_);
     linear_solver_.SetUp(*J);
     linear_solver_.Solve(residual_, &dz_);
     *z += dz_;

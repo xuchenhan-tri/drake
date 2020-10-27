@@ -69,34 +69,34 @@ void FemSolver<T>::SolveContact() const {
   // Fill SystemDynamicsData.
   VectorX<T> penetration_depth;
   auto A = objective_.GetA(state_);
-  drake::multibody::solvers::InverseOperator<T> Ainv(
+  drake::multibody::contact_solvers::internal::InverseOperator<T> Ainv(
       "Ainv", &newton_solver_.get_linear_solver(), *A);
   const Matrix3X<T>& v_star = state_.get_v0() + state_.get_dv();
-  const VectorX<T>& v_star_tmp = Eigen::Map<const VectorX<T>>(v_star.data(), v_star.size());
-  VectorX<T> tau = VectorX<T>::Zero(get_num_position_dofs());
-  drake::multibody::solvers::SystemDynamicsData<T> dynamics_data(&Ainv, &v_star_tmp,
-                                                                 &tau);
+  const VectorX<T>& v_star_tmp =
+      Eigen::Map<const VectorX<T>>(v_star.data(), v_star.size());
+  drake::multibody::contact_solvers::internal::SystemDynamicsData<T>
+      dynamics_data(&Ainv, &v_star_tmp);
   // Fill PointContactData.
   auto& Jc = state_.get_mutable_cache().get_mutable_Jc();
   const auto& dt = data_.get_dt();
   // Perform contact query at the temporary position q0 + dt * v*.
-  Matrix3X<T> tmp_q = state_.get_q0() + dt*v_star;
+  Matrix3X<T> tmp_q = state_.get_q0() + dt * v_star;
   QueryContact(tmp_q, collision_objects, &Jc, &penetration_depth);
-  drake::multibody::solvers::SparseLinearOperator<T> Jc_lop("Jc", &Jc);
+  drake::multibody::contact_solvers::internal::SparseLinearOperator<T> Jc_lop(
+      "Jc", &Jc);
   // TODO(xuchenhan-tri) Properly set these coefficients.
   VectorX<T> stiffness = VectorX<T>::Zero(penetration_depth.size());
   VectorX<T> dissipation = VectorX<T>::Zero(penetration_depth.size());
   const T friction_coeff = 0.1;
   VectorX<T> mu = friction_coeff * VectorX<T>::Ones(penetration_depth.size());
-  drake::multibody::solvers::PointContactData<T> point_data(
+  drake::multibody::contact_solvers::internal::PointContactData<T> point_data(
       &penetration_depth, &Jc_lop, &stiffness, &dissipation, &mu);
   // Solve contact constraints with PGS.
-  drake::multibody::solvers::PgsSolver<T> pgs;
-  pgs.SetSystemDynamicsData(&dynamics_data);
-  pgs.SetPointContactData(&point_data);
-  pgs.SolveWithGuess(dt, v_star_tmp);
+  drake::multibody::contact_solvers::internal::PgsSolver<T> pgs;
+  drake::multibody::contact_solvers::internal::ContactSolverResults<T> result;
+  pgs.SolveWithGuess(dt, dynamics_data, point_data, v_star_tmp, &result);
   // Update positions and velocities.
-  const auto& v_new_tmp = pgs.GetVelocities();
+  const auto& v_new_tmp = result.v_next;
   auto& v = state_.get_mutable_v();
   v = Eigen::Map<const Matrix3X<T>>(v_new_tmp.data(), 3, v_new_tmp.size() / 3);
   auto& q = state_.get_mutable_q();

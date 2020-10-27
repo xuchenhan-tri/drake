@@ -4,8 +4,8 @@
 #include "drake/fem/fem_data.h"
 #include "drake/fem/fem_force.h"
 #include "drake/fem/fem_state.h"
-#include "drake/multibody/solvers/linear_operator.h"
-#include "drake/multibody/solvers/sparse_linear_operator.h"
+#include "drake/multibody/contact_solvers/linear_operator.h"
+#include "drake/multibody/contact_solvers/sparse_linear_operator.h"
 
 namespace drake {
 namespace fem {
@@ -98,7 +98,7 @@ class BackwardEulerObjective {
 
   /** Calculates the Jacobian matrix at the current configuration and returns a
    * linear operator representing the Jacobian matrix. */
-  std::unique_ptr<multibody::solvers::LinearOperator<T>> GetA(const FemState<T>& state) const;
+  std::unique_ptr<multibody::contact_solvers::internal::LinearOperator<T>> GetA(const FemState<T>& state) const;
 
  private:
   const std::vector<Matrix3<T>>& EvalF() const;

@@ -3,7 +3,7 @@
 #include "drake/common/eigen_types.h"
 #include "drake/fem/backward_euler_objective.h"
 #include "drake/fem/linear_system_solver.h"
-#include "drake/multibody/solvers/linear_operator.h"
+#include "drake/multibody/contact_solvers/linear_operator.h"
 
 namespace drake {
 namespace fem {
@@ -71,7 +71,7 @@ class EigenMatrixReplacement
   ~EigenMatrixReplacement() = default;
 
   // TODO(xuchenhan-tri): linear_operator_ may dangle here if the input lop goes out of scope.
-  void SetUp(const multibody::solvers::LinearOperator<T>& lop) {
+  void SetUp(const multibody::contact_solvers::internal::LinearOperator<T>& lop) {
     linear_operator_ = &lop;
   }
 
@@ -82,7 +82,7 @@ class EigenMatrixReplacement
   }
 
  private:
-  const multibody::solvers::LinearOperator<T>* linear_operator_{nullptr};
+  const multibody::contact_solvers::internal::LinearOperator<T>* linear_operator_{nullptr};
 };
 }  // namespace internal
 }  // namespace fem
@@ -203,7 +203,7 @@ class EigenConjugateGradientSolver : public LinearSystemSolver<T> {
   }
 
   /** Set up the equation A*x = rhs. */
-  virtual void SetUp(const multibody::solvers::LinearOperator<T>& lop) {
+  virtual void SetUp(const multibody::contact_solvers::internal::LinearOperator<T>& lop) {
     matrix_.SetUp(lop);
     cg_.compute(matrix_);
   }

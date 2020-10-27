@@ -8,8 +8,7 @@ namespace drake {
 namespace fem {
 template <typename T>
 void BackwardEulerObjective<T>::CalcResidual(
-    const FemState<T>& state,
-    EigenPtr<VectorX<T>> residual) const {
+    const FemState<T>& state, EigenPtr<VectorX<T>> residual) const {
   Eigen::Map<Matrix3X<T>> impulse(residual->data(), 3, residual->size() / 3);
   impulse.setZero();
 
@@ -33,7 +32,8 @@ void BackwardEulerObjective<T>::CalcResidual(
 }
 
 template <typename T>
-void BackwardEulerObjective<T>::Multiply(const FemState<T>& state, const Eigen::Ref<const Matrix3X<T>>& x,
+void BackwardEulerObjective<T>::Multiply(const FemState<T>& state,
+                                         const Eigen::Ref<const Matrix3X<T>>& x,
                                          EigenPtr<Matrix3X<T>> prod) const {
   const VectorX<T>& mass = fem_data_.get_mass();
   DRAKE_DEMAND(prod->cols() == mass.size());
@@ -76,11 +76,11 @@ T BackwardEulerObjective<T>::norm(const Eigen::Ref<const VectorX<T>>& x) const {
 }
 
 template <typename T>
-std::unique_ptr<multibody::solvers::LinearOperator<T>>
+std::unique_ptr<multibody::contact_solvers::internal::LinearOperator<T>>
 BackwardEulerObjective<T>::GetA(const FemState<T>& state) const {
   if (matrix_free_) {
     auto multiply = [this, &state](const Eigen::Ref<const VectorX<T>>& x,
-                           EigenPtr<VectorX<T>> y) {
+                                   EigenPtr<VectorX<T>> y) {
       const Matrix3X<T>& tmp_x =
           Eigen::Map<const Matrix3X<T>>(x.data(), 3, x.size() / 3);
       Matrix3X<T> tmp_y;
@@ -88,7 +88,8 @@ BackwardEulerObjective<T>::GetA(const FemState<T>& state) const {
       this->Multiply(state, tmp_x, &tmp_y);
       *y = Eigen::Map<VectorX<T>>(tmp_y.data(), tmp_y.size());
     };
-    return std::make_unique<multibody::solvers::SparseLinearOperator<T>>(
+    return std::make_unique<
+        multibody::contact_solvers::internal::SparseLinearOperator<T>>(
         "A", multiply, get_num_dofs(), get_num_dofs());
   }
   int num_dofs = get_num_dofs();
@@ -98,12 +99,13 @@ BackwardEulerObjective<T>::GetA(const FemState<T>& state) const {
     SetSparsityPattern(&A);
   }
   BuildA(state, &A);
-  return std::make_unique<multibody::solvers::SparseLinearOperator<T>>("A", &A);
+  return std::make_unique<
+      multibody::contact_solvers::internal::SparseLinearOperator<T>>("A", &A);
 }
 
-
 template <typename T>
-void BackwardEulerObjective<T>::BuildA(const FemState<T>& state, Eigen::SparseMatrix<T>* A) const {
+void BackwardEulerObjective<T>::BuildA(const FemState<T>& state,
+                                       Eigen::SparseMatrix<T>* A) const {
   const auto& mass = get_mass();
   const T& dt = fem_data_.get_dt();
   // The dimension of the matrix should be properly set by the caller and

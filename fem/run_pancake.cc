@@ -18,7 +18,7 @@
 #include "drake/systems/framework/diagram_builder.h"
 
 DEFINE_double(simulation_time, 10.0, "How long to simulate the system");
-DEFINE_bool(use_pancake, false,
+DEFINE_bool(use_pancake, true,
             "Whether to simulate a pancake geometry or a rectangular block.");
 DEFINE_bool(
     use_drake_visualizer, true,

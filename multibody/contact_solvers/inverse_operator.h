@@ -6,12 +6,13 @@
 #include "drake/common/drake_copyable.h"
 #include "drake/common/eigen_types.h"
 #include "drake/fem/linear_system_solver.h"
-#include "drake/multibody/solvers/linear_operator.h"
+#include "drake/multibody/contact_solvers/linear_operator.h"
 #include "drake/fem/eigen_conjugate_gradient_solver.h"
 
 namespace drake {
 namespace multibody {
-namespace solvers {
+namespace contact_solvers {
+    namespace internal {
 
 template <typename T>
 class InverseOperator final : public LinearOperator<T> {
@@ -53,9 +54,10 @@ class InverseOperator final : public LinearOperator<T> {
   const LinearOperator<T>& lop_{nullptr};
 };
 
-}  // namespace solvers
+    }  // namespace internal
+}  // namespace contact_solvers
 }  // namespace multibody
 }  // namespace drake
 
 DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_NONSYMBOLIC_SCALARS(
-    class ::drake::multibody::solvers::InverseOperator)
+    class ::drake::multibody::contact_solvers::internal::InverseOperator)
