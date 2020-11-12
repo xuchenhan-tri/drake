@@ -79,7 +79,7 @@ Drake requires a compiler running in C++17 mode.
 | Operating System                 | Bazel | CMake | C/C++ Compiler      | Java              | Python |
 +==================================+=======+=======+=====================+===================+========+
 +----------------------------------+-------+-------+---------------------+-------------------+--------+
-| Ubuntu 18.04 LTS (Bionic Beaver) | 3.4   | 3.10  | | GCC 7.5 (default) | OpenJDK 11        | 3.6    |
+| Ubuntu 18.04 LTS (Bionic Beaver) | 3.5   | 3.10  | | GCC 7.5 (default) | OpenJDK 11        | 3.6    |
 |                                  |       |       | | Clang 9           |                   |        |
 +----------------------------------+       +-------+---------------------+                   +--------+
 | Ubuntu 20.04 LTS (Focal Fossa)   |       | 3.16  | | GCC 9.3 (default) |                   | 3.8    |
@@ -88,8 +88,8 @@ Drake requires a compiler running in C++17 mode.
 | macOS Mojave (10.14)             |       | 3.17  | | Apple LLVM 11.0.0 | | AdoptOpenJDK 14 |        |
 |                                  |       |       | | (Xcode 11.3)      | | (HotSpot JVM)   |        |
 +----------------------------------+       |       +---------------------+                   |        |
-| macOS Catalina (10.15)           |       |       | | Apple LLVM 11.0.3 |                   |        |
-|                                  |       |       | | (Xcode 11.5)      |                   |        |
+| macOS Catalina (10.15)           |       |       | | Apple LLVM 12.0.0 |                   |        |
+|                                  |       |       | | (Xcode 12.0)      |                   |        |
 +----------------------------------+-------+-------+---------------------+-------------------+--------+
 
 CPython is the only Python implementation supported. On Ubuntu, amd64
@@ -336,3 +336,4 @@ Version Control
 
     no_push_to_origin
     model_version_control
+    release_playbook

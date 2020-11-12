@@ -8,6 +8,7 @@
 
 set -euo pipefail
 
+with_doc_only=1
 with_kcov=0
 with_maintainer_only=0
 with_test_only=1
@@ -26,9 +27,15 @@ while [ "${1:-}" != "" ]; do
     --with-maintainer-only)
       with_maintainer_only=1
       ;;
+    # Do NOT install prerequisites that are only needed to build documentation,
+    # i.e., those prerequisites that are dependencies of bazel { build, run }
+    # { //doc:gen_sphinx, //bindings/pydrake/doc:gen_sphinx, //doc:doxygen }
+    --without-doc-only)
+      with_doc_only=0
+      ;;
     # Do NOT install prerequisites that are only needed to build and/or run
     # unit tests, i.e., those prerequisites that are not dependencies of
-    # bazel build //:install and/or bazel run //:install.
+    # bazel { build, run } //:install.
     --without-test-only)
       with_test_only=0
       ;;
@@ -64,9 +71,12 @@ if [[ "${codename}" == 'bionic' ]] && [[ "${with_kcov}" -eq 1 ]]; then
 fi
 
 apt-get update
-apt-get install --no-install-recommends \
-  $(cat "${BASH_SOURCE%/*}/packages-${codename}.txt")
+packages=$(cat "${BASH_SOURCE%/*}/packages-${codename}.txt")
+apt-get install --no-install-recommends ${packages}
 
+# Ensure that we have available a locale that supports UTF-8 for generating a
+# C++ header containing Python API documentation during the build.
+apt-get install --no-install-recommends locales
 locale-gen en_US.UTF-8
 
 if [[ "${codename}" == 'focal' ]]; then
@@ -79,16 +89,21 @@ if [[ "${codename}" == 'focal' ]]; then
   fi
 fi
 
+if [[ "${with_doc_only}" -eq 1 ]]; then
+  packages=$(cat "${BASH_SOURCE%/*}/packages-${codename}-doc-only.txt")
+  apt-get install --no-install-recommends ${packages}
+fi
+
 if [[ "${with_test_only}" -eq 1 ]]; then
+  packages=$(cat "${BASH_SOURCE%/*}/packages-${codename}-test-only.txt")
   # Suppress Python 3.8 warnings when installing python3-pandas on Focal.
   PYTHONWARNINGS=ignore::SyntaxWarning \
-    apt-get install --no-install-recommends \
-      $(cat "${BASH_SOURCE%/*}/packages-${codename}-test-only.txt")
+    apt-get install --no-install-recommends ${packages}
 fi
 
 if [[ "${with_maintainer_only}" -eq 1 ]]; then
-  apt-get install --no-install-recommends \
-    $(cat "${BASH_SOURCE%/*}/packages-${codename}-maintainer.txt")
+  packages=$(cat "${BASH_SOURCE%/*}/packages-${codename}-maintainer-only.txt")
+  apt-get install --no-install-recommends ${packages}
 fi
 
 dpkg_install_from_wget() {
@@ -130,8 +145,16 @@ dpkg_install_from_wget() {
   rm "${tmpdeb}"
 }
 
-# Depends: g++, unzip, zlib1g-dev
+# Install bazel package dependencies (these may duplicate dependencies of
+# drake).
+apt-get install --no-install-recommends $(cat <<EOF
+g++
+unzip
+zlib1g-dev
+EOF
+)
+
 dpkg_install_from_wget \
-  bazel 3.4.1 \
-  https://releases.bazel.build/3.4.1/release/bazel_3.4.1-linux-x86_64.deb \
-  dc8f51b7ed039d57bb990a1eebddcbb0014fe267a88df8972f4609ded1f11c90
+  bazel 3.5.0 \
+  https://releases.bazel.build/3.5.0/release/bazel_3.5.0-linux-x86_64.deb \
+  08b71237eccc3c313e62976894fc260d9e1c1ecdfa5b14fc7477fce1c36c618c

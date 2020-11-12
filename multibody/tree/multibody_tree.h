@@ -413,14 +413,16 @@ class MultibodyTree {
   const JointType<T>& AddJoint(
       std::unique_ptr<JointType<T>> joint);
 
-  /// This method helps to create a Joint of type `JointType` between two
-  /// bodies.
-  /// The two bodies connected by this Joint object are referred to as the
-  /// _parent_ and _child_ bodies. Although the terms _parent_ and _child_ are
-  /// sometimes used synonymously to describe the relationship between inboard
-  /// and outboard bodies in multibody models, this usage is wholly unrelated
-  /// and implies nothing about the inboard-outboard relationship between the
-  /// bodies.
+  /// This method adds a Joint of type `JointType` between two bodies.
+  /// The two bodies connected by this Joint object are referred to as _parent_
+  /// and _child_ bodies. The parent/child ordering defines the sign conventions
+  /// for the generalized coordinates and the coordinate ordering for multi-DOF
+  /// joints.  Our use of the terms _parent_ and _child_ does 𝐧𝐨𝐭 describe the
+  /// inboard/outboard relationship between bodies as our usage of inboard/
+  /// outboard is more general and is also meaningful for multibody systems
+  /// with loops, such as four-bar linkages.  However, when possible the
+  /// _parent_ body is made inboard and the _child_ outboard in the tree.
+  ///
   /// As explained in the Joint class's documentation, in Drake we define a
   /// frame F attached to the parent body P with pose `X_PF` and a frame M
   /// attached to the child body B with pose `X_BM`. This method helps create
@@ -637,6 +639,11 @@ class MultibodyTree {
     return *owned_bodies_[body_index];
   }
 
+  Body<T>& get_mutable_body(BodyIndex body_index) {
+    DRAKE_THROW_UNLESS(body_index < num_bodies());
+    return *owned_bodies_[body_index];
+  }
+
   /// See MultibodyPlant method.
   const Joint<T>& get_joint(JointIndex joint_index) const {
     DRAKE_THROW_UNLESS(joint_index < num_joints());
@@ -658,6 +665,11 @@ class MultibodyTree {
 
   /// See MultibodyPlant method.
   const Frame<T>& get_frame(FrameIndex frame_index) const {
+    DRAKE_THROW_UNLESS(frame_index < num_frames());
+    return *frames_[frame_index];
+  }
+
+  Frame<T>& get_mutable_frame(FrameIndex frame_index) {
     DRAKE_THROW_UNLESS(frame_index < num_frames());
     return *frames_[frame_index];
   }
@@ -692,6 +704,12 @@ class MultibodyTree {
 
   const ForceElement<T>& get_force_element(
       ForceElementIndex force_element_index) const {
+    DRAKE_THROW_UNLESS(force_element_index < num_force_elements());
+    return *owned_force_elements_[force_element_index];
+  }
+
+  ForceElement<T>& get_mutable_force_element(
+      ForceElementIndex force_element_index) {
     DRAKE_THROW_UNLESS(force_element_index < num_force_elements());
     return *owned_force_elements_[force_element_index];
   }
@@ -1287,6 +1305,16 @@ class MultibodyTree {
   Vector3<T> CalcCenterOfMassPosition(
       const systems::Context<T>& context,
       const std::vector<BodyIndex>& body_indexes) const;
+
+  /// See MultibodyPlant method.
+  SpatialMomentum<T> CalcSpatialMomentumInWorldAboutPoint(
+      const systems::Context<T>& context, const Vector3<T>& p_WoP_W) const;
+
+  /// See MultibodyPlant method.
+  SpatialMomentum<T> CalcSpatialMomentumInWorldAboutPoint(
+      const systems::Context<T>& context,
+      const std::vector<ModelInstanceIndex>& model_instances,
+      const Vector3<T>& p_WoP_W) const;
 
   /// See MultibodyPlant method.
   const math::RigidTransform<T>& EvalBodyPoseInWorld(
@@ -2602,6 +2630,19 @@ class MultibodyTree {
       JacobianWrtVariable with_respect_to,
       std::vector<SpatialAcceleration<T>>* AsBias_WB_all) const;
 
+  // This method returns the spatial momentum of a list of bodies in the
+  // world frame W, about the world origin Wo, expressed in the world frame W.
+  // @param[in] context Contains the state of the model.
+  // @param[in] body_indexes Array of selected bodies.  This method does not
+  //  distinguish between welded bodies, joint-connected bodies,
+  //  floating bodies, the world_body(), or repeated bodies.
+  // @throws std::exception if model_instances contains an invalid
+  // ModelInstanceIndex.
+  // @throws std::exception if body_indexes contains an invalid BodyIndex.
+  SpatialMomentum<T> CalcBodiesSpatialMomentumInWorldAboutWo(
+      const systems::Context<T>& context,
+      const std::vector<BodyIndex>& body_indexes) const;
+
   // Helper method to access the mobilizer of a free body.
   // If `body` is a free body in the model, this method will return the
   // QuaternionFloatingMobilizer for the body. If the body is not free but it
@@ -2909,7 +2950,7 @@ class MultibodyTree {
   // List of all frames in the system ordered by their FrameIndex.
   // This vector contains a pointer to all frames in owned_frames_ as well as a
   // pointer to each BodyFrame, which are owned by their corresponding Body.
-  std::vector<const Frame<T>*> frames_;
+  std::vector<Frame<T>*> frames_;
 
   // The gravity field force element.
   UniformGravityFieldElement<T>* gravity_field_{nullptr};

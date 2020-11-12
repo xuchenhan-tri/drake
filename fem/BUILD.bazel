@@ -1,0 +1,490 @@
+#- * - python - * -
+
+load(
+    "@drake//tools/skylark:drake_cc.bzl",
+    "drake_cc_binary",
+    "drake_cc_googletest",
+    "drake_cc_library",
+)
+load(
+    "@drake//tools/vector_gen:vector_gen.bzl",
+    "drake_cc_vector_gen_library",
+)
+load("//tools/lint:lint.bzl", "add_lint_tests")
+
+package(
+    default_visibility = ["//visibility:public"],
+)
+
+drake_cc_library(
+    name = "fem_tetmesh_base",
+    srcs =
+        [
+            "fem_tetmesh_base.cc",
+        ],
+    hdrs =
+        [
+            "fem_tetmesh_base.h",
+        ],
+    deps =
+        [
+            "//common:essential",
+            "//geometry/proximity:sorted_triplet",
+        ],
+)
+
+drake_cc_library(
+    name = "fem_tetmesh",
+    hdrs =
+        [
+            "fem_tetmesh.h",
+        ],
+    deps =
+        [
+            ":fem_tetmesh_base",
+            "//common:essential",
+        ],
+)
+
+drake_cc_library(
+    name = "fem_solver",
+    srcs =
+        [
+            "fem_solver.cc",
+        ],
+    hdrs =
+        [
+            "fem_config.h",
+            "fem_solver.h",
+        ],
+    deps =
+        [
+            ":backward_euler_objective",
+            ":collision_object",
+            ":fem_data",
+            ":fem_element",
+            ":fem_force",
+            ":newton_solver",
+            ":query_contact",
+            "//common:essential",
+            "//multibody/contact_solvers:inverse_operator",
+            "//multibody/contact_solvers:pgs_solver",
+            "//multibody/contact_solvers:point_contact_data",
+            "//multibody/contact_solvers:sparse_linear_operator",
+            "//multibody/contact_solvers:system_dynamics_data",
+        ],
+)
+
+drake_cc_library(
+    name = "newton_solver",
+    srcs =
+        [
+            "newton_solver.cc",
+        ],
+    hdrs =
+        [
+            "newton_solver.h",
+        ],
+    deps =
+        [
+            ":backward_euler_objective",
+            ":eigen_conjugate_gradient_solver",
+            "//common:essential",
+        ],
+)
+
+drake_cc_library(
+    name = "eigen_conjugate_gradient_solver",
+    srcs =
+        [
+        ],
+    hdrs =
+        [
+            "eigen_conjugate_gradient_solver.h",
+        ],
+    deps =
+        [
+            ":linear_system_solver",
+            "//common:essential",
+        ],
+)
+
+drake_cc_library(
+    name = "fem_data",
+    srcs = [
+        "fem_data.cc",
+    ],
+    hdrs = [
+        "fem_config.h",
+        "fem_data.h",
+    ],
+    deps = [
+        ":collision_object",
+        ":corotated_linear_model",
+        ":fem_element",
+        "//common:default_scalars",
+        "//common:essential",
+    ],
+)
+
+drake_cc_library(
+    name = "fem_state",
+    srcs = [
+        "fem_state.cc",
+    ],
+    hdrs = [
+        "fem_state.h",
+    ],
+    deps = [
+        ":hyperelastic_cache",
+        "//common:default_scalars",
+        "//common:essential",
+    ],
+)
+
+drake_cc_library(
+    name = "fem_cache_evaluator",
+    hdrs = [
+        "fem_cache_evaluator.h",
+    ],
+    deps = [
+        ":fem_data",
+        ":fem_state",
+        "//common:default_scalars",
+        "//common:essential",
+    ],
+)
+
+drake_cc_library(
+    name = "mesh_utility",
+    hdrs =
+        [
+            "mesh_utility.h",
+        ],
+    deps =
+        [
+            "//common:essential",
+        ],
+)
+
+drake_cc_library(
+    name = "backward_euler_objective",
+    srcs =
+        [
+            "backward_euler_objective.cc",
+        ],
+    hdrs =
+        [
+            "backward_euler_objective.h",
+        ],
+    deps =
+        [
+            ":fem_data",
+            ":fem_force",
+            "//common:essential",
+            "//multibody/contact_solvers:linear_operator",
+            "//multibody/contact_solvers:sparse_linear_operator",
+        ],
+)
+
+drake_cc_library(
+    name = "linear_system_solver",
+    hdrs = [
+        "linear_system_solver.h",
+    ],
+    deps = [
+        ":backward_euler_objective",
+        "//common:essential",
+        "//multibody/contact_solvers:linear_operator",
+    ],
+)
+
+drake_cc_library(
+    name = "conjugate_gradient_solver",
+    hdrs = [
+        "conjugate_gradient_solver.h",
+    ],
+    deps = [
+        ":linear_system_solver",
+        "//common:essential",
+    ],
+)
+
+drake_cc_library(
+    name = "fem_force",
+    srcs = [
+        "fem_force.cc",
+    ],
+    hdrs = [
+        "fem_force.h",
+    ],
+    deps = [
+        ":fem_cache_evaluator",
+        ":fem_data",
+        ":fem_state",
+        "//common:default_scalars",
+        "//common:essential",
+    ],
+)
+
+drake_cc_library(
+    name = "fem_element",
+    srcs = [
+        "fem_element.cc",
+    ],
+    hdrs = [
+        "fem_element.h",
+    ],
+    deps = [
+        ":hyperelastic_constitutive_model",
+        "//common:default_scalars",
+        "//common:essential",
+    ],
+)
+
+drake_cc_library(
+    name = "hyperelastic_constitutive_model",
+    hdrs = [
+        "hyperelastic_constitutive_model.h",
+    ],
+    deps = [
+        ":fem_state",
+        ":hyperelastic_cache",
+        "//common:essential",
+        "//common:nice_type_name",
+    ],
+)
+
+drake_cc_library(
+    name = "hyperelastic_cache",
+    hdrs = [
+        "hyperelastic_cache.h",
+    ],
+    deps = [
+        "//common:essential",
+    ],
+)
+
+drake_cc_library(
+    name = "corotated_linear_model",
+    srcs = [
+        "corotated_linear_model.cc",
+    ],
+    hdrs = [
+        "corotated_linear_model.h",
+    ],
+    deps = [
+        ":hyperelastic_constitutive_model",
+        "//common:default_scalars",
+        "//common:essential",
+    ],
+)
+
+drake_cc_library(
+    name = "parse_vtk",
+    hdrs = [
+        "parse_vtk.h",
+    ],
+    deps = [
+        "//common:essential",
+    ],
+)
+
+drake_cc_library(
+    name = "deformable_visualizer",
+    srcs = ["deformable_visualizer.cc"],
+    hdrs = ["deformable_visualizer.h"],
+    deps = [
+        ":fem_tetmesh_base",
+        "//common:essential",
+        "//geometry/proximity:sorted_triplet",
+        "//lcm:drake_lcm",
+        "//lcmtypes:deformable_mesh",
+        "//systems/framework:leaf_system",
+    ],
+)
+
+drake_cc_library(
+    name = "fem_system",
+    srcs = [
+        "fem_system.cc",
+    ],
+    hdrs = [
+        "fem_config.h",
+        "fem_system.h",
+    ],
+    deps = [
+        ":fem_solver",
+        ":fem_tetmesh",
+        ":mesh_utility",
+        ":parse_vtk",
+        "//common:essential",
+        "//systems/framework:leaf_system",
+    ],
+)
+
+drake_cc_library(
+    name = "obj_writer",
+    hdrs = [
+        "obj_writer.h",
+    ],
+    deps = [
+        ":fem_system",
+        "//common:essential",
+        "//systems/framework:leaf_system",
+    ],
+)
+
+drake_cc_library(
+    name = "analytic_level_set",
+    srcs = [
+        "analytic_level_set.cc",
+    ],
+    hdrs = [
+        "analytic_level_set.h",
+    ],
+    deps = [
+        "//common:default_scalars",
+        "//common:essential",
+    ],
+)
+
+drake_cc_library(
+    name = "half_space",
+    srcs = [
+        "half_space.cc",
+    ],
+    hdrs = [
+        "half_space.h",
+    ],
+    deps = [
+        ":analytic_level_set",
+        "//common:default_scalars",
+        "//common:essential",
+        "//common:unused",
+    ],
+)
+
+drake_cc_library(
+    name = "collision_object",
+    srcs = [
+        "collision_object.cc",
+    ],
+    hdrs = [
+        "collision_object.h",
+    ],
+    deps = [
+        ":analytic_level_set",
+        "//common:default_scalars",
+        "//common:essential",
+        "//math:geometric_transform",
+    ],
+)
+
+drake_cc_library(
+    name = "query_contact",
+    hdrs = [
+        "query_contact.h",
+    ],
+    deps = [
+        ":collision_object",
+        "//common:default_scalars",
+        "//common:essential",
+        "//math:orthonormal_basis",
+    ],
+)
+
+drake_cc_binary(
+    name = "run_pancake",
+    srcs = [
+        "run_pancake.cc",
+    ],
+    data = [
+        "//fem/models:pancake.vtk",
+    ],
+    deps = [
+        ":collision_object",
+        ":deformable_visualizer",
+        ":fem_system",
+        ":half_space",
+        ":obj_writer",
+        "//common:add_text_logging_gflags",
+        "//common:find_resource",
+        "//systems/analysis:simulator_gflags",
+        "//systems/framework:diagram_builder",
+    ],
+)
+
+drake_cc_googletest(
+    name = "derivative_test",
+    deps = [
+        ":fem_data",
+        ":fem_force",
+        ":mesh_utility",
+    ],
+)
+
+drake_cc_googletest(
+    name = "eigen_conjugate_gradient_solver_test",
+    deps = [
+        ":backward_euler_objective",
+        ":eigen_conjugate_gradient_solver",
+        ":fem_data",
+        ":fem_force",
+        ":mesh_utility",
+    ],
+)
+
+drake_cc_googletest(
+    name = "newton_solver_test",
+    deps = [
+        ":backward_euler_objective",
+        ":fem_data",
+        ":fem_force",
+        ":mesh_utility",
+        ":newton_solver",
+    ],
+)
+
+drake_cc_googletest(
+    name = "half_space_test",
+    deps = [
+        ":half_space",
+    ],
+)
+
+drake_cc_googletest(
+    name = "collision_object_test",
+    deps = [
+        ":collision_object",
+        ":half_space",
+    ],
+)
+
+drake_cc_googletest(
+    name = "query_contact_test",
+    deps = [
+        ":collision_object",
+        ":half_space",
+        ":query_contact",
+    ],
+)
+
+drake_cc_googletest(
+    name = "fem_tetmesh_test",
+    deps = [
+        ":fem_tetmesh",
+        "//common/test_utilities:eigen_matrix_compare",
+    ],
+)
+
+drake_cc_googletest(
+    name = "hyperelastic_constitutive_model_test",
+    deps = [
+        ":hyperelastic_constitutive_model",
+        "//common/test_utilities:eigen_geometry_compare",
+        "//common/test_utilities:expect_throws_message",
+    ],
+)
+
+add_lint_tests()

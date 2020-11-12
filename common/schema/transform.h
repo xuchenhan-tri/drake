@@ -146,6 +146,9 @@ For an explanation of `!Uniform`, `!UniformVector`, and other available options
 ///
 /// For an overview of configuring stochastic transforms, see
 /// @ref schema_transform and @ref schema_stochastic.
+///
+/// See @ref serialize_tips for implementation details, especially the
+/// unusually public member fields.
 class Transform {
  public:
   DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(Transform)
@@ -183,36 +186,14 @@ class Transform {
 
   /// Samples this Transform.  If this is deterministic, the result is the same
   /// as GetDeterministicValue.
-  math::RigidTransformd Sample(RandomGenerator* random) const;
+  math::RigidTransformd Sample(RandomGenerator* generator) const;
 
   template <typename Archive>
   void Serialize(Archive* a) {
     a->Visit(DRAKE_NVP(base_frame));
     a->Visit(DRAKE_NVP(translation));
-
-    // Visit the `rotation` field as if it were optional, to allow it to be
-    // missing during a schema transition window.
-    // TODO(anzu#4772) Once rotation_rpy_deg is gone, this should be
-    // `Visit(MakeNameValue("rotation", &rotation.value))` instead.
-    std::optional<Rotation::Variant> maybe_rotation = rotation.value;
-    a->Visit(MakeNameValue("rotation", &maybe_rotation));
-    if (maybe_rotation) {
-      rotation.value = *maybe_rotation;
-    }
-
-    // Visit the legacy `rotation_rpy_deg` field as an empty optional, to allow
-    // it to be read and obeyed (but not written) during a transition window.
-    // TODO(anzu#4772) Remove this compatibility shim once nothing is using it.
-    std::optional<Eigen::Vector3d> maybe_rpy;
-    a->Visit(MakeNameValue("rotation_rpy_deg", &maybe_rpy));
-    if (maybe_rpy) {
-      this->set_rotation_rpy_deg(*maybe_rpy);
-    }
+    a->Visit(MakeNameValue("rotation", &rotation.value));
   }
-
-  // N.B. As is standard for classes implementing Serialize(), we declare all
-  // of our members fields as public since they are effectively so anyway, and
-  // we omit the trailing underscore from the field names.
 
   /// An optional base frame name for this transform.  When left unspecified,
   /// the default depends on the semantics of the enclosing struct.

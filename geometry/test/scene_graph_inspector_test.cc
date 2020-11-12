@@ -70,6 +70,7 @@ GTEST_TEST(SceneGraphInspector, ExerciseEverything) {
   inspector.GetFrameGroup(frame_id);
   inspector.NumGeometriesForFrame(frame_id);
   inspector.NumGeometriesForFrameWithRole(frame_id, Role::kUnassigned);
+  inspector.GetGeometries(frame_id, Role::kUnassigned);
   // Register a geometry to prevent an exception being thrown.
   const GeometryId geometry_id =
       tester.mutable_state().RegisterGeometry(
@@ -113,6 +114,7 @@ GTEST_TEST(SceneGraphInspector, ExerciseEverything) {
   EXPECT_NE(geometry_instance_clone->proximity_properties(), nullptr);
   EXPECT_EQ(geometry_instance_clone->perception_properties(), nullptr);
   EXPECT_EQ(geometry_instance_clone->illustration_properties(), nullptr);
+  inspector.geometry_version();
 }
 
 }  // namespace

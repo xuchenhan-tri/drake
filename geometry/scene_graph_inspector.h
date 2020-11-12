@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <set>
 #include <string>
 #include <unordered_set>
@@ -240,6 +241,20 @@ class SceneGraphInspector {
     return state_->NumGeometriesForFrameWithRole(id, role);
   }
 
+  /** Returns geometry ids that have been registered directly to the frame
+   indicated by `frame_id`. If a `role` is provided, only geometries with that
+   role assigned will be returned, otherwise all geometries will be returned.
+   @param frame_id    The id of the frame in question.
+   @param role  The requested role; if omitted, all geometries registered to the
+                frame are returned.
+   @returns The requested unique geometry ids in a consistent order.
+   @throws std::logic_error if `id` does not map to a registered frame.  */
+  std::vector<GeometryId> GetGeometries(
+      FrameId frame_id, const std::optional<Role>& role = std::nullopt) const {
+    DRAKE_DEMAND(state_ != nullptr);
+    return state_->GetGeometries(frame_id, role);
+  }
+
   /** Reports the id of the geometry with the given `name` and `role`, attached
    to the frame with the given frame `id`.
    @param id        The id of the frame whose geometry is being queried.
@@ -397,6 +412,12 @@ class SceneGraphInspector {
   std::unique_ptr<GeometryInstance>
   CloneGeometryInstance(GeometryId id) const;
 
+  /** Returns the geometry version that can be used to detect changes
+   to the geometry data associated with geometry roles. The reference returned
+   should not be persisted. If it needs to be persisted, it should be copied. */
+  const GeometryVersion& geometry_version() const {
+    return state_->geometry_version();
+  }
   //@}
 
  private:

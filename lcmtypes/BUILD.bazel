@@ -25,10 +25,6 @@ load(
     "drake_lcm_java_library",
     "drake_lcm_py_library",
 )
-load(
-    "@drake//tools/vector_gen:vector_gen.bzl",
-    "drake_vector_gen_lcm_sources",
-)
 load("//tools/lint:lint.bzl", "add_lint_tests")
 
 drake_lcm_cc_library(
@@ -89,6 +85,16 @@ drake_lcm_cc_library(
     name = "contact_information",
     lcm_package = "drake",
     lcm_srcs = ["lcmt_contact_information.lcm"],
+)
+
+drake_lcm_cc_library(
+    name = "deformable_mesh",
+    lcm_package = "drake",
+    lcm_srcs = [
+        "lcmt_deformable_tri.lcm",
+        "lcmt_deformable_tri_mesh_init.lcm",
+        "lcmt_deformable_tri_mesh_update.lcm"
+    ],
 )
 
 drake_lcm_cc_library(

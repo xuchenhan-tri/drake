@@ -13,20 +13,15 @@ namespace drake {
 namespace schema {
 namespace {
 
-// TODO(jeremy.nimmer) We can remove this argument from the call sites below
-// once Drake's YamlReadArchive constructor default changes to be strict.
-constexpr YamlReadArchive::Options kStrict;
-
-// TODO(jwnimmer-tri) Change use R""" per Drake GSG, throughout this file.
-const char* deterministic = R"R(
+const char* deterministic = R"""(
 base_frame: foo
 translation: [1., 2., 3.]
 rotation: !Rpy { deg: [10, 20, 30] }
-)R";
+)""";
 
 GTEST_TEST(DeterministicTest, TransformTest) {
   Transform transform;
-  YamlReadArchive(YAML::Load(deterministic), kStrict).Accept(&transform);
+  YamlReadArchive(YAML::Load(deterministic)).Accept(&transform);
 
   EXPECT_EQ(*transform.base_frame, "foo");
 
@@ -42,36 +37,15 @@ GTEST_TEST(DeterministicTest, TransformTest) {
       expected.GetAsMatrix34()));
 }
 
-const char* deprecated_rpy = R"R(
-translation: [1., 2., 3.]
-rotation_rpy_deg: [10., 20., 30.]
-)R";
-
-GTEST_TEST(DeprecatedDeterministicTest, TransformTest) {
-  Transform transform;
-  YamlReadArchive(YAML::Load(deprecated_rpy), kStrict).Accept(&transform);
-
-  drake::math::RigidTransformd expected(
-      drake::math::RollPitchYawd(
-          Eigen::Vector3d(10., 20., 30.) * (M_PI / 180.0)),
-      Eigen::Vector3d(1., 2., 3.));
-  EXPECT_TRUE(drake::CompareMatrices(
-      transform.GetDeterministicValue().GetAsMatrix34(),
-      expected.GetAsMatrix34()));
-  EXPECT_TRUE(drake::CompareMatrices(
-      transform.Mean().GetAsMatrix34(),
-      expected.GetAsMatrix34()));
-}
-
-const char* random = R"R(
+const char* random = R"""(
 base_frame: bar
 translation: !UniformVector { min: [1., 2., 3.], max: [4., 5., 6.] }
 rotation: !Uniform {}
-)R";
+)""";
 
 GTEST_TEST(StochasticTest, TransformTest) {
   Transform transform;
-  YamlReadArchive(YAML::Load(random), kStrict).Accept(&transform);
+  YamlReadArchive(YAML::Load(random)).Accept(&transform);
 
   EXPECT_EQ(*transform.base_frame, "bar");
   EXPECT_FALSE(IsDeterministic(transform.translation));
@@ -82,18 +56,18 @@ GTEST_TEST(StochasticTest, TransformTest) {
       Eigen::Vector3d(2.5, 3.5, 4.5)));
 }
 
-const char* random_bounded = R"R(
+const char* random_bounded = R"""(
 base_frame: baz
 translation: !UniformVector { min: [1., 2., 3.], max: [4., 5., 6.] }
 rotation: !Rpy
   deg: !UniformVector
     min: [380, -0.25, -1.]
     max: [400,  0.25,  1.]
-)R";
+)""";
 
 GTEST_TEST(StochasticSampleTest, TransformTest) {
   Transform transform;
-  YamlReadArchive(YAML::Load(random_bounded), kStrict).Accept(&transform);
+  YamlReadArchive(YAML::Load(random_bounded)).Accept(&transform);
   drake::RandomGenerator generator(0);
   drake::math::RigidTransformd sampled_transform = transform.Sample(&generator);
 

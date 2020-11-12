@@ -8,6 +8,7 @@ import sys
 from _drake_visualizer_builtin_scripts import (
     AVAILABLE_SCRIPTS,
     grid_wireframe,
+    show_deformable_mesh,
     limit_clipping_range,
     scoped_singleton_func,
     show_frame,
@@ -21,6 +22,7 @@ from _drake_visualizer_builtin_scripts import (
 @scoped_singleton_func
 def init_visualizer():
     available = OrderedDict((
+        ("deformable_mesh", show_deformable_mesh.init_visualizer),
         ("frame", show_frame.init_visualizer),
         ("hydroelastic_contact", show_hydroelastic_contact.init_visualizer),
         ("image", show_image.init_visualizer),
