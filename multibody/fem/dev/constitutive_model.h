@@ -35,6 +35,17 @@ class ConstitutiveModel {
 
   virtual ~ConstitutiveModel() {}
 
+  /** Creates a DeformationGradientCacheEntry that is compatible with this
+   %ConstitutiveModel. See ElasticityElement for more about the compatibility
+   requirement. */
+  std::unique_ptr<DeformationGradientCacheEntry<T>>
+  MakeDeformationGradientCacheEntry(ElementIndex element_index,
+                                    int num_quadrature_points) const {
+    DRAKE_DEMAND(element_index.is_valid());
+    DRAKE_DEMAND(num_quadrature_points > 0);
+    return DoMakeDeformationGradientCacheEntry(element_index,
+                                               num_quadrature_points);
+  }
   // TODO(xuchenhan-tri) Update the list of methods here as more methods are
   // introduced.
   /** @name "Calc" Methods
@@ -85,26 +96,27 @@ class ConstitutiveModel {
     DoCalcFirstPiolaStress(cache_entry, P);
   }
 
-  /** Creates a DeformationGradientCacheEntry that is compatible with this
-   %ConstitutiveModel. See ElasticityElement for more about the compatibility
-   requirement. */
-  std::unique_ptr<DeformationGradientCacheEntry<T>>
-  MakeDeformationGradientCacheEntry(ElementIndex element_index,
-                                    int num_quadrature_points) const {
-    DRAKE_DEMAND(element_index.is_valid());
-    DRAKE_DEMAND(num_quadrature_points > 0);
-    return DoMakeDeformationGradientCacheEntry(element_index,
-                                               num_quadrature_points);
+  /** Calculates the derivative of First Piola stress with respect to the
+   deformation gradient, given the model cache. The stress derivative dPᵢⱼ/dFₖₗ
+   is a 4-th order tensor that is flattened to a 9-by-9 matrix. The 9-by-9
+   matrix is organized into 3-by-3 blocks of 3-by-3 submatrices. The ik-th entry
+   in the jl-th block corresponds to the value dPᵢⱼ/dFₖₗ. */
+  std::vector<Eigen::Matrix<T, 9, 9>> CalcFirstPiolaStressDerivative(
+      const DeformationGradientCacheEntry<T>& cache) const {
+    std::vector<Eigen::Matrix<T, 9, 9>> dPdF(cache.num_quadrature_points());
+    CalcFirstPiolaStressDerivative(cache, &dPdF);
+    return dPdF;
   }
 
-  /** Creates a DeformationGradientCache that is compatible with this
-   %ConstitutiveModel. See ElasticityElement for more about the compatibility
-   requirement. */
-  std::unique_ptr<DeformationGradientCache<T>> MakeDeformationGradientCache(
-      ElementIndex element_index, int num_quads) const {
-    DRAKE_DEMAND(element_index.is_valid());
-    DRAKE_DEMAND(num_quads > 0);
-    return DoMakeDeformationGradientCache(element_index, num_quads);
+  /** Alternative signature for CalcFirstPiolaStressDerivative that writes the
+   result in the output argument. */
+  void CalcFirstPiolaStressDerivative(
+      const DeformationGradientCacheEntry<T>& cache,
+      std::vector<Eigen::Matrix<T, 9, 9>>* dPdF) const {
+    DRAKE_DEMAND(dPdF != nullptr);
+    DRAKE_DEMAND(static_cast<int>(dPdF->size()) ==
+                 cache.num_quadrature_points());
+    DoCalcFirstPiolaStressDerivative(cache, dPdF);
   }
 
  protected:
@@ -116,6 +128,12 @@ class ConstitutiveModel {
    Derived classes must implement this so that it performs the complete
    deep copy of the object, including all base class members. */
   virtual std::unique_ptr<ConstitutiveModel<T>> DoClone() const = 0;
+
+  /** Derived class must create a DeformationGradientCacheEntry that is
+   compatible with this ConstitutiveModel. */
+  virtual std::unique_ptr<DeformationGradientCacheEntry<T>>
+  DoMakeDeformationGradientCacheEntry(ElementIndex element_index,
+                                      int num_quadrature_points) const = 0;
 
   /** Derived class must calculate the energy density, in unit J/m³, given the
    model cache entry. */
@@ -129,11 +147,11 @@ class ConstitutiveModel {
       const DeformationGradientCacheEntry<T>& cache_entry,
       std::vector<Matrix3<T>>* P) const = 0;
 
-  /** Derived class must create a DeformationGradientCacheEntry that is
-   compatible with this ConstitutiveModel. */
-  virtual std::unique_ptr<DeformationGradientCacheEntry<T>>
-  DoMakeDeformationGradientCacheEntry(ElementIndex element_index,
-                                      int num_quadrature_points) const = 0;
+  /** Derived class must calculate the derivative of First Piola stress with
+   respect to the deformation gradient, given the model cache. */
+  virtual void DoCalcFirstPiolaStressDerivative(
+      const DeformationGradientCacheEntry<T>& cache,
+      std::vector<Eigen::Matrix<T, 9, 9>>* dPdF) const = 0;
 };
 }  // namespace fem
 }  // namespace multibody
