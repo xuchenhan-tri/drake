@@ -107,6 +107,7 @@ drake_cc_library(
     deps =
         [
             ":collision_object",
+            ":corotated_model",
             ":corotated_linear_model",
             ":fem_element",
             "//common:essential",
@@ -211,10 +212,6 @@ drake_cc_library(
 
 drake_cc_library(
     name = "hyperelastic_constitutive_model",
-    srcs =
-        [
-            "hyperelastic_constitutive_model.cc",
-        ],
     hdrs =
         [
             "hyperelastic_constitutive_model.h",
@@ -223,6 +220,38 @@ drake_cc_library(
         [
             "//common:essential",
             "//common:nice_type_name",
+        ],
+)
+
+drake_cc_library(
+    name = "corotated_model",
+    hdrs =
+        [
+            "corotated_model.h",
+        ],
+    deps =
+        [
+            ":hyperelastic_constitutive_model",
+            ":jixie",
+            "//common:essential",
+            "//common:unused",
+        ],
+)
+
+drake_cc_library(
+    name = "jixie",
+    hdrs =
+        [
+            "ImplicitQRSVD.h",
+            "Tools.h",
+        ],
+    copts = [
+        "-Wno-error=unused-parameter",
+    ],
+    deps =
+        [
+            "//common:essential",
+            "//common:unused",
         ],
 )
 

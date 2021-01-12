@@ -62,17 +62,18 @@ class ContactJacobian {
         if (signed_distance <= 0.0) {
           normals.push_back(normal);
           penetration_depth.push_back(signed_distance);
-          Matrix3<T> R_LW = drake::math::ComputeBasisFromAxis(2, normal).transpose();
-          for (int k = 0; k < 3; ++k){
-              for (int l = 0; l < 3; ++l) {
-                  triplets.emplace_back(3 * nc_ + k, 3 * i + l, R_LW(k,l));
-              }
+          Matrix3<T> R_LW =
+              drake::math::ComputeBasisFromAxis(2, normal).transpose();
+          for (int k = 0; k < 3; ++k) {
+            for (int l = 0; l < 3; ++l) {
+              triplets.emplace_back(3 * nc_ + k, 3 * i + l, R_LW(k, l));
+            }
           }
           ++nc_;
         }
       }
     }
-    jacobian_.resize(3*nc_, 3*nv);
+    jacobian_.resize(3 * nc_, 3 * nv);
     jacobian_.setFromTriplets(triplets.begin(), triplets.end());
     jacobian_.makeCompressed();
     normals_.resize(3, nc_);

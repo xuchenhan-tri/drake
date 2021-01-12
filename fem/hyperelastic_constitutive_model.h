@@ -145,19 +145,20 @@ class HyperelasticConstitutiveModel {
   /* Set the Lamé parameters from Young's modulus and Poisson ratio. It's
      important to keep the Lamé Parameters in sync with Young's modulus and
      Poisson ratio as most computations use Lame parameters. */
-  void VerifyParameterValidity(T E, T nu, T alpha, T beta){
-      if (E < 0.0){
-        throw std::logic_error("Young's modulus must be nonnegative.");
-      }
-      if (nu >= 0.5 || nu <= -1){
-          throw std::logic_error("Poisson ratio must be in (-1, 0.5).");
-      }
-      if (alpha < 0.0){
-          throw std::logic_error("Mass damping parameter must be nonnegative.");
-      }
-      if (beta < 0.0){
-          throw std::logic_error("Stiffness damping parameter must be nonnegative.");
-      }
+  void VerifyParameterValidity(T E, T nu, T alpha, T beta) {
+    if (E < 0.0) {
+      throw std::logic_error("Young's modulus must be nonnegative.");
+    }
+    if (nu >= 0.5 || nu <= -1) {
+      throw std::logic_error("Poisson ratio must be in (-1, 0.5).");
+    }
+    if (alpha < 0.0) {
+      throw std::logic_error("Mass damping parameter must be nonnegative.");
+    }
+    if (beta < 0.0) {
+      throw std::logic_error(
+          "Stiffness damping parameter must be nonnegative.");
+    }
   }
 
   void SetLameParameters(T E, T nu) {

@@ -26,6 +26,14 @@ class FemSystem final : public systems::LeafSystem<T> {
         context.get_discrete_state().get_vector().get_value());
   }
 
+  void CopyForceOut(const systems::Context<T>& context,
+                            systems::BasicVector<T>* output) const {
+    unused(context);
+    const auto& force = solver_.get_force();
+    std::cout << force.size() << std::endl;
+    output->SetFromVector(force);
+  }
+
   void AddObjectFromVtkFile(
       const std::string& vtk, const FemConfig& config,
       const std::function<void(int, EigenPtr<Matrix3X<T>>)> position_transform,
@@ -70,7 +78,7 @@ class FemSystem final : public systems::LeafSystem<T> {
   }
 
   void AddCollisionObject(std::unique_ptr<CollisionObject<T>> object) {
-      solver_.AddCollisionObject(std::move(object));
+    solver_.AddCollisionObject(std::move(object));
   }
 
   void AdvanceOneTimeStep(const systems::Context<T>& context,
@@ -107,6 +115,11 @@ class FemSystem final : public systems::LeafSystem<T> {
         systems::BasicVector<T>(initial_position.rows() *
                                 initial_position.cols()),
         &FemSystem::CopyPositionStateOut);
+    this->DeclareVectorOutputPort(
+        "force",
+        systems::BasicVector<T>(initial_position.rows() *
+                                initial_position.cols()),
+        &FemSystem::CopyForceOut);
     this->DeclarePeriodicDiscreteUpdateEvent(dt_, 0.,
                                              &FemSystem::AdvanceOneTimeStep);
   }

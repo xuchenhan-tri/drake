@@ -1,4 +1,5 @@
 #include "drake/fem/backward_euler_objective.h"
+
 #include "drake/fem/fem_data.h"
 
 namespace drake {
@@ -40,6 +41,7 @@ void BackwardEulerObjective<T>::CalcResidual(EigenPtr<VectorX<T>> residual) {
   *residual = Eigen::Map<VectorX<T>>(impulse.data(), impulse.size());
 }
 
+
 template <typename T>
 void BackwardEulerObjective<T>::Multiply(const Eigen::Ref<const Matrix3X<T>>& x,
                                          EigenPtr<Matrix3X<T>> prod) const {
@@ -74,7 +76,9 @@ void BackwardEulerObjective<T>::Project(EigenPtr<Matrix3X<T>> impulse) const {
 }
 
 template <typename T>
-int BackwardEulerObjective<T>::get_num_dofs() const { return fem_data_.get_q().size(); }
+int BackwardEulerObjective<T>::get_num_dofs() const {
+  return fem_data_.get_q().size();
+}
 
 template class BackwardEulerObjective<double>;
 }  // namespace fem

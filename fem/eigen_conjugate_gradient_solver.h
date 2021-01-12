@@ -102,7 +102,7 @@ class EigenConjugateGradientSolver : public LinearSystemSolver<T> {
 
   explicit EigenConjugateGradientSolver(
       const BackwardEulerObjective<T>& objective)
-      : matrix_(objective, false) {
+      : matrix_(objective, true) {
     cg_.setTolerance(1e-3);
   }
 

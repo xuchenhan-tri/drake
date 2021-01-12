@@ -1,12 +1,12 @@
 #pragma once
 
-#include <vector>
 #include <limits>
+#include <vector>
 
 #include "drake/common/default_scalars.h"
 #include "drake/common/drake_copyable.h"
-#include "drake/common/unused.h"
 #include "drake/common/eigen_types.h"
+#include "drake/common/unused.h"
 #include "drake/fem/analytic_level_set.h"
 
 namespace drake {
@@ -26,8 +26,8 @@ class HalfSpace final : public AnalyticLevelSet<T> {
 
  protected:
   virtual Vector3<T> DoNormal(const Vector3<T>& x) const {
-      unused(x);
-      return normal_;
+    unused(x);
+    return normal_;
   }
 
   virtual T DoSignedDistance(const Vector3<T>& x) const {
@@ -43,4 +43,3 @@ class HalfSpace final : public AnalyticLevelSet<T> {
 
 DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_NONSYMBOLIC_SCALARS(
     class ::drake::fem::HalfSpace)
-

@@ -3,9 +3,9 @@
 // #include <Eigen/Core>
 // #include <Eigen/Sparse>
 
-#include "drake/fem/backward_euler_objective.h"
-
 #include <iostream>
+
+#include "drake/fem/backward_euler_objective.h"
 //#include "drake/common/eigen_types.h"
 
 namespace drake {
@@ -65,30 +65,34 @@ class EigenSparseMatrix : public Eigen::EigenBase<EigenSparseMatrix<T>> {
   }
 
   // Custom API:
-  EigenSparseMatrix(const BackwardEulerObjective<T>& objective, bool matrix_free)
+  EigenSparseMatrix(const BackwardEulerObjective<T>& objective,
+                    bool matrix_free)
       : objective_(objective), matrix_free_(matrix_free) {
-      if (matrix_free){
-          matrix_.resize(objective.get_num_dofs(), objective.get_num_dofs());
-          matrix_.setZero();
-      }
+    if (matrix_free) {
+      matrix_.resize(objective.get_num_dofs(), objective.get_num_dofs());
+      matrix_.setZero();
+    }
   }
 
-  void Multiply(const Eigen::Ref<const VectorX<T>>& x, EigenPtr<Matrix3X<T>> b) const {
-          DRAKE_DEMAND(matrix_free_);
-          const Matrix3X<T> &tmp_x = Eigen::Map<const Matrix3X<T>>(x.data(), 3, x.size() / 3);
-          return objective_.Multiply(tmp_x, b);
+  void Multiply(const Eigen::Ref<const VectorX<T>>& x,
+                EigenPtr<Matrix3X<T>> b) const {
+    DRAKE_DEMAND(matrix_free_);
+    const Matrix3X<T>& tmp_x =
+        Eigen::Map<const Matrix3X<T>>(x.data(), 3, x.size() / 3);
+    return objective_.Multiply(tmp_x, b);
   }
 
   VectorX<T> Multiply(const Eigen::Ref<const VectorX<T>>& x) const {
-      if (matrix_free_) {
-          Matrix3X<T> b(3, x.size() / 3);
-          Multiply(x, &b);
-          return Eigen::Map<VectorX<T>>(b.data(), b.size());
-      }
-      VectorX<T> b = matrix_ * x;
-      Eigen::Ref<Matrix3X<T>> tmp_b = Eigen::Map<Matrix3X<T>>(b.data(), 3, b.size()/3);
-      objective_.Project(&tmp_b);
-      return Eigen::Map<VectorX<T>>(tmp_b.data(), tmp_b.size());
+    if (matrix_free_) {
+      Matrix3X<T> b(3, x.size() / 3);
+      Multiply(x, &b);
+      return Eigen::Map<VectorX<T>>(b.data(), b.size());
+    }
+    VectorX<T> b = matrix_ * x;
+    Eigen::Ref<Matrix3X<T>> tmp_b =
+        Eigen::Map<Matrix3X<T>>(b.data(), 3, b.size() / 3);
+    objective_.Project(&tmp_b);
+    return Eigen::Map<VectorX<T>>(tmp_b.data(), tmp_b.size());
   }
 
   void set_matrix_free(bool matrix_free) { matrix_free_ = matrix_free; }
@@ -97,33 +101,30 @@ class EigenSparseMatrix : public Eigen::EigenBase<EigenSparseMatrix<T>> {
 
   // For non-matrix free operations only. Resize the matrix according to
   // information provided by the objective and allocate memory for the matrix.
-  // This is expensive but only needs to be called when the number of dofs change, or when the sparsity pattern changes.
-      // Currently, the sparsity pattern will remain unchanged throughout the simulation. In the future, that might not be true (e.g. when we support fracture).
+  // This is expensive but only needs to be called when the number of dofs
+  // change, or when the sparsity pattern changes. Currently, the sparsity
+  // pattern will remain unchanged throughout the simulation. In the future,
+  // that might not be true (e.g. when we support fracture).
   void Reinitialize() {
-      if (!matrix_free_){
-          int matrix_size =  objective_.get_num_dofs();
-          if (matrix_.cols() != matrix_size)
-          {
-              matrix_.resize(matrix_size, matrix_size);
-              objective_.SetSparsityPattern(&matrix_);
-          }
+    if (!matrix_free_) {
+      int matrix_size = objective_.get_num_dofs();
+      if (matrix_.cols() != matrix_size) {
+        matrix_.resize(matrix_size, matrix_size);
+        objective_.SetSparsityPattern(&matrix_);
       }
+    }
   }
 
-  const BackwardEulerObjective<T>& get_objective() const {
-       return objective_;
-  }
+  const BackwardEulerObjective<T>& get_objective() const { return objective_; }
 
-  const Eigen::SparseMatrix<T>& get_matrix() const {
-      return matrix_;
-  }
+  const Eigen::SparseMatrix<T>& get_matrix() const { return matrix_; }
 
-    // For non-matrix free operations only. Fill the matrix using Jacobian from
+  // For non-matrix free operations only. Fill the matrix using Jacobian from
   // the objective. Needs to be called every time step.
   void BuildMatrix() {
-      if (!matrix_free_) {
-          objective_.BuildJacobian(&matrix_);
-      }
+    if (!matrix_free_) {
+      objective_.BuildJacobian(&matrix_);
+    }
   }
 
  private:

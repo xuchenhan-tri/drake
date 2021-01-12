@@ -59,7 +59,7 @@ class CollisionObject {
     }
   }
 
-  T get_friction_coeff() const {return friction_coeff_; }
+  T get_friction_coeff() const { return friction_coeff_; }
 
   void set_friction_coeff(T mu) { friction_coeff_ = mu; }
 
@@ -73,4 +73,4 @@ class CollisionObject {
 }  // namespace fem
 }  // namespace drake
 DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_NONSYMBOLIC_SCALARS(
-        class ::drake::fem::CollisionObject)
+    class ::drake::fem::CollisionObject)

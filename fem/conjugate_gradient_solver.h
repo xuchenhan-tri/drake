@@ -11,7 +11,8 @@ class ConjugateGradientSolver : public LinearSystemSolver<T> {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(ConjugateGradientSolver)
 
-  ConjugateGradientSolver(const BackwardEulerObjective<T>& objective): objective_(objective){}
+  ConjugateGradientSolver(const BackwardEulerObjective<T>& objective)
+      : objective_(objective) {}
 
   virtual ~ConjugateGradientSolver() {}
 
@@ -62,18 +63,19 @@ class ConjugateGradientSolver : public LinearSystemSolver<T> {
   }
 
   /** Set up the equation A*x = rhs. */
-  virtual void SetUp() {
-    objective_.BuildJacobian();
-  }
+  virtual void SetUp() { objective_.BuildJacobian(); }
 
   void Multiply(const VectorX<T>& x, VectorX<T>* b) const {
-        Eigen::Map<Matrix3X<T>> reshaped_b(b->data(),3, b->size()/3);
-        objective_.Multiply(Eigen::Map<const Matrix3X<T>>(x.data(), 3, x.size()/3), &reshaped_b);
+    Eigen::Map<Matrix3X<T>> reshaped_b(b->data(), 3, b->size() / 3);
+    objective_.Multiply(
+        Eigen::Map<const Matrix3X<T>>(x.data(), 3, x.size() / 3), &reshaped_b);
   }
 
   bool is_matrix_free() const { return objective_.is_matrix_free(); }
 
-  void set_matrix_free(bool matrix_free) { objective_.set_matrix_free(matrix_free); }
+  void set_matrix_free(bool matrix_free) {
+    objective_.set_matrix_free(matrix_free);
+  }
 
   int get_max_iterations() const { return max_iterations_; }
 
@@ -97,9 +99,7 @@ class ConjugateGradientSolver : public LinearSystemSolver<T> {
     objective_.preconditioner_(x, b);
   }
 
-  void Project(EigenPtr<VectorX<T>> b) const {
-    objective_.projection_(b);
-  }
+  void Project(EigenPtr<VectorX<T>> b) const { objective_.projection_(b); }
 };
 }  // namespace fem
 }  // namespace drake

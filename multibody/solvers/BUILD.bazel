@@ -124,6 +124,7 @@ drake_cc_library(
         "-Wno-error=unused-variable",
     ],
     deps = [
+        ":linear_operator",
         "//common:default_scalars",
     ],
 )

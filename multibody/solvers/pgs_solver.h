@@ -21,7 +21,7 @@ struct PgsSolverParameters {
   // Relative contact velocity tolerance, unitless.
   double rel_tolerance{1.0e-4};
   // Maximum number of PGS iterations.
-  int max_iterations{1000};
+  int max_iterations{200};
 };
 
 struct PgsSolverStats {

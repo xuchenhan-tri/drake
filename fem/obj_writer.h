@@ -17,6 +17,8 @@ class ObjWriter final : public systems::LeafSystem<T> {
   ObjWriter(const FemSystem<T>& fem) {
     this->DeclareInputPort("vertex_positions", systems::kVectorValued,
                            fem.get_num_position_dofs());
+    this->DeclareInputPort("force", systems::kVectorValued,
+                           fem.get_num_position_dofs());
     // Generate boundary faces.
     const auto& tets = fem.get_indices();
     /* A typical tetrahedral element looks like:
@@ -61,16 +63,19 @@ class ObjWriter final : public systems::LeafSystem<T> {
       Vector3<int> f(it->second[0], it->second[1], it->second[2]);
       faces_.push_back(f);
     }
-    this->DeclarePeriodicPublishEvent(fem.get_dt(), 0.0, &ObjWriter::WriteObj);
+    this->DeclarePeriodicPublishEvent(0.01, 0.0, &ObjWriter::WriteObj);
   }
 
   /** Write the boundary face tri-mesh to file. */
   void WriteObj(const systems::Context<T>& context) const {
-    VectorX<T> input = this->get_input_port(0).Eval(context);
+    VectorX<T> q_input = this->get_input_port(0).Eval(context);
+    VectorX<T> f_input = this->get_input_port(1).Eval(context);
     const Matrix3X<T>& q =
-        Eigen::Map<Matrix3X<T>>(input.data(), 3, input.size() / 3);
+        Eigen::Map<Matrix3X<T>>(q_input.data(), 3, q_input.size() / 3);
+    const Matrix3X<T>& f =
+        Eigen::Map<Matrix3X<T>>(f_input.data(), 3, f_input.size() / 3);
     std::ofstream fs;
-    std::string filename = std::to_string(frame_++) + ".obj";
+    std::string filename = std::to_string(frame_) + ".obj";
     fs.open(filename);
     DRAKE_DEMAND(fs.is_open());
     // Write vertex positions.
@@ -91,6 +96,17 @@ class ObjWriter final : public systems::LeafSystem<T> {
       fs << "\n";
     }
     fs.close();
+
+    std::string force_file = "force_" + std::to_string(frame_++) + ".obj";
+    fs.open(force_file);
+    DRAKE_DEMAND(fs.is_open());
+    for (int i = 0; i < f.cols(); ++i) {
+      fs << "v";
+      fs << " " << f.col(i).norm();
+      fs << " " << 0;
+      fs << " " << 0;
+      fs << "\n";
+    }
   }
 
  private:

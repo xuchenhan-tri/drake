@@ -48,23 +48,15 @@ ContactSolverResult PgsSolver<T>::SolveWithGuess(double dt,
   vc_ = vc_star;  // Contact velocity at state_, intialized to when gamma = 0.
   VectorX<T> vc_kp(3 * num_contacts());  // Contact velocity at state_kp.
   for (int k = 0; k < max_iters; ++k) {
-    std::cout << "ITERATION " << k+1 << std::endl;
     // N.B. This is more of a "Projected Jacobi" update since we are not using
     // the already updated values. A small variation from PGS ok for testing
     // purposes.
     gamma_kp = gamma - omega * Dinv.asDiagonal() * vc_;
-//    std::cout << "Dinv = \n " << Dinv.transpose() << std::endl;
-//    std::cout << "vc = \n " << vc_.transpose() << std::endl;
-//    std::cout << "gamma = \n" << gamma.transpose() << std::endl;
-//    std::cout << "gamma_kp = \n" << gamma_kp.transpose() << std::endl;
     ProjectAllImpulses(vc_, &gamma_kp);
     // Update generalized velocities; v = v* + M⁻¹⋅Jᵀ⋅γ.
     get_Jc().MultiplyByTranspose(gamma_kp, &tau_c_);  // tau_c = Jᵀ⋅γ
-//    std::cout << "tau_c = \n" << tau_c_.transpose() << std::endl;
     get_Minv().Multiply(tau_c_, &v_kp);  // v_kp = M⁻¹⋅Jᵀ⋅γ
-//    std::cout << "v1 = " << v_kp.transpose() << std::endl;
     v_kp += v_star;                      // v_kp = v* + M⁻¹⋅Jᵀ⋅γ
-//    std::cout << "v2 = " << v_kp.transpose() << std::endl;
     // Update contact velocities; vc = J⋅v.
     get_Jc().Multiply(v_kp, &vc_kp);
 
@@ -72,13 +64,10 @@ ContactSolverResult PgsSolver<T>::SolveWithGuess(double dt,
     const bool converged = VerifyConvergenceCriteria(
         vc_, vc_kp, gamma, gamma_kp, &stats_.vc_err, &stats_.gamma_err);
     stats_.iterations++;
-//    std::cout << "vc_err = " << std::endl;
-    std::cout << stats_.vc_err << std::endl;
 
     // Update state for the next iteration.
     state_ = state_kp;
     vc_ = vc_kp;
-//    std::cout << "vc = " << vc_.transpose() << std::endl;
     if (converged) {
       return ContactSolverResult::kSuccess;
     }

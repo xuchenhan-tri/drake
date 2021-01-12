@@ -1,14 +1,15 @@
 #pragma once
 
-#include <vector>
 #include <memory>
+#include <vector>
 
 #include "drake/common/eigen_types.h"
 #include "drake/fem/collision_object.h"
-#include "drake/fem/constitutive_model.h"
+#include "drake/fem/corotated_model.h"
 #include "drake/fem/corotated_linear_model.h"
 #include "drake/fem/fem_config.h"
 #include "drake/fem/fem_element.h"
+#include "drake/fem/hyperelastic_constitutive_model.h"
 
 namespace drake {
 namespace fem {
@@ -43,9 +44,9 @@ class FemData {
       // TODO(xuchenhan-tri): Support customized constitutive models.
       elements_.emplace_back(
           indices[i] + particle_offset, positions,
-          std::make_unique<CorotatedLinearElasticity<T>>(
+          std::make_unique<CorotatedElasticity<T>>(
               config.youngs_modulus, config.poisson_ratio, config.mass_damping,
-              config.stiffness_damping, local_positions),
+              config.stiffness_damping),
           config.density);
       local_element_indices[i] = num_elements_++;
     }
@@ -191,8 +192,8 @@ class FemData {
   // Time n+1 velocity - Time n velocity.
   Matrix3X<T> dv_;
   VectorX<T> mass_;
-//  Vector3<T> gravity_{0, 0, -9.81};
-    Vector3<T> gravity_{0, -9.81, 0};
+  //  Vector3<T> gravity_{0, 0, -9.81};
+  Vector3<T> gravity_{0, -9.81, 0};
   // Velocity boundary conditions.
   std::vector<BoundaryCondition<T>> v_bc_;
   int num_objects_{0};

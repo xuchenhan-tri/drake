@@ -66,7 +66,7 @@ TEST_F(EigenConjugateGradientSolverTest, MatrixVsMatrixFree) {
   // b is the right hand side of the linear system.
   VectorX<double> b = VectorX<double>::Zero(positions.size());
   objective_->CalcResidual(&b);
-  solver_->set_tolerance(std::numeric_limits<double>::epsilon());
+  solver_->set_accuracy(std::numeric_limits<double>::epsilon());
   // Rounding errors would accumulate over CG iterations, so we limit the number
   // of iterations to 1.
   solver_->set_max_iterations(1);

@@ -52,7 +52,6 @@ class InverseOperator final : public LinearOperator<T> {
  private:
   drake::fem::LinearSystemSolver<T>* Ainv_{nullptr};
 };
-
 }  // namespace solvers
 }  // namespace multibody
 }  // namespace drake

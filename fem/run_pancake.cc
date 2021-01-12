@@ -23,22 +23,24 @@ namespace fem {
 
 int DoMain() {
   systems::DiagramBuilder<double> builder;
-  const double dt = 1.0 / 60.0;
+  const double dt = 1.0 / 600.0;
   auto* fem_system = builder.AddSystem<FemSystem<double>>(dt);
 
   auto ground_ls = std::make_unique<HalfSpace<double>>(
-      Vector3<double>(0, -0.2, 0), Vector3<double>(0, 1, 0));
+      Vector3<double>(0, -0.15, 0), Vector3<double>(0, 1, 0));
   auto ground = std::make_unique<CollisionObject<double>>(std::move(ground_ls));
-    fem_system->AddCollisionObject(std::move(ground));
-//  auto pusher_ls = std::make_unique<HalfSpace<double>>(
-//      Vector3<double>(0, -0.06, 0), Vector3<double>(0, 1, 0));
-//  auto pusher_update = [](double time, CollisionObject<double>* cb) {
-//      double translation_velocity = 0.1;
-//      Vector3<double> translation(0, time * translation_velocity, 0);
-//      cb->set_translation(translation);
-//  };
-//    auto pusher = std::make_unique<CollisionObject<double>>(std::move(pusher_ls), pusher_update);
-//  fem_system->AddCollisionObject(std::move(pusher));
+  fem_system->AddCollisionObject(std::move(ground));
+  //  auto pusher_ls = std::make_unique<HalfSpace<double>>(
+  //      Vector3<double>(0, -0.06, 0), Vector3<double>(0, 1, 0));
+  //  auto pusher_update = [](double time, CollisionObject<double>* cb) {
+  //      double translation_velocity = 0.1;
+  //      Vector3<double> translation(0, time * translation_velocity, 0);
+  //      cb->set_translation(translation);
+  //  };
+  //    auto pusher =
+  //    std::make_unique<CollisionObject<double>>(std::move(pusher_ls),
+  //    pusher_update);
+  //  fem_system->AddCollisionObject(std::move(pusher));
 
   const double mesh_spacing = 0.005;
   const int nx = 2;
@@ -46,15 +48,15 @@ int DoMain() {
   const int nz = 2;
   FemConfig config;
   config.density = 1e3;
-  config.youngs_modulus = 5e3;
+  config.youngs_modulus = 4e3;
   config.poisson_ratio = 0.45;
   config.mass_damping = 0.0;
-  config.stiffness_damping = 0.0;
-//    config.density = 1e3;
-//    config.youngs_modulus = 1e4;
-//    config.poisson_ratio = 0.4;
-//    config.mass_damping = 4;
-//    config.stiffness_damping = 0.0;
+  config.stiffness_damping = 0.00;
+  //    config.density = 1e3;
+  //    config.youngs_modulus = 1e4;
+  //    config.poisson_ratio = 0.4;
+  //    config.mass_damping = 4;
+  //    config.stiffness_damping = 0.0;
   auto velocity_transform = [](int vertex_index,
                                EigenPtr<Matrix3X<double>> vel) {
     vel->col(vertex_index).setZero();
@@ -98,6 +100,8 @@ int DoMain() {
   auto* obj_writer = builder.AddSystem<ObjWriter<double>>(*fem_system);
   builder.Connect(fem_system->get_output_port(0),
                   obj_writer->get_input_port(0));
+  builder.Connect(fem_system->get_output_port(1),
+                  obj_writer->get_input_port(1));
 #endif
   auto diagram = builder.Build();
   auto context = diagram->CreateDefaultContext();

@@ -38,7 +38,9 @@ class NewtonSolver {
       linear_solver_.SetUp();
       linear_solver_.Solve(residual_, &dx_);
       *x += dx_;
-      if (UpdateAndEvalResidual(*x)) return NewtonSolverStatus::Success;
+      if (UpdateAndEvalResidual(*x)) {
+        return NewtonSolverStatus::Success;
+      }
     }
     return NewtonSolverStatus::NoConvergence;
   }
@@ -72,7 +74,9 @@ class NewtonSolver {
 
   void set_tolerance(T tolerance) { tolerance_ = tolerance; }
 
-  EigenConjugateGradientSolver<T>& get_linear_solver() { return linear_solver_; }
+  EigenConjugateGradientSolver<T>& get_linear_solver() {
+    return linear_solver_;
+  }
 
  private:
   BackwardEulerObjective<T>& objective_;
