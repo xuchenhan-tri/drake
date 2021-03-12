@@ -3,86 +3,86 @@
 #include <Eigen/SparseCore>
 #include <gtest/gtest.h>
 
-#include "drake/multibody/solvers/pgs_solver.h"
-#include "drake/multibody/solvers/point_contact_data.h"
-#include "drake/multibody/solvers/sparse_linear_operator.h"
-#include "drake/multibody/solvers/system_dynamics_data.h"
+#include "drake/common/test_utilities/eigen_matrix_compare.h"
+#include "drake/multibody/contact_solvers/sparse_linear_operator.h"
+#include "drake/multibody/fixed_fem/dev/pgs_solver.h"
 
 namespace drake {
 namespace multibody {
-namespace solvers {
+namespace contact_solvers {
+namespace internal {
 namespace {
 
 using SparseMatrixd = Eigen::SparseMatrix<double>;
-using SparseVectord = Eigen::SparseVector<double>;
 using Eigen::VectorXd;
 using Triplet = Eigen::Triplet<double>;
 
 class PgsTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    jacobian.resize(3, 3);
+    jacobian_.resize(3, 3);
     {
       std::vector<Triplet> triplets;
       triplets.emplace_back(0, 0, 1.0);
       triplets.emplace_back(1, 1, 1.0);
       triplets.emplace_back(2, 2, 1.0);
-      jacobian.setFromTriplets(triplets.begin(), triplets.end());
-      jacobian.makeCompressed();
+      jacobian_.setFromTriplets(triplets.begin(), triplets.end());
+      jacobian_.makeCompressed();
     }
-    std::cout << "setup 1" << std::endl;
-     Jc = std::make_unique<SparseLinearOperator<double>>("Jc", &jacobian);
-    penetration_depth.resize(1);
-      penetration_depth(0) = -1;
-    v_free = -1.0 * VectorXd::Ones(3);
-    tau = VectorXd::Zero(v_free.size());
+    Jc_ = std::make_unique<SparseLinearOperator<double>>("Jc", &jacobian_);
+    penetration_depth_.resize(1);
+    penetration_depth_(0) = -1;
+    v_free_ = -1.0 * VectorXd::Ones(3);
 
-    Minv_tmp.resize(3, 3);
+    Ainv_tmp_.resize(3, 3);
     {
       std::vector<Triplet> triplets;
       triplets.emplace_back(0, 0, 12.0);
       triplets.emplace_back(1, 1, 4.0);
       triplets.emplace_back(2, 2, 3.0);
-      Minv_tmp.setFromTriplets(triplets.begin(), triplets.end());
-      Minv_tmp.makeCompressed();
+      Ainv_tmp_.setFromTriplets(triplets.begin(), triplets.end());
+      Ainv_tmp_.makeCompressed();
     }
-    Minv = std::make_unique<SparseLinearOperator<double>>("Minv", &Minv_tmp);
-    dynamics_data = std::make_unique<SystemDynamicsData<double>>(Minv.get(), &v_free, &tau);
-    stiffness = VectorXd::Zero(1);
-    dissipation = VectorXd::Zero(1);
-    mu = 1000.0 * VectorXd::Ones(1);
-    point_data = std::make_unique<PointContactData<double>>(&penetration_depth, Jc.get(), &stiffness,
-                                        &dissipation, &mu);
-
-    pgs_ = std::make_unique<PgsSolver<double>>();
-    pgs_->SetSystemDynamicsData(dynamics_data.get());
-    pgs_->SetPointContactData(point_data.get());
+    Ainv_ = std::make_unique<SparseLinearOperator<double>>("Ainv", &Ainv_tmp_);
+    dynamics_data_ =
+        std::make_unique<SystemDynamicsData<double>>(Ainv_.get(), &v_free_);
+    stiffness_ = VectorXd::Zero(1);
+    dissipation_ = VectorXd::Zero(1);
+    mu_ = 1000.0 * VectorXd::Ones(1);
+    point_data_ = std::make_unique<PointContactData<double>>(
+        &penetration_depth_, Jc_.get(), &stiffness_, &dissipation_, &mu_);
   }
 
-  std::unique_ptr<PgsSolver<double>> pgs_;
-  VectorXd v_free;
-  VectorXd tau;
-  std::unique_ptr<SparseLinearOperator<double>> Minv;
-    std::unique_ptr<SystemDynamicsData<double>> dynamics_data;
-    std::unique_ptr<PointContactData<double>> point_data;
-    VectorXd penetration_depth;
-    std::unique_ptr<SparseLinearOperator<double>> Jc;
-    SparseMatrixd jacobian;
-    SparseMatrixd Minv_tmp;
-    VectorXd stiffness;
-    VectorXd dissipation;
-    VectorXd mu;
+  VectorXd v_free_;
+  PgsSolver<double> pgs_;
+  std::unique_ptr<SparseLinearOperator<double>> Ainv_;
+  std::unique_ptr<SystemDynamicsData<double>> dynamics_data_;
+  std::unique_ptr<PointContactData<double>> point_data_;
+  VectorXd penetration_depth_;
+  std::unique_ptr<SparseLinearOperator<double>> Jc_;
+  SparseMatrixd jacobian_;
+  SparseMatrixd Ainv_tmp_;
+  VectorXd stiffness_;
+  VectorXd dissipation_;
+  VectorXd mu_;
 };
 
 TEST_F(PgsTest, Solve) {
-  VectorXd v = -1.0 * VectorXd::Ones(3);
-        std::cout << "solver " << std::endl;
-  pgs_->SolveWithGuess(1, v);
-  std::cout << pgs_->GetVelocities() << std::endl;
-  EXPECT_EQ(1,2);
+  Vector3<double> v_guess(0.12, 0.34, 0.56);
+  const double dt = 0.1;
+  ContactSolverResults<double> result;
+  EXPECT_EQ(
+      pgs_.SolveWithGuess(dt, *dynamics_data_, *point_data_, v_guess, &result),
+      ContactSolverStatus::kSuccess);
+  const double kTol = 1e-6;
+  EXPECT_TRUE(
+      CompareMatrices(result.ft, Vector2<double>(1. / 12., 1. / 4.), kTol));
+  EXPECT_TRUE(CompareMatrices(result.fn, Vector1<double>(1. / 3.), kTol));
+  EXPECT_TRUE(CompareMatrices(result.v_next, Vector3<double>(0, 0, 0), kTol));
 }
+
 }  // namespace
-}  // namespace solvers
+}  // namespace internal
+}  // namespace contact_solvers
 }  // namespace multibody
 }  // namespace drake
-
