@@ -38,7 +38,7 @@ namespace fixed_fem {
  and 3j + 2 in the i-th VectorX from the output port.
 
  The connectivity of the meshes representing the deformable bodies and their
- initial positions can be queried via `initial_meshes()` which returns an
+ initial positions can be queried via `meshes()` which returns an
  std::vector of volume meshes. The i-th mesh stores the connectivity for body i,
  which does not change throughout the simulation, as well as the initial
  positions of the vertices of the i-th body.
@@ -91,14 +91,11 @@ class SoftsimSystem final : public systems::LeafSystem<T> {
   }
 
   /** Returns the number of deformable bodies in the %SoftsimSystem. */
-  int num_bodies() const { return initial_meshes_.size(); }
+  int num_bodies() const { return meshes_.size(); }
 
-  /** The volume meshes of the deformable bodies at the time of registration.
-   The meshes have the same order as the registration of their corresponding
-   deformable bodies. */
-  const std::vector<geometry::VolumeMesh<T>>& initial_meshes() const {
-    return initial_meshes_;
-  }
+  /** The volume meshes of the deformable bodies. The meshes have the same order
+   as the registration of their corresponding deformable bodies. */
+  const std::vector<geometry::VolumeMesh<T>>& meshes() const { return meshes_; }
 
   /** The names of all the registered bodies in the same order as the bodies
    were registered. */
@@ -120,6 +117,20 @@ class SoftsimSystem final : public systems::LeafSystem<T> {
   void AdvanceOneTimeStep(const systems::Context<T>& context,
                           systems::DiscreteValues<T>* next_states) const;
 
+  void UpdateMesh(SoftBodyIndex id, const VectorX<T>& q) const {
+    const auto q_reshaped =
+        Eigen::Map<const Matrix3X<T>>(q.data(), q.size() / 3, 3);
+    std::vector<geometry::VolumeElement> tets = meshes_[id].tetrahedra();
+    // We assume the deformable body frame is always the same as the world frame
+    // for now. It probably makes sense to have the frame move with the body in
+    // the future.
+    std::vector<geometry::VolumeVertex<T>> vertices_D;
+    for (int i = 0; i < q_reshaped.cols(); ++i) {
+      vertices_D.push_back(geometry::VolumeVertex<T>(q_reshaped.col(i)));
+    }
+    meshes_[id] = {std::move(tets), std::move(vertices_D)};
+  }
+
   /* Copies the generalized positions of each body to the given `output`.
    The order of the body positions follows that in which the bodies were
    added. */
@@ -132,8 +143,10 @@ class SoftsimSystem final : public systems::LeafSystem<T> {
    allocation. */
   mutable std::vector<std::unique_ptr<FemStateBase<T>>> prev_fem_states_{};
   mutable std::vector<std::unique_ptr<FemStateBase<T>>> next_fem_states_{};
-  /* Initial mesh for all bodies at time of registration. */
-  std::vector<geometry::VolumeMesh<T>> initial_meshes_{};
+  // TODO(xuchenhan-tri): The meshes should be managed by scene graph when
+  //  Softsim is integrated with SceneGraph.
+  /* The volume tetmesh for all bodies. */
+  mutable std::vector<geometry::VolumeMesh<T>> meshes_{};
   /* Solvers for all bodies. */
   std::vector<std::unique_ptr<FemSolver<T>>> fem_solvers_{};
   /* Names of all registered bodies. */

@@ -100,7 +100,7 @@ int DoMain() {
                                            wall_normal);
 
   auto& visualizer = *builder.AddSystem<DeformableVisualizer>(
-      1.0 / 60.0, softsim_system->names(), softsim_system->initial_meshes());
+      1.0 / 60.0, softsim_system->names(), softsim_system->meshes());
   builder.Connect(*softsim_system, visualizer);
   auto diagram = builder.Build();
   auto context = diagram->CreateDefaultContext();

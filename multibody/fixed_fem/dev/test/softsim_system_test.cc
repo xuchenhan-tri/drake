@@ -85,10 +85,10 @@ TEST_F(SoftsimSystemTest, RegisterDeformableBody) {
   const std::vector<std::string>& registered_names = softsim_system_.names();
   EXPECT_EQ(registered_names.size(), 1);
   EXPECT_EQ(registered_names[0], "box");
-  const std::vector<geometry::VolumeMesh<double>>& initial_meshes =
-      softsim_system_.initial_meshes();
-  EXPECT_EQ(initial_meshes.size(), 1);
-  EXPECT_TRUE(MakeBoxTetMesh().Equal(initial_meshes[0]));
+  const std::vector<geometry::VolumeMesh<double>>& meshes =
+      softsim_system_.meshes();
+  EXPECT_EQ(meshes.size(), 1);
+  EXPECT_TRUE(MakeBoxTetMesh().Equal(meshes[0]));
   EXPECT_EQ(softsim_system_.dt(), kDt);
 }
 

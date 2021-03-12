@@ -122,7 +122,7 @@ void SoftsimSystem<T>::RegisterDeformableBodyHelper(
   next_fem_states_.emplace_back(std::make_unique<StateType>(state));
   fem_solvers_.emplace_back(
       std::make_unique<FemSolver<T>>(std::move(fem_model)));
-  initial_meshes_.emplace_back(mesh);
+  meshes_.emplace_back(mesh);
   names_.emplace_back(std::move(name));
 }
 
@@ -162,6 +162,7 @@ void SoftsimSystem<T>::AdvanceOneTimeStep(
     next_discrete_value.head(num_dofs) = next_fem_state.q();
     next_discrete_value.segment(num_dofs, num_dofs) = next_fem_state.qdot();
     next_discrete_value.tail(num_dofs) = next_fem_state.qddot();
+    UpdateMesh(SoftBodyIndex(i), q);
   }
 }
 
