@@ -130,6 +130,8 @@ template <typename T>
 void SoftsimSystem<T>::AdvanceOneTimeStep(
     const systems::Context<T>& context,
     systems::DiscreteValues<T>* next_states) const {
+  // TODO(xuchenhan-tri): Figure out the correct time to feed in here.
+  UpdateAllCollisionObjects(context.get_time());
   const systems::DiscreteValues<T>& all_discrete_states =
       context.get_discrete_state();
   for (int i = 0; i < num_bodies(); ++i) {
@@ -154,6 +156,9 @@ void SoftsimSystem<T>::AdvanceOneTimeStep(
     next_fem_state.SetQdot(qdot);
     next_fem_state.SetQddot(qddot);
     fem_solvers_[i]->AdvanceOneTimeStep(prev_fem_state, &next_fem_state);
+    /* Update the test position of the deformable mesh. */
+    UpdateMesh(SoftBodyIndex(i), q);
+
     /* Copy new state to output variable. */
     systems::BasicVector<T>& next_discrete_state =
         next_states->get_mutable_vector(i);
@@ -162,7 +167,6 @@ void SoftsimSystem<T>::AdvanceOneTimeStep(
     next_discrete_value.head(num_dofs) = next_fem_state.q();
     next_discrete_value.segment(num_dofs, num_dofs) = next_fem_state.qdot();
     next_discrete_value.tail(num_dofs) = next_fem_state.qddot();
-    UpdateMesh(SoftBodyIndex(i), q);
   }
 }
 

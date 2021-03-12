@@ -1,12 +1,16 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "drake/common/eigen_types.h"
+#include "drake/geometry/proximity/hydroelastic_internal.h"
+#include "drake/geometry/proximity/surface_mesh.h"
 #include "drake/geometry/proximity/volume_mesh.h"
+#include "drake/geometry/proximity_properties.h"
 #include "drake/multibody/fixed_fem/dev/deformable_body_config.h"
 #include "drake/multibody/fixed_fem/dev/dirichlet_boundary_condition.h"
 #include "drake/multibody/fixed_fem/dev/dynamic_elasticity_element.h"
@@ -14,6 +18,7 @@
 #include "drake/multibody/fixed_fem/dev/fem_solver.h"
 #include "drake/multibody/fixed_fem/dev/linear_simplex_element.h"
 #include "drake/multibody/fixed_fem/dev/simplex_gaussian_quadrature.h"
+#include "drake/multibody/math/spatial_algebra.h"
 #include "drake/systems/framework/leaf_system.h"
 namespace drake {
 namespace multibody {
@@ -84,6 +89,28 @@ class SoftsimSystem final : public systems::LeafSystem<T> {
                                 const Vector3<T>& n_W,
                                 double distance_tolerance = 1e-6);
 
+  /** Add a coliision geometry with the given `shape`, `proximity_properties`
+   and pose `X_WG`. */
+  template <typename ShapeType>
+  void RegisterCollisionGeometry(
+      const ShapeType& shape,
+      const geometry::ProximityProperties& proximity_properties,
+      const std::function<void(const T& time, math::RigidTransform<T>* X_WG,
+                               SpatialVelocity<T>* V_WG)>&
+          motion_update_callback) {
+    static_assert(std::is_base_of_v<geometry::Shape, ShapeType>,
+                  "The template parameter 'ShapeType' must be derived from "
+                  "'geometry::Shape'.");
+    std::optional<geometry::internal::hydroelastic::RigidGeometry>
+        rigid_geometry =
+            geometry::internal::hydroelastic::MakeRigidRepresentation(
+                shape, proximity_properties);
+    DRAKE_THROW_UNLESS(rigid_geometry.has_value());
+    geometry::SurfaceMesh<double> surface_mesh = rigid_geometry.value().mesh();
+    collision_objects_.emplace_back(surface_mesh, proximity_properties,
+                                    motion_update_callback);
+  }
+
   double dt() const { return dt_; }
 
   const systems::OutputPort<T>& get_vertex_positions_output_port() const {
@@ -103,6 +130,14 @@ class SoftsimSystem final : public systems::LeafSystem<T> {
 
  private:
   friend class SoftsimSystemTest;
+
+  /* Updates the poses and velocities of all collision objects given the current
+   time. */
+  void UpdateAllCollisionObjects(const T& time) const {
+    for (auto& object : collision_objects_) {
+      object.UpdatePositionAndVelocity(time);
+    }
+  }
 
   /* Register a deformable body with the given type of constitutive model.
    @tparam Model    The type of constitutive model for the new deformable body,
@@ -147,6 +182,7 @@ class SoftsimSystem final : public systems::LeafSystem<T> {
   //  Softsim is integrated with SceneGraph.
   /* The volume tetmesh for all bodies. */
   mutable std::vector<geometry::VolumeMesh<T>> meshes_{};
+  mutable std::vector<CollisionObject<T>> collision_objects_{};
   /* Solvers for all bodies. */
   std::vector<std::unique_ptr<FemSolver<T>>> fem_solvers_{};
   /* Names of all registered bodies. */
