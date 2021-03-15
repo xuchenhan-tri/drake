@@ -60,7 +60,7 @@ class EigenMatrixProxy : public Eigen::EigenBase<EigenMatrixProxy<T>> {
       : linear_operator_(linear_operator) {}
 
   /* Resize the scratch vector to match the size of the linear operator. */
-  void Resize() { scratch_vector_.resize(linear_operator_->rows()); }
+  void Resize() const { scratch_vector_.resize(linear_operator_->rows()); }
 
   ~EigenMatrixProxy() = default;
 
@@ -182,7 +182,7 @@ class EigenConjugateGradientSolver : public LinearSystemSolver<T> {
   void set_tolerance(const T& tol) final { cg_.setTolerance(tol); }
 
  private:
-  void DoCompute() final {
+  void DoCompute() const final {
     matrix_proxy_.Resize();
     cg_.compute(matrix_proxy_);
   }
@@ -190,8 +190,9 @@ class EigenConjugateGradientSolver : public LinearSystemSolver<T> {
   EigenMatrixProxy<T> matrix_proxy_;
   /* TODO(xuchenhan-tri): Allow for custom preconditioner if needed in the
    future. */
-  Eigen::ConjugateGradient<EigenMatrixProxy<T>, Eigen::Lower | Eigen::Upper,
-                           Eigen::IdentityPreconditioner>
+  mutable Eigen::ConjugateGradient<EigenMatrixProxy<T>,
+                                   Eigen::Lower | Eigen::Upper,
+                                   Eigen::IdentityPreconditioner>
       cg_;
 };
 }  // namespace internal

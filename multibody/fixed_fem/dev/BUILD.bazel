@@ -12,6 +12,19 @@ package(
 )
 
 drake_cc_library(
+    name = "block_diagonal_operator",
+    srcs = [
+        "block_diagonal_operator.cc",
+    ],
+    hdrs = [
+        "block_diagonal_operator.h",
+    ],
+    deps = [
+        "//multibody/contact_solvers:linear_operator",
+    ],
+)
+
+drake_cc_library(
     name = "collision_object",
     hdrs = [
         "collision_object.h",
@@ -342,6 +355,20 @@ drake_cc_library(
     deps = [
         ":dirichlet_boundary_condition",
         "//common:default_scalars",
+    ],
+)
+
+drake_cc_library(
+    name = "inverse_operator",
+    srcs = [
+        "inverse_operator.cc",
+    ],
+    hdrs = [
+        "inverse_operator.h",
+    ],
+    deps = [
+        ":linear_system_solver",
+        "//multibody/contact_solvers:linear_operator",
     ],
 )
 

@@ -39,7 +39,7 @@ class LinearSystemSolver {
    linear_solver.Solve(b2, &x2);
    ...
    ``` */
-  void Compute() {
+  void Compute() const {
     DRAKE_THROW_UNLESS(A_ != nullptr);
     DRAKE_THROW_UNLESS(A_->rows() == A_->cols());
     DoCompute();
@@ -69,7 +69,7 @@ class LinearSystemSolver {
 
   /* Derived classes should override this method to perform percomputes (e.g.
    factorize) on A, the left hand side of the system, if necessary. */
-  virtual void DoCompute() {}
+  virtual void DoCompute() const {}
 
  private:
   const contact_solvers::internal::LinearOperator<T>* A_{nullptr};
