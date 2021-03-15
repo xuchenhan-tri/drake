@@ -158,6 +158,12 @@ void SoftsimSystem<T>::AdvanceOneTimeStep(
     fem_solvers_[i]->AdvanceOneTimeStep(prev_fem_state, &next_fem_state);
     /* Update the test position of the deformable mesh. */
     UpdateMesh(SoftBodyIndex(i), q);
+    const contact_solvers::internal::PointContactData<T>& point_contact_data =
+        contact_data_calculator_.ComputeContactData(meshes_[i],
+                                                    collision_objects_);
+    std::cout << fmt::format("body {} has {} contacts", i,
+                             point_contact_data.num_contacts())
+              << std::endl;
 
     /* Copy new state to output variable. */
     systems::BasicVector<T>& next_discrete_state =

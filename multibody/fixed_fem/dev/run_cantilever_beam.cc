@@ -22,11 +22,13 @@ bazel-bin/multibody/fixed_fem/dev/run_cantilever_beam
 
 #include <gflags/gflags.h>
 
+#include "drake//math/rigid_transform.h"
 #include "drake/geometry/proximity_properties.h"
 #include "drake/multibody/fixed_fem/dev/deformable_body_config.h"
 #include "drake/multibody/fixed_fem/dev/deformable_visualizer.h"
 #include "drake/multibody/fixed_fem/dev/mesh_utilities.h"
 #include "drake/multibody/fixed_fem/dev/softsim_system.h"
+#include "drake/multibody/math/spatial_algebra.h"
 #include "drake/systems/analysis/simulator_gflags.h"
 #include "drake/systems/framework/diagram.h"
 #include "drake/systems/framework/diagram_builder.h"
@@ -101,18 +103,18 @@ int DoMain() {
                                            wall_normal);
 
   /* Add a ground as collision geometry. */
-  geometry::Box ground{0.2, 4, 0.4};
-  const math::RigidTransform<double> X_WB(Vector3<double>{0, 0, -0.5});
+  geometry::Box ground{4, 4, 1};
+  const math::RigidTransform<double> X_WB(Vector3<double>{0, 0, -1.5});
   geometry::ProximityProperties prox_prop;
-  geometry::AddContactMaterial(1e8, {}, CoulombFriction<double>(), &prox_prop);
-  softsim_system->RegisterCollisionGeometry(
-      ground, prox_prop,
-      [&](const double& time, math::RigidTransformd* pose,
-          SpatialVelocity<double>* spatial_velocity) {
-        unused(time);
-        *pose = X_WB;
-        spatial_velocity->SetZero();
-      });
+  geometry::AddContactMaterial({}, {}, CoulombFriction<double>(), &prox_prop);
+  auto callback = [&X_WB](const double& time,
+                          math::RigidTransform<double>* pose,
+                          SpatialVelocity<double>* spatial_velocity) {
+    unused(time);
+    *pose = X_WB;
+    spatial_velocity->SetZero();
+  };
+  softsim_system->RegisterCollisionGeometry(ground, prox_prop, callback);
 
   auto& visualizer = *builder.AddSystem<DeformableVisualizer>(
       1.0 / 60.0, softsim_system->names(), softsim_system->meshes());

@@ -1,7 +1,10 @@
 #pragma once
 
-#include "drake/common/unused.h"
-#include "drake/multibody/fixed_fem/dev/fem_state.h"
+#include "drake/geometry/proximity/surface_mesh.h"
+#include "drake/geometry/proximity/volume_mesh.h"
+#include "drake/geometry/proximity_properties.h"
+#include "drake/math/rigid_transform.h"
+#include "drake/multibody/math/spatial_algebra.h"
 
 namespace drake {
 namespace multibody {
@@ -15,35 +18,41 @@ class CollisionObject {
   CollisionObject(
       const geometry::SurfaceMesh<double>& surface_mesh,
       const geometry::ProximityProperties& proximity_properties,
-      const std::function<void(const U& time, math::RigidTransform<U>* X_WG,
-                               SpatialVelocity<U>* V_WG)>&
+      const std::function<void(const T& time, math::RigidTransform<T>* X_WG,
+                               SpatialVelocity<T>* V_WG)>&
           motion_update_callback)
       : surface_mesh_(surface_mesh),
         proximity_properties_(proximity_properties),
         motion_update_callback_(motion_update_callback) {}
 
-  const Vector3<U>& rotational_velocity() const {
+  const Vector3<T>& rotational_velocity() const {
     return spatial_velocity_.rotational();
   }
 
-  const Vector3<U>& translational_velocity() const {
+  const Vector3<T>& translational_velocity() const {
     return spatial_velocity_.translational();
   }
 
-  void UpdatePositionAndVelocity(const U& time) {
+  void UpdatePositionAndVelocity(const T& time) {
     motion_update_callback_(time, &pose_, &spatial_velocity_);
   }
 
   /* Return the pose of the collision object in world space, X_WG. */
-  const math::RigidTransform<U>& get_pose() const { return pose_; }
+  const math::RigidTransform<T>& pose() const { return pose_; }
+
+  const geometry::SurfaceMesh<double>& mesh() const { return surface_mesh_; }
+
+  const geometry::ProximityProperties& proximity_properties() const {
+    return proximity_properties_;
+  }
 
  private:
   const geometry::SurfaceMesh<double> surface_mesh_;
-  math::RigidTransform<U> pose_{};
-  SpatialVelocity<U> spatial_velocity_{};
+  math::RigidTransform<T> pose_{};
+  SpatialVelocity<T> spatial_velocity_{};
   const geometry::ProximityProperties proximity_properties_;
-  const std::function<void(const U& time, math::RigidTransform<U>* X_WG,
-                           SpatialVelocity<U>* V_WG)>
+  const std::function<void(const T& time, math::RigidTransform<T>* X_WG,
+                           SpatialVelocity<T>* V_WG)>
       motion_update_callback_;
 };
 }  // namespace fixed_fem

@@ -140,6 +140,8 @@ bool CompareSetOfVector3s(const std::vector<Vector3<T>>& A,
                              });
 }
 
+// TODO(xuchenhan-tri): Add a unit test where a polygon is split into more than
+//  one triangle.
 /* Limited test to show correctness of ComputeTetMeshTriMeshContact<T>().
  Given a simple, tractable set of input meshes, we analytically compute the
  expected contact data and compare it against the result from

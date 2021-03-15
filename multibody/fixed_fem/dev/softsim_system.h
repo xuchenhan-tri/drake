@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -11,6 +12,7 @@
 #include "drake/geometry/proximity/surface_mesh.h"
 #include "drake/geometry/proximity/volume_mesh.h"
 #include "drake/geometry/proximity_properties.h"
+#include "drake/multibody/fixed_fem/dev/contact_data_calculator.h"
 #include "drake/multibody/fixed_fem/dev/deformable_body_config.h"
 #include "drake/multibody/fixed_fem/dev/dirichlet_boundary_condition.h"
 #include "drake/multibody/fixed_fem/dev/dynamic_elasticity_element.h"
@@ -18,7 +20,6 @@
 #include "drake/multibody/fixed_fem/dev/fem_solver.h"
 #include "drake/multibody/fixed_fem/dev/linear_simplex_element.h"
 #include "drake/multibody/fixed_fem/dev/simplex_gaussian_quadrature.h"
-#include "drake/multibody/math/spatial_algebra.h"
 #include "drake/systems/framework/leaf_system.h"
 namespace drake {
 namespace multibody {
@@ -89,15 +90,14 @@ class SoftsimSystem final : public systems::LeafSystem<T> {
                                 const Vector3<T>& n_W,
                                 double distance_tolerance = 1e-6);
 
-  /** Add a coliision geometry with the given `shape`, `proximity_properties`
+  /** Add a collision geometry with the given `shape`, `proximity_properties`
    and pose `X_WG`. */
   template <typename ShapeType>
   void RegisterCollisionGeometry(
       const ShapeType& shape,
       const geometry::ProximityProperties& proximity_properties,
-      const std::function<void(const T& time, math::RigidTransform<T>* X_WG,
-                               SpatialVelocity<T>* V_WG)>&
-          motion_update_callback) {
+      const std::function<void(const T&, math::RigidTransform<T>*,
+                               SpatialVelocity<T>*)>& motion_update_callback) {
     static_assert(std::is_base_of_v<geometry::Shape, ShapeType>,
                   "The template parameter 'ShapeType' must be derived from "
                   "'geometry::Shape'.");
@@ -149,12 +149,12 @@ class SoftsimSystem final : public systems::LeafSystem<T> {
 
   /* Advance the dynamics of all registered bodies by one time step and store
    the states at the new time step in the given `next_states`. */
-  void AdvanceOneTimeStep(const systems::Context<T>& context,
+  void AdvanceOneTimeStep(const systems::Context<T>& contelt,
                           systems::DiscreteValues<T>* next_states) const;
 
   void UpdateMesh(SoftBodyIndex id, const VectorX<T>& q) const {
     const auto q_reshaped =
-        Eigen::Map<const Matrix3X<T>>(q.data(), q.size() / 3, 3);
+        Eigen::Map<const Matrix3X<T>>(q.data(), 3, q.size() / 3);
     std::vector<geometry::VolumeElement> tets = meshes_[id].tetrahedra();
     // We assume the deformable body frame is always the same as the world frame
     // for now. It probably makes sense to have the frame move with the body in
@@ -183,6 +183,7 @@ class SoftsimSystem final : public systems::LeafSystem<T> {
   /* The volume tetmesh for all bodies. */
   mutable std::vector<geometry::VolumeMesh<T>> meshes_{};
   mutable std::vector<CollisionObject<T>> collision_objects_{};
+  mutable internal::ContactDataCalculator<T> contact_data_calculator_{};
   /* Solvers for all bodies. */
   std::vector<std::unique_ptr<FemSolver<T>>> fem_solvers_{};
   /* Names of all registered bodies. */

@@ -12,6 +12,19 @@ package(
 )
 
 drake_cc_library(
+    name = "collision_object",
+    hdrs = [
+        "collision_object.h",
+    ],
+    deps = [
+        "//common:essential",
+        "//geometry:proximity_properties",
+        "//math:geometric_transform",
+        "//multibody/math:spatial_algebra",
+    ],
+)
+
+drake_cc_library(
     name = "constitutive_model",
     hdrs = [
         "constitutive_model.h",
@@ -263,6 +276,21 @@ drake_cc_library(
 )
 
 drake_cc_library(
+    name = "contact_data_calculator",
+    hdrs = [
+        "contact_data_calculator.h",
+    ],
+    deps = [
+        ":collision_object",
+        ":deformable_contact",
+        "//math:orthonormal_basis",
+        "//multibody/contact_solvers:point_contact_data",
+        "//multibody/contact_solvers:sparse_linear_operator",
+        "//multibody/plant:coulomb_friction",
+    ],
+)
+
+drake_cc_library(
     name = "softsim_system",
     srcs = [
         "softsim_system.cc",
@@ -271,6 +299,7 @@ drake_cc_library(
         "softsim_system.h",
     ],
     deps = [
+        ":contact_data_calculator",
         ":corotated_model",
         ":deformable_body_config",
         ":dirichlet_boundary_condition",
@@ -285,8 +314,8 @@ drake_cc_library(
         "//geometry/proximity:hydroelastic_internal",
         "//geometry/proximity:surface_mesh",
         "//geometry/proximity:volume_mesh",
-        "//systems/framework:leaf_system",
         "//multibody/math:spatial_algebra",
+        "//systems/framework:leaf_system",
     ],
 )
 
@@ -463,6 +492,7 @@ drake_cc_binary(
         "//common:add_text_logging_gflags",
         "//geometry:proximity_properties",
         "//math:geometric_transform",
+        "//multibody/math:spatial_algebra",
         "//systems/analysis:simulator_gflags",
         "//systems/framework:diagram_builder",
     ],
@@ -528,6 +558,19 @@ drake_cc_library(
     hdrs = ["test/test_utilities.h"],
     deps = [
         "//common:essential",
+    ],
+)
+
+drake_cc_googletest(
+    name = "contact_data_calculator_test",
+    deps = [
+        ":collision_object",
+        ":contact_data_calculator",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//geometry/proximity:make_box_mesh",
+        "//geometry/proximity:surface_mesh",
+        "//geometry/proximity:volume_mesh",
+        "//multibody/contact_solvers:contact_solver_utils",
     ],
 )
 
