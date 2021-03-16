@@ -183,6 +183,17 @@ drake_cc_library(
 )
 
 drake_cc_library(
+    name = "eigen_sparse_ldlt_solver",
+    hdrs = [
+        "eigen_sparse_ldlt_solver.h",
+    ],
+    deps = [
+        ":linear_system_solver",
+        "//common:essential",
+    ],
+)
+
+drake_cc_library(
     name = "elasticity_element",
     hdrs = [
         "elasticity_element.h",
@@ -663,6 +674,7 @@ drake_cc_googletest(
     name = "eigen_conjugate_gradient_solver_test",
     deps = [
         ":eigen_conjugate_gradient_solver",
+        ":eigen_sparse_ldlt_solver",
         "//common/test_utilities:eigen_matrix_compare",
         "//math:gradient",
         "//multibody/contact_solvers:sparse_linear_operator",

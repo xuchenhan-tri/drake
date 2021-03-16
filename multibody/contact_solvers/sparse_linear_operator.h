@@ -36,6 +36,8 @@ class SparseLinearOperator final : public LinearOperator<T> {
   int rows() const final { return A_->rows(); }
   int cols() const final { return A_->cols(); }
 
+  const Eigen::SparseMatrix<T>* sparse_matrix() const { return A_; }
+
  protected:
   void DoMultiply(const Eigen::Ref<const VectorX<T>>& x,
                   VectorX<T>* y) const final {
@@ -56,9 +58,7 @@ class SparseLinearOperator final : public LinearOperator<T> {
     *y = A_->transpose() * x;
   }
 
-  void DoAssembleMatrix(Eigen::SparseMatrix<T>* A) const final {
-    *A = *A_;
-  }
+  void DoAssembleMatrix(Eigen::SparseMatrix<T>* A) const final { *A = *A_; }
 
  private:
   const Eigen::SparseMatrix<T>* A_{nullptr};

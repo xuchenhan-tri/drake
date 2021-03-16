@@ -47,7 +47,7 @@ class LinearSystemSolver {
 
   /* Returns the underlying linear operator. Useful for debugging purposes.
    */
-  const contact_solvers::internal::LinearOperator<T>& A() {
+  const contact_solvers::internal::LinearOperator<T>& A() const {
     DRAKE_THROW_UNLESS(A_ != nullptr);
     return *A_;
   }
