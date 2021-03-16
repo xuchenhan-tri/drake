@@ -3,6 +3,7 @@
 #include <Eigen/SparseCholesky>
 
 #include "drake/common/eigen_types.h"
+#include "drake/multibody/contact_solvers/sparse_linear_operator.h"
 #include "drake/multibody/fixed_fem/dev/linear_system_solver.h"
 namespace drake {
 namespace multibody {

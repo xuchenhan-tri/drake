@@ -58,16 +58,17 @@ class BlockDiagonalOperator final : public LinearOperator<T> {
     int starting_row = 0;
     int starting_col = 0;
     for (const auto* block : blocks_) {
-      const int current_rows = block->rows();
-      const int current_cols = block->cols();
+      DRAKE_DEMAND(block != nullptr);
+      const int block_rows = block->rows();
+      const int block_cols = block->cols();
 
-      const auto& x_segment = x.segment(current_cols, starting_col);
-      VectorX<T> y_segment(current_rows);
+      const auto& x_segment = x.segment(starting_col, block_cols);
+      VectorX<T> y_segment(block_rows);
       block->Multiply(x_segment, &y_segment);
-      y->segment(current_rows, starting_row) = y_segment;
+      y->segment(starting_row, block_rows) = y_segment;
 
-      starting_row = current_rows;
-      starting_col = current_cols;
+      starting_row += block_rows;
+      starting_col += block_cols;
     }
   }
 
@@ -79,7 +80,37 @@ class BlockDiagonalOperator final : public LinearOperator<T> {
     *y = dense_y.sparseView();
   }
 
+  void DoAssembleMatrix(Eigen::SparseMatrix<T>* A) const final {
+    std::vector<Eigen::Triplet<T>> triplets;
+    int starting_row = 0;
+    int starting_col = 0;
+    for (const auto* block : blocks_) {
+      DRAKE_DEMAND(block != nullptr);
+      const int block_rows = block->rows();
+      const int block_cols = block->cols();
+
+      Eigen::SparseMatrix<T> block_matrix(block_rows, block_cols);
+      block->AssembleMatrix(&block_matrix);
+      AssembleBlockSparseMatrix(block_matrix, starting_row, starting_col,
+                                &triplets);
+
+      starting_row += block_rows;
+      starting_col += block_cols;
+    }
+    A->setFromTriplets(triplets.begin(), triplets.end());
+  }
+
  private:
+  static void AssembleBlockSparseMatrix(
+      const Eigen::SparseMatrix<T>& block_matrix, int starting_row,
+      int starting_col, std::vector<Eigen::Triplet<T>>* triplets) {
+    using InnerIterator = typename Eigen::SparseMatrix<T>::InnerIterator;
+    for (int k = 0; k < block_matrix.outerSize(); ++k)
+      for (InnerIterator it(block_matrix, k); it; ++it) {
+        triplets->emplace_back(it.row() + starting_row, it.col() + starting_col,
+                               it.value());
+      }
+  }
   const std::vector<const LinearOperator<T>*> blocks_;
 };
 }  // namespace internal

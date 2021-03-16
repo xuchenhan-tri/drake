@@ -600,6 +600,18 @@ drake_cc_library(
 )
 
 drake_cc_googletest(
+    name = "block_diagonal_operator_test",
+    deps = [
+        ":block_diagonal_operator",
+        ":eigen_conjugate_gradient_solver",
+        ":inverse_operator",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//common/test_utilities:expect_throws_message",
+        "//multibody/contact_solvers:sparse_linear_operator",
+    ],
+)
+
+drake_cc_googletest(
     name = "contact_data_calculator_test",
     deps = [
         ":collision_object",
@@ -740,6 +752,17 @@ drake_cc_googletest(
         "//common/test_utilities:eigen_matrix_compare",
         "//common/test_utilities:expect_throws_message",
         "//math:gradient",
+    ],
+)
+
+drake_cc_googletest(
+    name = "inverse_operator_test",
+    deps = [
+        ":eigen_conjugate_gradient_solver",
+        ":inverse_operator",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//common/test_utilities:expect_throws_message",
+        "//multibody/contact_solvers:sparse_linear_operator",
     ],
 )
 

@@ -53,6 +53,19 @@ class InverseOperator final : public LinearOperator<T> {
     *y = dense_y.sparseView();
   }
 
+  void DoAssembleMatrix(Eigen::SparseMatrix<T>* A) const final {
+    MatrixX<T> dense_A(rows(), cols());
+    VectorX<T> unit_vector = VectorX<T>::Zero(cols());
+    VectorX<T> dense_A_col(rows());
+    for (int i = 0; i < cols(); ++i) {
+      unit_vector *= 0;
+      unit_vector(i) = 1;
+      this->Multiply(unit_vector, &dense_A_col);
+      dense_A.col(i) = dense_A_col;
+    }
+    *A = dense_A.sparseView();
+  }
+
  private:
   const fixed_fem::internal::LinearSystemSolver<T>* Ainv_{nullptr};
 };
