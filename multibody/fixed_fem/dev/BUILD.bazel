@@ -172,6 +172,22 @@ drake_cc_library(
 )
 
 drake_cc_library(
+    name = "dynamics_data_calculator",
+    hdrs = [
+        "dynamics_data_calculator.h",
+    ],
+    deps = [
+        ":block_diagonal_operator",
+        ":collision_object",
+        ":eigen_sparse_ldlt_solver",
+        ":fem_model_base",
+        ":fem_state_base",
+        ":inverse_operator",
+        "//multibody/contact_solvers:system_dynamics_data",
+    ],
+)
+
+drake_cc_library(
     name = "eigen_conjugate_gradient_solver",
     hdrs = [
         "eigen_conjugate_gradient_solver.h",
@@ -190,6 +206,7 @@ drake_cc_library(
     deps = [
         ":linear_system_solver",
         "//common:essential",
+        "//multibody/contact_solvers:sparse_linear_operator",
     ],
 )
 
@@ -679,6 +696,23 @@ drake_cc_googletest(
         "//common/test_utilities:eigen_matrix_compare",
         "//geometry/proximity:make_box_mesh",
         "//math:gradient",
+    ],
+)
+
+drake_cc_googletest(
+    name = "dynamics_data_calculator_test",
+    deps = [
+        ":collision_object",
+        ":dynamic_elasticity_element",
+        ":dynamic_elasticity_model",
+        ":dynamics_data_calculator",
+        ":fem_state_base",
+        ":linear_constitutive_model",
+        ":linear_simplex_element",
+        ":simplex_gaussian_quadrature",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//geometry/proximity:hydroelastic_internal",
+        "//geometry/proximity:make_box_mesh",
     ],
 )
 
