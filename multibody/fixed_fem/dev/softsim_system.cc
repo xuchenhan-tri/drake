@@ -159,7 +159,7 @@ void SoftsimSystem<T>::AdvanceOneTimeStep(
     //  more compact.
     next_fem_state.SetQ(q);
     next_fem_state.SetQdot(qdot);
-    next_fem_state.SetQddot(qddot*0);
+    next_fem_state.SetQddot(qddot);
     fem_solvers_[i]->AdvanceOneTimeStep(prev_fem_state, &next_fem_state);
     /* Update the test position of the deformable mesh. */
     UpdateMesh(SoftBodyIndex(i), q);
@@ -177,8 +177,8 @@ void SoftsimSystem<T>::AdvanceOneTimeStep(
           dt_, system_dynamics_data, point_contact_data,
           system_dynamics_data.get_v_star(), &contact_results);
       const VectorX<T> v = contact_results.v_next.head(num_dofs);
-      const T gamma = 0.5;
-      const T beta = 1;
+      const T gamma = 1;
+      const T beta = 0.5;
       const VectorX<T> a = (v - prev_fem_state.qdot()) / (dt_ * gamma) -
                            (1.0 - gamma) / gamma * prev_fem_state.qddot();
       const VectorX<T> x =
