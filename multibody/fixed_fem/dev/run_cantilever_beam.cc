@@ -51,7 +51,7 @@ DEFINE_double(alpha, 0.001,
               "motion. Note that mass damping damps out rigid body "
               "motion and thus this coefficient should be kept small. ");
 DEFINE_double(
-    beta, 0.001,
+    beta, 0.002,
     "Stiffness damping coefficient. The damping ratio contributed by this "
     "coefficient is proportional to the frequency of the motion.");
 
@@ -84,29 +84,29 @@ int DoMain() {
                                              "Corotated", nonlinear_bar_config);
 
   /* Set up the linear bar. */
-  DeformableBodyConfig<double> linear_bar_config(nonlinear_bar_config);
-  linear_bar_config.set_material_model(MaterialModel::kLinear);
-  const math::RigidTransform<double> translation_right(
-      Vector3<double>(0, 0.5, 0));
-  const geometry::VolumeMesh<double> linear_bar_geometry =
-      MakeDiamondCubicBoxVolumeMesh<double>(box, dx, translation_right);
-  const SoftBodyIndex linear_bar_body_index =
-      softsim_system->RegisterDeformableBody(linear_bar_geometry, "Linear",
-                                             linear_bar_config);
+//   DeformableBodyConfig<double> linear_bar_config(nonlinear_bar_config);
+//   linear_bar_config.set_material_model(MaterialModel::kLinear);
+//   const math::RigidTransform<double> translation_right(
+//       Vector3<double>(0, 0.5, 0));
+//   const geometry::VolumeMesh<double> linear_bar_geometry =
+//       MakeDiamondCubicBoxVolumeMesh<double>(box, dx, translation_right);
+//   const SoftBodyIndex linear_bar_body_index =
+//       softsim_system->RegisterDeformableBody(linear_bar_geometry, "Linear",
+//                                              linear_bar_config);
 
   /* Plug the two bars in to a wall. */
   const Vector3<double> wall_origin(-0.75, 0, 0);
   const Vector3<double> wall_normal(1, 0, 0);
   softsim_system->SetWallBoundaryCondition(nonlinear_bar_body_index,
                                            wall_origin, wall_normal);
-  softsim_system->SetWallBoundaryCondition(linear_bar_body_index, wall_origin,
-                                           wall_normal);
+//   softsim_system->SetWallBoundaryCondition(linear_bar_body_index, wall_origin,
+//                                            wall_normal);
 
   /* Add a ground as collision geometry. */
   geometry::Box ground{4, 4, 1};
-  const math::RigidTransform<double> X_WB(Vector3<double>{0, 0, -1.5});
+  const math::RigidTransform<double> X_WB(Vector3<double>{0, 0, -1});
   geometry::ProximityProperties prox_prop;
-  geometry::AddContactMaterial({}, {}, CoulombFriction<double>(), &prox_prop);
+  geometry::AddContactMaterial({}, {}, CoulombFriction<double>(0.1, 0.1), &prox_prop);
   auto callback = [&X_WB](const double& time,
                           math::RigidTransform<double>* pose,
                           SpatialVelocity<double>* spatial_velocity) {
@@ -123,7 +123,12 @@ int DoMain() {
   auto context = diagram->CreateDefaultContext();
   auto simulator =
       systems::MakeSimulatorFromGflags(*diagram, std::move(context));
+  std::chrono::time_point<std::chrono::system_clock> start, end;
+  start = std::chrono::system_clock::now();
   simulator->AdvanceTo(FLAGS_simulation_time);
+  end = std::chrono::system_clock::now();
+  std::chrono::duration<double> elapsed_seconds = end - start;
+  std::cout << "elapsed time: " << elapsed_seconds.count() << "s\n";
   return 0;
 }
 }  // namespace fixed_fem
