@@ -12,11 +12,13 @@
 #include "drake/geometry/proximity/surface_mesh.h"
 #include "drake/geometry/proximity/volume_mesh.h"
 #include "drake/geometry/proximity_properties.h"
+#include "drake/multibody/contact_solvers/contact_solver.h"
 #include "drake/multibody/fixed_fem/dev/contact_data_calculator.h"
 #include "drake/multibody/fixed_fem/dev/deformable_body_config.h"
 #include "drake/multibody/fixed_fem/dev/dirichlet_boundary_condition.h"
 #include "drake/multibody/fixed_fem/dev/dynamic_elasticity_element.h"
 #include "drake/multibody/fixed_fem/dev/dynamic_elasticity_model.h"
+#include "drake/multibody/fixed_fem/dev/dynamics_data_calculator.h"
 #include "drake/multibody/fixed_fem/dev/fem_solver.h"
 #include "drake/multibody/fixed_fem/dev/linear_simplex_element.h"
 #include "drake/multibody/fixed_fem/dev/simplex_gaussian_quadrature.h"
@@ -149,7 +151,7 @@ class SoftsimSystem final : public systems::LeafSystem<T> {
 
   /* Advance the dynamics of all registered bodies by one time step and store
    the states at the new time step in the given `next_states`. */
-  void AdvanceOneTimeStep(const systems::Context<T>& contelt,
+  void AdvanceOneTimeStep(const systems::Context<T>& context,
                           systems::DiscreteValues<T>* next_states) const;
 
   void UpdateMesh(SoftBodyIndex id, const VectorX<T>& q) const {
@@ -184,10 +186,13 @@ class SoftsimSystem final : public systems::LeafSystem<T> {
   mutable std::vector<geometry::VolumeMesh<T>> meshes_{};
   mutable std::vector<CollisionObject<T>> collision_objects_{};
   mutable internal::ContactDataCalculator<T> contact_data_calculator_{};
+  mutable std::vector<std::unique_ptr<internal::DynamicsDataCalculator<T>>>
+      dynamics_data_calculators_{};
   /* Solvers for all bodies. */
   std::vector<std::unique_ptr<FemSolver<T>>> fem_solvers_{};
   /* Names of all registered bodies. */
   std::vector<std::string> names_{};
+  std::unique_ptr<contact_solvers::internal::ContactSolver<T>> contact_solver_;
   /* Port Indexes. */
   systems::OutputPortIndex vertex_positions_port_;
 };

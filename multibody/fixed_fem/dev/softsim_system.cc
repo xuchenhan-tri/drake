@@ -2,6 +2,7 @@
 
 #include "drake/multibody/fixed_fem/dev/corotated_model.h"
 #include "drake/multibody/fixed_fem/dev/linear_constitutive_model.h"
+#include "drake/multibody/fixed_fem/dev/pgs_solver.h"
 
 namespace drake {
 namespace multibody {
@@ -15,6 +16,7 @@ SoftsimSystem<T>::SoftsimSystem(double dt) : dt_(dt) {
           .get_index();
   this->DeclarePeriodicDiscreteUpdateEvent(dt, 0,
                                            &SoftsimSystem::AdvanceOneTimeStep);
+  contact_solver_ = std::make_unique<contact_solvers::internal::PgsSolver<T>>();
 }
 
 template <typename T>
@@ -124,6 +126,9 @@ void SoftsimSystem<T>::RegisterDeformableBodyHelper(
       std::make_unique<FemSolver<T>>(std::move(fem_model)));
   meshes_.emplace_back(mesh);
   names_.emplace_back(std::move(name));
+  dynamics_data_calculators_.emplace_back(
+      std::make_unique<internal::DynamicsDataCalculator<T>>(
+          &fem_solvers_.back()->model(), &collision_objects_));
 }
 
 template <typename T>
@@ -154,16 +159,35 @@ void SoftsimSystem<T>::AdvanceOneTimeStep(
     //  more compact.
     next_fem_state.SetQ(q);
     next_fem_state.SetQdot(qdot);
-    next_fem_state.SetQddot(qddot);
+    next_fem_state.SetQddot(qddot*0);
     fem_solvers_[i]->AdvanceOneTimeStep(prev_fem_state, &next_fem_state);
     /* Update the test position of the deformable mesh. */
     UpdateMesh(SoftBodyIndex(i), q);
-    const contact_solvers::internal::PointContactData<T>& point_contact_data =
+    const contact_solvers::internal::PointContactData<T> point_contact_data =
         contact_data_calculator_.ComputeContactData(meshes_[i],
                                                     collision_objects_);
-    std::cout << fmt::format("body {} has {} contacts", i,
-                             point_contact_data.num_contacts())
-              << std::endl;
+    if (point_contact_data.num_contacts() > 0) {
+      const contact_solvers::internal::SystemDynamicsData<T>
+          system_dynamics_data =
+              dynamics_data_calculators_[i]->ComputeDynamicsData(
+                  next_fem_state);
+
+      contact_solvers::internal::ContactSolverResults<T> contact_results;
+      contact_solver_->SolveWithGuess(
+          dt_, system_dynamics_data, point_contact_data,
+          system_dynamics_data.get_v_star(), &contact_results);
+      const VectorX<T> v = contact_results.v_next.head(num_dofs);
+      const T gamma = 0.5;
+      const T beta = 1;
+      const VectorX<T> a = (v - prev_fem_state.qdot()) / (dt_ * gamma) -
+                           (1.0 - gamma) / gamma * prev_fem_state.qddot();
+      const VectorX<T> x =
+          prev_fem_state.q() + dt_ * prev_fem_state.qdot() +
+          dt_ * dt_ * (beta * a + (0.5 - beta) * prev_fem_state.qddot());
+      next_fem_state.SetQddot(a);
+      next_fem_state.SetQdot(v);
+      next_fem_state.SetQ(x);
+    }
 
     /* Copy new state to output variable. */
     systems::BasicVector<T>& next_discrete_state =
