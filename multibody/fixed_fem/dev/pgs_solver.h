@@ -17,11 +17,11 @@ struct PgsSolverParameters {
   // Over-relaxation paramter, in (0, 1]
   double relaxation{1};
   // Absolute contact velocity tolerance, m/s.
-  double abs_tolerance{1.0e-6};
+  double abs_tolerance{1.0e-4};
   // Relative contact velocity tolerance, unitless.
   double rel_tolerance{1.0e-4};
   // Maximum number of PGS iterations.
-  int max_iterations{100};
+  int max_iterations{20};
 };
 
 struct PgsSolverStats {
@@ -87,6 +87,18 @@ class PgsSolver final : public ContactSolver<T> {
     }
   };
 
+  void CopyContactResults(ContactSolverResults<T>* result) const {
+    const int nv = state_.v().size();
+    const int nc = state_.gamma().size() / 3;
+    result->Resize(nv, nc);
+    result->v_next = state_.v();
+    ExtractNormal(vc_, &(result->vn));
+    ExtractTangent(vc_, &(result->vt));
+    ExtractNormal(state_.gamma(), &(result->fn));
+    ExtractTangent(state_.gamma(), &(result->ft));
+    result->tau_contact = tau_c_;
+  }
+
   void PreProcessData(const SystemDynamicsData<T>& dynamics_data,
                       const PointContactData<T>& contact_data);
   bool VerifyConvergenceCriteria(int num_contacts, const VectorX<T>& vc,
@@ -111,3 +123,5 @@ class PgsSolver final : public ContactSolver<T> {
 }  // namespace contact_solvers
 }  // namespace multibody
 }  // namespace drake
+DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_NONSYMBOLIC_SCALARS(
+    class ::drake::multibody::contact_solvers::internal::PgsSolver);

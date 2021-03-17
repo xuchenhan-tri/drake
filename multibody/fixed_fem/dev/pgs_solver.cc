@@ -22,15 +22,14 @@ ContactSolverStatus PgsSolver<T>::SolveWithGuess(
   const auto& Dinv = pre_proc_data_.Dinv;
   const auto& W = pre_proc_data_.W;
 
-  // Aliases so solver's state.
+  // Aliases to solver's state.
   auto& v = state_.mutable_v();
   auto& gamma = state_.mutable_gamma();
 
-  // Aliases to parameters.
+  // Aliases to solver parameters.
   const int max_iters = parameters_.max_iterations;
   const double omega = parameters_.relaxation;
   const int nc = contact_data.num_contacts();
-  const int nv = dynamics_data.num_velocities();
 
   // Set initial guess.
   v = v_guess;
@@ -76,16 +75,11 @@ ContactSolverStatus PgsSolver<T>::SolveWithGuess(
     state_ = state_kp;
     vc_ = vc_kp;
     if (converged) {
-      result->Resize(nv, nc);
-      result->v_next = state_.v();
-      ExtractNormal(vc_, &(result->vn));
-      ExtractTangent(vc_, &(result->vt));
-      ExtractNormal(state_.gamma(), &(result->fn));
-      ExtractTangent(state_.gamma(), &(result->ft));
-      result->tau_contact = tau_c_;
+      CopyContactResults(result);
       return ContactSolverStatus::kSuccess;
     }
   }
+  CopyContactResults(result);
   return ContactSolverStatus::kFailure;
 }
 
@@ -150,7 +144,11 @@ bool PgsSolver<T>::VerifyConvergenceCriteria(
     const auto vci_kp = vc_kp.template segment<3>(3 * ic);
     const T vc_norm = vci.norm();
     const T vci_err = (vci_kp - vci).norm();
-    *vc_err = max(*vc_err, vci_err);
+    if constexpr (std::is_same_v<T, double>) {
+      *vc_err = max(*vc_err, vci_err);
+    } else {
+      *vc_err = max(*vc_err, vci_err.value());
+    }
     if (!within_error_bounds(vci_err, vc_norm)) {
       converged = false;
     }
@@ -161,8 +159,12 @@ bool PgsSolver<T>::VerifyConvergenceCriteria(
     const auto gi_kp = gamma_kp.template segment<3>(3 * ic);
     const T g_norm = gi.norm() / Wii_norm(ic);
     T g_err = (gi_kp - gi).norm();
-    *gamma_err = max(*gamma_err, g_err);
-    g_err /= Wii_norm(ic);
+    g_err *= Wii_norm(ic);
+    if constexpr (std::is_same_v<T, double>) {
+      *gamma_err = max(*gamma_err, g_err);
+    } else {
+      *gamma_err = max(*gamma_err, g_err.value());
+    }
     if (!within_error_bounds(g_err, g_norm)) {
       converged = false;
     }
@@ -201,4 +203,5 @@ Vector3<T> PgsSolver<T>::ProjectImpulse(
 }  // namespace multibody
 }  // namespace drake
 
-template class ::drake::multibody::contact_solvers::internal::PgsSolver<double>;
+DRAKE_DEFINE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_NONSYMBOLIC_SCALARS(
+    class ::drake::multibody::contact_solvers::internal::PgsSolver);
