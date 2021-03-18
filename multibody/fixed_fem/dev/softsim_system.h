@@ -8,10 +8,12 @@
 #include <vector>
 
 #include "drake/common/eigen_types.h"
+#include "drake/geometry/geometry_frame.h"
 #include "drake/geometry/proximity/hydroelastic_internal.h"
 #include "drake/geometry/proximity/surface_mesh.h"
 #include "drake/geometry/proximity/volume_mesh.h"
 #include "drake/geometry/proximity_properties.h"
+#include "drake/geometry/scene_graph.h"
 #include "drake/multibody/contact_solvers/contact_solver.h"
 #include "drake/multibody/fixed_fem/dev/contact_data_calculator.h"
 #include "drake/multibody/fixed_fem/dev/deformable_body_config.h"
@@ -69,7 +71,7 @@ class SoftsimSystem final : public systems::LeafSystem<T> {
 
   /* Construct a %SoftsimSystem with the fixed prescribed discrete time step.
    @pre dt > 0. */
-  explicit SoftsimSystem(double dt);
+  SoftsimSystem(double dt, geometry::SceneGraph<T>* scene_graph);
 
   // TODO(xuchenhan-tri): Identify deformable bodies with actual identifiers,
   //  which would make deleting deformable bodies easier to track in the future.
@@ -111,12 +113,31 @@ class SoftsimSystem final : public systems::LeafSystem<T> {
     geometry::SurfaceMesh<double> surface_mesh = rigid_geometry.value().mesh();
     collision_objects_.emplace_back(surface_mesh, proximity_properties,
                                     motion_update_callback);
+
+    frame_ids_.emplace_back(scene_graph_->RegisterFrame(
+        source_id_,
+        geometry::GeometryFrame("collision object" +
+                                std::to_string(collision_objects_.size()))));
+    const geometry::GeometryId id = scene_graph_->RegisterGeometry(
+        source_id_, frame_ids_.back(),
+        std::make_unique<geometry::GeometryInstance>(
+            math::RigidTransformd::Identity(), shape.Clone(),
+            "collision object"));
+    scene_graph_->AssignRole(
+        source_id_, id,
+        geometry::MakePhongIllustrationProperties(Vector4<double>(0, 1, 1, 1)));
   }
+
+  geometry::SourceId source_id() const { return source_id_; }
 
   double dt() const { return dt_; }
 
   const systems::OutputPort<T>& get_vertex_positions_output_port() const {
     return systems::System<T>::get_output_port(vertex_positions_port_);
+  }
+
+  const systems::OutputPort<T>& get_collision_objects_pose_output_port() const {
+    return systems::System<T>::get_output_port(collision_objects_pose_port_);
   }
 
   /** Returns the number of deformable bodies in the %SoftsimSystem. */
@@ -174,6 +195,18 @@ class SoftsimSystem final : public systems::LeafSystem<T> {
   void CopyVertexPositionsOut(const systems::Context<T>& context,
                               std::vector<VectorX<T>>* output) const;
 
+  /* Copies the poses of each collision object to the given output `poses`.
+   The order of the poses follows that in which the bodies were added. */
+  void OutputCollisionObjectsPose(const systems::Context<T>& context,
+                                  geometry::FramePoseVector<T>* poses) const {
+    unused(context);
+    poses->clear();
+    // Set the frames to the poses of the collision objects.
+    for (int i = 0; i < static_cast<int>(collision_objects_.size()); ++i) {
+      poses->set_value(frame_ids_[i], collision_objects_[i].pose());
+    }
+  }
+
   double dt_{0};
   const Vector3<T> gravity_{0, 0, -9.81};
   /* Scratch space for the time n and time n+1 FEM states to avoid repeated
@@ -193,8 +226,15 @@ class SoftsimSystem final : public systems::LeafSystem<T> {
   /* Names of all registered bodies. */
   std::vector<std::string> names_{};
   std::unique_ptr<contact_solvers::internal::ContactSolver<T>> contact_solver_;
+  /* SceneGraph pointer. Used to visualize collision objects only. */
+  geometry::SceneGraph<T>* scene_graph_;
+  /* Geometry source identifier for SoftsimSystem to interact with SceneGraph.
+   */
+  geometry::SourceId source_id_{};
+  std::vector<geometry::FrameId> frame_ids_{};
   /* Port Indexes. */
   systems::OutputPortIndex vertex_positions_port_;
+  systems::OutputPortIndex collision_objects_pose_port_;
 };
 }  // namespace fixed_fem
 }  // namespace multibody

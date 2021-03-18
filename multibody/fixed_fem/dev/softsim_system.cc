@@ -8,11 +8,19 @@ namespace drake {
 namespace multibody {
 namespace fixed_fem {
 template <typename T>
-SoftsimSystem<T>::SoftsimSystem(double dt) : dt_(dt) {
+SoftsimSystem<T>::SoftsimSystem(double dt, geometry::SceneGraph<T>* scene_graph)
+    : dt_(dt), scene_graph_(scene_graph) {
   DRAKE_DEMAND(dt > 0);
   vertex_positions_port_ =
       this->DeclareAbstractOutputPort("vertex_positions",
                                       &SoftsimSystem::CopyVertexPositionsOut)
+          .get_index();
+
+  source_id_ = scene_graph_->RegisterSource();
+  collision_objects_pose_port_ =
+      this->DeclareAbstractOutputPort(
+              "collision_objects_pose",
+              &SoftsimSystem::OutputCollisionObjectsPose)
           .get_index();
   this->DeclarePeriodicDiscreteUpdateEvent(dt, 0,
                                            &SoftsimSystem::AdvanceOneTimeStep);

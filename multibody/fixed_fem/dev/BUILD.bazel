@@ -353,6 +353,7 @@ drake_cc_library(
         ":pgs_solver",
         ":simplex_gaussian_quadrature",
         "//common:essential",
+        "//geometry:scene_graph",
         "//geometry:proximity_properties",
         "//geometry/proximity:hydroelastic_internal",
         "//geometry/proximity:surface_mesh",
@@ -548,6 +549,23 @@ drake_cc_binary(
         ":mesh_utilities",
         ":softsim_system",
         "//common:add_text_logging_gflags",
+        "//math:geometric_transform",
+        "//systems/analysis:simulator_gflags",
+        "//systems/framework:diagram_builder",
+    ],
+)
+
+drake_cc_binary(
+    name = "run_kinematic_pick_up",
+    srcs = [
+        "run_kinematic_pick_up.cc",
+    ],
+    deps = [
+        ":deformable_visualizer",
+        ":mesh_utilities",
+        ":softsim_system",
+        "//common:add_text_logging_gflags",
+        "//geometry:drake_visualizer",
         "//geometry:proximity_properties",
         "//math:geometric_transform",
         "//multibody/math:spatial_algebra",

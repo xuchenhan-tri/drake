@@ -6,7 +6,7 @@ built:
 
 ```
 bazel build //tools:drake_visualizer
-bazel build //multibody/fixed_fem/dev:run_cantilever_beam
+bazel build //multibody/fixed_fem/dev:run_kinematic_pick_up
 ```
 
 Then, in one terminal, launch the visualizer
@@ -16,29 +16,33 @@ bazel-bin/tools/drake_visualizer
 
 In another terminal, launch the demo
 ```
-bazel-bin/multibody/fixed_fem/dev/run_cantilever_beam
+bazel-bin/multibody/fixed_fem/dev/run_kinematic_pick_up
 ``` */
 #include <memory>
 
 #include <gflags/gflags.h>
 
 #include "drake//math/rigid_transform.h"
+#include "drake/geometry/drake_visualizer.h"
+#include "drake/geometry/proximity_properties.h"
+#include "drake/geometry/scene_graph.h"
 #include "drake/multibody/fixed_fem/dev/deformable_body_config.h"
 #include "drake/multibody/fixed_fem/dev/deformable_visualizer.h"
 #include "drake/multibody/fixed_fem/dev/mesh_utilities.h"
 #include "drake/multibody/fixed_fem/dev/softsim_system.h"
+#include "drake/multibody/math/spatial_algebra.h"
 #include "drake/systems/analysis/simulator_gflags.h"
 #include "drake/systems/framework/diagram.h"
 #include "drake/systems/framework/diagram_builder.h"
 
-DEFINE_double(simulation_time, 10.0,
+DEFINE_double(simulation_time, 30.0,
               "How many seconds to simulate the system.");
 DEFINE_double(dx, 0.1,
               "Distance between consecutive vertices in the tet mesh, with "
               "unit m. Must be positive and smaller than or equal to 0.1 to "
               "provide enough resolution for reasonable accuracy. The smaller "
               "this number is, the higher the resolution of the mesh will be.");
-DEFINE_double(E, 1e7,
+DEFINE_double(E, 5e6,
               "Young's modulus of the deformable objects, with unit Pa");
 DEFINE_double(nu, 0.4, "Poisson ratio of the deformable objects, unitless");
 DEFINE_double(density, 1e4,
@@ -59,15 +63,17 @@ namespace fixed_fem {
 
 int DoMain() {
   systems::DiagramBuilder<double> builder;
-  const double dt = 1.0 / 60.0;
+  auto scene_graph = builder.AddSystem<geometry::SceneGraph<double>>();
+
+  const double dt = 1.0 / 100.0;
   DRAKE_DEMAND(FLAGS_dx > 0);
   const double dx = std::min(0.1, FLAGS_dx);
-  auto* softsim_system = builder.AddSystem<SoftsimSystem<double>>(dt);
+  auto* softsim_system =
+      builder.AddSystem<SoftsimSystem<double>>(dt, scene_graph);
   const geometry::Box box(1.5, 0.2, 0.2);
 
   /* Set up the corotated bar. */
-  const math::RigidTransform<double> translation_left(
-      Vector3<double>(0, -0.5, 0));
+  const math::RigidTransform<double> translation_left(Vector3<double>(0, 0, 0));
   DeformableBodyConfig<double> nonlinear_bar_config;
   nonlinear_bar_config.set_youngs_modulus(FLAGS_E);
   nonlinear_bar_config.set_poisson_ratio(FLAGS_nu);
@@ -81,28 +87,81 @@ int DoMain() {
       softsim_system->RegisterDeformableBody(nonlinear_bar_geometry,
                                              "Corotated", nonlinear_bar_config);
 
-  /* Set up the linear bar. */
-  DeformableBodyConfig<double> linear_bar_config(nonlinear_bar_config);
-  linear_bar_config.set_material_model(MaterialModel::kLinear);
-  const math::RigidTransform<double> translation_right(
-      Vector3<double>(0, 0.5, 0));
-  const geometry::VolumeMesh<double> linear_bar_geometry =
-      MakeDiamondCubicBoxVolumeMesh<double>(box, dx, translation_right);
-  const SoftBodyIndex linear_bar_body_index =
-      softsim_system->RegisterDeformableBody(linear_bar_geometry, "Linear",
-                                             linear_bar_config);
-
-  /* Plug the two bars in to a wall. */
+  /* Plug the bar into a wall. */
   const Vector3<double> wall_origin(-0.75, 0, 0);
   const Vector3<double> wall_normal(1, 0, 0);
   softsim_system->SetWallBoundaryCondition(nonlinear_bar_body_index,
                                            wall_origin, wall_normal);
-  softsim_system->SetWallBoundaryCondition(linear_bar_body_index, wall_origin,
-                                           wall_normal);
+
+  /* Add a ground as collision geometry. */
+  geometry::Box ground{4, 4, 1};
+  const math::RigidTransform<double> X_WB(Vector3<double>{0, 0, -1.1});
+  geometry::ProximityProperties prox_prop;
+  geometry::AddContactMaterial({}, {}, CoulombFriction<double>(0.15, 0.15),
+                               &prox_prop);
+  auto callback = [&X_WB](const double& time,
+                          math::RigidTransform<double>* pose,
+                          SpatialVelocity<double>* spatial_velocity) {
+    unused(time);
+    *pose = X_WB;
+    spatial_velocity->SetZero();
+  };
+  softsim_system->RegisterCollisionGeometry(ground, prox_prop, callback);
+
+  const double finger_velocity = 0.8;
+  const double finger_initial_offset = 1;
+  const double close_time = 1.08;
+  const double finger_final_offset =
+      finger_initial_offset - finger_velocity * close_time;
+  /* Add the left finger. */
+  geometry::Box left{0.2, 0.1, 1};
+  auto left_callback = [=](const double& time,
+                           math::RigidTransform<double>* pose,
+                           SpatialVelocity<double>* spatial_velocity) {
+    pose->SetIdentity();
+    if (time < close_time) {
+      pose->set_translation(Vector3<double>(
+          0, -finger_initial_offset + finger_velocity * time, 0));
+      *spatial_velocity = SpatialVelocity<double>(
+          Vector3<double>(0, 0, 0), Vector3<double>(0, finger_velocity, 0));
+    } else {
+      pose->set_translation(Vector3<double>(
+          0, -finger_final_offset, finger_velocity * (time - close_time)));
+      *spatial_velocity = SpatialVelocity<double>(
+          Vector3<double>(0, 0, 0), Vector3<double>(0, 0, finger_velocity));
+    }
+  };
+  softsim_system->RegisterCollisionGeometry(left, prox_prop, left_callback);
+  /* Add the right finger. */
+  geometry::Box right{0.2, 0.1, 1};
+  auto right_callback = [=](const double& time,
+                            math::RigidTransform<double>* pose,
+                            SpatialVelocity<double>* spatial_velocity) {
+    pose->SetIdentity();
+    if (time < close_time) {
+      pose->set_translation(Vector3<double>(
+          0, finger_initial_offset - finger_velocity * time, 0));
+      *spatial_velocity = SpatialVelocity<double>(
+          Vector3<double>(0, 0, 0), Vector3<double>(0, -finger_velocity, 0));
+    } else {
+      pose->set_translation(Vector3<double>(
+          0, finger_final_offset, finger_velocity * (time - close_time)));
+      *spatial_velocity = SpatialVelocity<double>(
+          Vector3<double>(0, 0, 0), Vector3<double>(0, 0, finger_velocity));
+    }
+  };
+  softsim_system->RegisterCollisionGeometry(right, prox_prop, right_callback);
 
   auto& visualizer = *builder.AddSystem<DeformableVisualizer>(
       1.0 / 60.0, softsim_system->names(), softsim_system->meshes());
-  builder.Connect(*softsim_system, visualizer);
+  builder.Connect(softsim_system->get_vertex_positions_output_port(),
+                  visualizer.vertex_positions_input_port());
+
+  builder.Connect(
+      softsim_system->get_collision_objects_pose_output_port(),
+      scene_graph->get_source_pose_port(softsim_system->source_id()));
+  geometry::DrakeVisualizerd::AddToBuilder(&builder, *scene_graph);
+
   auto diagram = builder.Build();
   auto context = diagram->CreateDefaultContext();
   auto simulator =
@@ -115,7 +174,8 @@ int DoMain() {
 }  // namespace drake
 
 int main(int argc, char** argv) {
-  gflags::SetUsageMessage("Demonstration of large deformation.");
+  gflags::SetUsageMessage(
+      "Demonstration of contact solver working with deformable objects.");
   gflags::ParseCommandLineFlags(&argc, &argv, true);
   return drake::multibody::fixed_fem::DoMain();
 }
