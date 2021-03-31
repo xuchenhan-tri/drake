@@ -74,7 +74,7 @@ TEST_F(PgsTest, Solve) {
   EXPECT_EQ(
       pgs_.SolveWithGuess(dt, *dynamics_data_, *point_data_, v_guess, &result),
       ContactSolverStatus::kSuccess);
-  const double kTol = 1e-6;
+  const double kTol = 1e-4;
   EXPECT_TRUE(
       CompareMatrices(result.ft, Vector2<double>(1. / 12., 1. / 4.), kTol));
   EXPECT_TRUE(CompareMatrices(result.fn, Vector1<double>(1. / 3.), kTol));

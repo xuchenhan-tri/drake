@@ -69,7 +69,14 @@ class SoftsimSystem final : public systems::LeafSystem<T> {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(SoftsimSystem)
 
-  /* Construct a %SoftsimSystem with the fixed prescribed discrete time step.
+  /** (Advanced) Construct a %SoftsimSystem with the fixed prescribed discrete
+   time step. No SceneGraph pointer is provided so collision objects cannot be
+   visualized.
+   @pre dt > 0. */
+  explicit SoftsimSystem(double dt);
+
+  /** Constructs a %SoftsimSystem with the fixed prescribed discrete time step
+   and the given SceneGraph pointer.
    @pre dt > 0. */
   SoftsimSystem(double dt, geometry::SceneGraph<T>* scene_graph);
 
@@ -113,19 +120,20 @@ class SoftsimSystem final : public systems::LeafSystem<T> {
     geometry::SurfaceMesh<double> surface_mesh = rigid_geometry.value().mesh();
     collision_objects_.emplace_back(surface_mesh, proximity_properties,
                                     motion_update_callback);
-
-    frame_ids_.emplace_back(scene_graph_->RegisterFrame(
-        source_id_,
-        geometry::GeometryFrame("collision object" +
-                                std::to_string(collision_objects_.size()))));
-    const geometry::GeometryId id = scene_graph_->RegisterGeometry(
-        source_id_, frame_ids_.back(),
-        std::make_unique<geometry::GeometryInstance>(
-            math::RigidTransformd::Identity(), shape.Clone(),
-            "collision object"));
-    scene_graph_->AssignRole(
-        source_id_, id,
-        geometry::MakePhongIllustrationProperties(Vector4<double>(0, 1, 1, 1)));
+    if (scene_graph_ != nullptr) {
+      frame_ids_.emplace_back(scene_graph_->RegisterFrame(
+          source_id_,
+          geometry::GeometryFrame("collision object" +
+                                  std::to_string(collision_objects_.size()))));
+      const geometry::GeometryId id = scene_graph_->RegisterGeometry(
+          source_id_, frame_ids_.back(),
+          std::make_unique<geometry::GeometryInstance>(
+              math::RigidTransformd::Identity(), shape.Clone(),
+              "collision object"));
+      scene_graph_->AssignRole(source_id_, id,
+                               geometry::MakePhongIllustrationProperties(
+                                   Vector4<double>(0, 1, 1, 1)));
+    }
   }
 
   geometry::SourceId source_id() const { return source_id_; }
