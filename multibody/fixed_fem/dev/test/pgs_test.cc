@@ -17,6 +17,15 @@ using SparseMatrixd = Eigen::SparseMatrix<double>;
 using Eigen::VectorXd;
 using Triplet = Eigen::Triplet<double>;
 
+/* A test against analytic solution for a simple contact problem:
+ A single point in 3D is in contact with velocity (-1, -1, -1) in the contact
+ space without contact force, where the first two components are in arbtrary
+ orthogonal directions in the contact plane and the last component is the in the
+ normal direction to the contact plane. The friction coefficient is set to be
+ large enough to prevent any slipping. Hence, the expected contact velocity is
+ (0, 0, 0). With an arbitrary prescribed tangent matrix A, the contact impulse
+ can also be analytically calculated. The test confirms that the results from the
+ PGS solver matches the analytically calculated contact velocity and impulse. */
 class PgsTest : public ::testing::Test {
  protected:
   void SetUp() override {
@@ -68,6 +77,7 @@ class PgsTest : public ::testing::Test {
 };
 
 TEST_F(PgsTest, Solve) {
+  // Abitrary initial guess.
   Vector3<double> v_guess(0.12, 0.34, 0.56);
   const double dt = 0.1;
   ContactSolverResults<double> result;
