@@ -145,13 +145,13 @@ class SoftsimSystem final : public systems::LeafSystem<T> {
   std::vector<std::string> names_{};
   /* Port Indexes. */
   systems::OutputPortIndex vertex_positions_port_;
-  /* A map from the GeometryId of the collision geometry to the index of its
-   corresponding collision object representation used for rigid-deformable
-   contact. */
-  std::map<GeometryId, CollisionObjectIndex>
+  /* A map from the GeometryId of the rigid collision geometries to the indexes
+   of their corresponding collision object representations used for
+   rigid-deformable contact. */
+  std::map<geometry::GeometryId, CollisionObjectIndex>
       geometry_id_to_collision_object_index;
   /* The vector of all collision objects used in rigid-deformable contact. */
-  std::vector<CollisionObject> collision_objects;
+  std::vector<internal::CollisionObject> collision_objects;
 };
 }  // namespace fixed_fem
 }  // namespace multibody
