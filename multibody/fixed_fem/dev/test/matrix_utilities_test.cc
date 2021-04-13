@@ -105,6 +105,41 @@ GTEST_TEST(MatrixUtilitiesTest, AddScaledCofactorMatrixDerivative) {
     }
   }
 }
+
+GTEST_TEST(MatrixUtilitiesTest, ConvertEigenSparseMatrixToTriplets) {
+  const int kMatrixSize = 10;
+  const int kRowOffset = 2;
+  const int kColOffset = 3;
+  std::vector<Eigen::Triplet<double>> triplets;
+  triplets.emplace_back(0, 0, 7);
+  triplets.emplace_back(1, 3, 4);
+  triplets.emplace_back(2, 2, 8);
+  Eigen::SparseMatrix<double> A(kMatrixSize, kMatrixSize);
+  A.setFromTriplets(triplets.begin(), triplets.end());
+  auto expected_triplets =
+      ConvertEigenSparseMatrixToTripletsWithOffsets(A, kRowOffset, kColOffset);
+
+  // Sort the two triplets before comparing because the two sets of triplets are
+  // equivalent even they are permutations of each other.
+  const auto triplet_compare = [](const Eigen::Triplet<double>& t1,
+                                  const Eigen::Triplet<double>& t2) -> bool {
+    if (t1.row() != t2.row()) {
+      return t1.row() < t2.row();
+    }
+    if (t1.col() != t2.col()) {
+      return t1.col() < t2.col();
+    }
+    return t1.value() < t2.value();
+  };
+  std::sort(triplets.begin(), triplets.end(), triplet_compare);
+  std::sort(expected_triplets.begin(), expected_triplets.end(),
+            triplet_compare);
+  for (int i = 0; i < static_cast<int>(triplets.size()); ++i) {
+    EXPECT_EQ(triplets[i].row() + kRowOffset, expected_triplets[i].row());
+    EXPECT_EQ(triplets[i].col() + kColOffset, expected_triplets[i].col());
+    EXPECT_EQ(triplets[i].value(), expected_triplets[i].value());
+  }
+}
 }  // namespace
 }  // namespace internal
 }  // namespace fixed_fem

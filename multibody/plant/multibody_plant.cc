@@ -451,6 +451,10 @@ geometry::GeometryId MultibodyPlant<T>::RegisterCollisionGeometry(
   GeometryId id = RegisterGeometry(
       body, X_BG, shape, GetScopedName(*this, body.model_instance(), name));
 
+  if (deformable_solver_ != nullptr) {
+    deformable_solver_->RegisterCollisionObject(id, shape, properties);
+  }
+
   member_scene_graph().AssignRole(*source_id_, id, std::move(properties));
   const int collision_index = geometry_id_to_collision_index_.size();
   geometry_id_to_collision_index_[id] = collision_index;
@@ -1223,7 +1227,6 @@ void MultibodyPlant<T>::AppendContactResultsContinuousHydroelastic(
   }
 }
 
-namespace {
 template <typename T>
 std::pair<T, T> CombinePointContactParameters(const T& k1, const T& k2,
                                               const T& d1, const T& d2) {
@@ -1236,7 +1239,6 @@ std::pair<T, T> CombinePointContactParameters(const T& k1, const T& k2,
       safe_divide(k1 * k2, k1 + k2),                                   // k
       safe_divide(k2, k1 + k2) * d1 + safe_divide(k1, k1 + k2) * d2);  // d
 }
-}  // namespace
 
 template <typename T>
 void MultibodyPlant<T>::CalcContactResultsContinuousPointPair(
@@ -2172,6 +2174,15 @@ void MultibodyPlant<T>::CalcTamsiResults(
     stiffness[i] = contact_pairs[i].stiffness;
     damping[i] = contact_pairs[i].damping;
     phi0[i] = contact_pairs[i].phi0;
+  }
+
+  if (deformable_solver_ != nullptr) {
+    deformable_solver_->AssembleContactSolverData(
+        context0, v0, M0, std::move(minus_tau), std::move(phi0),
+        contact_jacobians.Jc, std::move(stiffness), std::move(damping),
+        std::move(mu));
+    deformable_solver_->SolveContactProblem(*contact_solver_, results);
+    return;
   }
 
   if (contact_solver_ != nullptr) {
@@ -3498,6 +3509,15 @@ AddMultibodyPlantSceneGraph(
 
 template AddMultibodyPlantSceneGraphResult<AutoDiffXd>
 AddMultibodyPlantSceneGraph(systems::DiagramBuilder<AutoDiffXd>* builder);
+
+// Add explicit instantiations for `CombinePointContactParameters`.
+// This does *not* support symbolic::Expression.
+template std::pair<double, double> CombinePointContactParameters(const double&,
+                                                                 const double&,
+                                                                 const double&,
+                                                                 const double&);
+template std::pair<AutoDiffXd, AutoDiffXd> CombinePointContactParameters(
+    const AutoDiffXd&, const AutoDiffXd&, const AutoDiffXd&, const AutoDiffXd&);
 
 }  // namespace multibody
 }  // namespace drake

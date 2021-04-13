@@ -17,11 +17,31 @@ double DeformableSolverBase<T>::dt() const {
 }
 
 template <typename T>
+double DeformableSolverBase<T>::default_contact_stiffness() const {
+  return MultibodyPlantDeformableSolverAttorney<T>::contact_stiffness(
+      multibody_plant());
+}
+
+template <typename T>
+double DeformableSolverBase<T>::default_contact_dissipation() const {
+  return MultibodyPlantDeformableSolverAttorney<T>::contact_dissipation(
+      multibody_plant());
+}
+
+template <typename T>
 void DeformableSolverBase<T>::DeclareDeformableState(const VectorX<T>& q,
                                                      const VectorX<T>& qdot,
                                                      const VectorX<T>& qddot) {
   MultibodyPlantDeformableSolverAttorney<T>::DeclareDeformableState(
       q, qdot, qddot, mbp_);
+}
+
+template <typename T>
+void DeformableSolverBase<T>::CalcJacobianTranslationVelocity(
+    const systems::Context<T>& context, const Vector3<T>& p_WP,
+    geometry::GeometryId geometry_id, EigenPtr<Matrix3X<T>> Jv_v_WAp) const {
+  MultibodyPlantDeformableSolverAttorney<T>::CalcJacobianTranslationVelocity(
+      multibody_plant(), context, p_WP, geometry_id, Jv_v_WAp);
 }
 }  // namespace internal
 }  // namespace multibody

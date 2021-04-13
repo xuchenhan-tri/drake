@@ -71,6 +71,11 @@ template <typename T>
 class MultibodyPlantDeformableSolverAttorney;
 }  // namespace internal
 
+namespace fixed_fem {
+template <typename T>
+class SoftsimBase;
+}
+
 // TODO(amcastro-tri): Add a section on contact models in
 // contact_model_doxygen.h.
 /// Enumeration for contact model options.
@@ -4738,6 +4743,62 @@ class MultibodyPlant : public internal::MultibodyTreeSystem<T> {
 #undef DRAKE_MBP_THROW_IF_NOT_FINALIZED
 /// @endcond
 
+// namespace internal {
+// // This is an attorney-client pattern providing SoftsimBase access to the
+// // private data/methods of MultibodyPlant in order to be able construct
+// contact
+// // solver data. This class is meant to be a short-term solution to quickly
+// // facilitate integration of softsim with MultibodyPlant without SceneGraph's
+// // support for deformable geometries.
+// class MultibodyPlantSoftsimAttorney {
+//  public:
+//   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(MultibodyPlantSoftsimAttorney);
+//   MultibodyPlantSoftsimAttorney() = delete;
+
+//  private:
+//   template <typename T>
+//   friend class drake::multibody::fixed_fem::SoftsimBase;
+//   // Return a point P's translational velocity (measured and expressed in
+//   // world frame) Jacobian in the world frame with respect to the generalized
+//   // velocities in the `mbp`.
+//   // @param[in] mbp         The plant in which the generalized velocities
+//   live.
+//   // @param[in] context     The state of the multibody system.
+//   // @param[in] p_WP        The position of the point P in world frame.
+//   // @param[in] geometry_id The geometry id of the body A to which the point
+//   P
+//   //                        is fixed.
+//   // @param[out] Jv_v_WAp   Point Ap's velocity Jacobian in the world frame
+//   with
+//   //                        respects to the generalized velocities where Ap
+//   is
+//   //                        the origin of the frame A shifted to P.
+//   template <typename T>
+//   static void CalcJacobianTranslationVelocity(
+//       const MultibodyPlant<T>& mbp, const systems::Context<T>& context,
+//       const Vector3<T>& p_WP, geometry::GeometryId geometry_id,
+//       EigenPtr<Matrix3X<T>> Jv_v_WAp) {
+//     const BodyIndex bodyA_index =
+//         mbp.geometry_id_to_body_index_.at(geometry_id);
+//     const Body<T>& bodyA = mbp.get_body(bodyA_index);
+//     const Frame<T>& frame_W = mbp.world_frame();
+//     mbp.internal_tree().CalcJacobianTranslationalVelocity(
+//         context, JacobianWrtVariable::kV, bodyA.body_frame(), frame_W, p_WP,
+//         frame_W, frame_W, Jv_v_WAp);
+//   }
+
+//   template <typename T>
+//   static const T& contact_stiffness(const MultibodyPlant<T>& mbp){
+//     return mbp.penalty_method_contact_parameters_.geometry_stiffness;
+//   }
+
+//   template <typename T>
+//   static const T& contact_dissipation(const MultibodyPlant<T>& mbp){
+//     return mbp.penalty_method_contact_parameters_.dissipation;
+//   }
+// };
+// }  // namespace internal
+
 // Forward declare to permit exclusive friendship for construction.
 template <typename T>
 struct AddMultibodyPlantSceneGraphResult;
@@ -4789,6 +4850,13 @@ AddMultibodyPlantSceneGraph(
     systems::DiagramBuilder<T>* builder,
     std::unique_ptr<MultibodyPlant<T>> plant,
     std::unique_ptr<geometry::SceneGraph<T>> scene_graph = nullptr);
+
+
+/// Combines the stiffness and dissipation parameters of two bodies in contact
+/// to form the stiffness and dissipation at the contact point.
+template <typename T>
+std::pair<T, T> CombinePointContactParameters(const T& k1, const T& k2,
+                                              const T& d1, const T& d2);
 
 /// Temporary result from `AddMultibodyPlantSceneGraph`. This cannot be
 /// constructed outside of this method.

@@ -22,6 +22,7 @@ bazel-bin/multibody/fixed_fem/dev/run_cantilever_beam
 
 #include <gflags/gflags.h>
 
+#include "drake/geometry/proximity_properties.h"
 #include "drake/multibody/fixed_fem/dev/deformable_body_config.h"
 #include "drake/multibody/fixed_fem/dev/deformable_visualizer.h"
 #include "drake/multibody/fixed_fem/dev/mesh_utilities.h"
@@ -68,6 +69,10 @@ int DoMain() {
       static_cast<SoftsimSystem<double>&>(plant->mutable_deformable_solver());
 
   const geometry::Box box(1.5, 0.2, 0.2);
+
+  /* The friction is a dummy since there's no contact in this demo. */
+  const CoulombFriction<double> surface_friction(0, 0);
+
   /* Set up the corotated bar. */
   const math::RigidTransform<double> translation_left(
       Vector3<double>(0, -0.5, 0));
@@ -80,9 +85,13 @@ int DoMain() {
   nonlinear_bar_config.set_material_model(MaterialModel::kCorotated);
   const geometry::VolumeMesh<double> nonlinear_bar_geometry =
       MakeDiamondCubicBoxVolumeMesh<double>(box, dx, translation_left);
+  geometry::ProximityProperties corotated_proximity_props;
+  geometry::AddContactMaterial(std::nullopt, std::nullopt, std::nullopt,
+                               surface_friction, &corotated_proximity_props);
   const SoftBodyIndex nonlinear_bar_body_index =
-      deformable_solver.RegisterDeformableBody(
-          nonlinear_bar_geometry, "Corotated", nonlinear_bar_config);
+      deformable_solver.RegisterDeformableBody(nonlinear_bar_geometry,
+                                             "Corotated", nonlinear_bar_config,
+                                             corotated_proximity_props);
 
   /* Set up the linear bar. */
   DeformableBodyConfig<double> linear_bar_config(nonlinear_bar_config);
@@ -91,9 +100,13 @@ int DoMain() {
       Vector3<double>(0, 0.5, 0));
   const geometry::VolumeMesh<double> linear_bar_geometry =
       MakeDiamondCubicBoxVolumeMesh<double>(box, dx, translation_right);
+  geometry::ProximityProperties linear_proximity_props;
+  geometry::AddContactMaterial(std::nullopt, std::nullopt, std::nullopt,
+                               surface_friction, &linear_proximity_props);
   const SoftBodyIndex linear_bar_body_index =
       deformable_solver.RegisterDeformableBody(linear_bar_geometry, "Linear",
-                                               linear_bar_config);
+                                             linear_bar_config,
+                                             linear_proximity_props);
 
   /* Plug the two bars in to a wall. */
   const Vector3<double> wall_origin(-0.75, 0, 0);
@@ -106,7 +119,7 @@ int DoMain() {
 
   auto& visualizer = *builder.AddSystem<DeformableVisualizer>(
       1.0 / 60.0, deformable_solver.names(),
-      deformable_solver.initial_meshes());
+      deformable_solver.meshes());
   builder.Connect(plant->get_deformable_vertex_positions_output_port(),
                   visualizer.get_input_port());
   auto diagram = builder.Build();

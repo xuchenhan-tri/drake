@@ -16,6 +16,9 @@ using DofIndex = TypeSafeIndex<class DofTag>;
 
 /** Index into a vector of deformable bodies. */
 using SoftBodyIndex = TypeSafeIndex<class BodyTag>;
+
+/** Index into a vector of rigid collision objects. */
+using CollisionObjectIndex = TypeSafeIndex<class CollisionObjectTag>;
 }  // namespace fixed_fem
 }  // namespace multibody
 }  // namespace drake

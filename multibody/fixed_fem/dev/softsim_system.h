@@ -1,13 +1,18 @@
 #pragma once
 
+#include <map>
 #include <memory>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "drake/common/eigen_types.h"
+#include "drake/common/unused.h"
 #include "drake/geometry/proximity/volume_mesh.h"
+#include "drake/multibody/fixed_fem/dev/collision_objects.h"
+#include "drake/multibody/fixed_fem/dev/contact_solver_data.h"
 #include "drake/multibody/fixed_fem/dev/deformable_body_config.h"
+#include "drake/multibody/fixed_fem/dev/deformable_rigid_contact_data.h"
 #include "drake/multibody/fixed_fem/dev/dirichlet_boundary_condition.h"
 #include "drake/multibody/fixed_fem/dev/dynamic_elasticity_element.h"
 #include "drake/multibody/fixed_fem/dev/dynamic_elasticity_model.h"
@@ -70,11 +75,20 @@ class SoftsimSystem final
   /** Adds a deformable body modeled with linear simplex element, linear
    quadrature rule, mid-point integration rule and the given `config`. Returns
    the index of the newly added deformable body.
+   @param[in] mesh        The volume mesh representing the deformable body
+                          geometry.
+   @param[in] name        The name of the deformable body.
+   @param[in] config      The physical properties of the deformable body.
+   @param[in] properties  The proximity properties associated with the collision
+                          geometry. They *must* include the (`material`,
+                          `coulomb_friction`) property of type
+                          CoulombFriction<double>.
    @pre `name` is distinct from names of all previously registered bodies.
    @pre config.IsValid() == true. */
-  SoftBodyIndex RegisterDeformableBody(const geometry::VolumeMesh<T>& mesh,
-                                       std::string name,
-                                       const DeformableBodyConfig<T>& config);
+  SoftBodyIndex RegisterDeformableBody(
+      const geometry::VolumeMesh<T>& mesh, std::string name,
+      const DeformableBodyConfig<T>& config,
+      geometry::ProximityProperties properties);
 
   /** Set zero Dirichlet boundary conditions for a given body. All vertices in
    the mesh of corresponding to the deformable body with `body_id` within
@@ -87,14 +101,12 @@ class SoftsimSystem final
                                 double distance_tolerance = 1e-6);
 
   /** Returns the number of deformable bodies in the %SoftsimSystem. */
-  int num_bodies() const { return initial_meshes_.size(); }
+  int num_bodies() const { return meshes_.size(); }
 
-  /** The volume meshes of the deformable bodies at the time of registration.
+  /** The volume meshes of the deformable bodies.
    The meshes have the same order as the registration of their corresponding
    deformable bodies. */
-  const std::vector<geometry::VolumeMesh<T>>& initial_meshes() const {
-    return initial_meshes_;
-  }
+  const std::vector<geometry::VolumeMesh<T>>& meshes() const { return meshes_; }
 
   /** The names of all the registered bodies in the same order as the bodies
    were registered. */
@@ -114,16 +126,97 @@ class SoftsimSystem final
   VectorX<T> CalcFreeMotion(const VectorX<T>& state0,
                             int deformable_body_index) const final;
 
+  /* Implements SoftsimBase::BuildRigidGeometryRepresentations(). */
+  void RegisterCollisionObject(
+      geometry::GeometryId geometry_id, const geometry::Shape& shape,
+      const geometry::ProximityProperties& properties) final;
+
+  /* Updates the positions of the vertices of the deformable mesh associated
+   with the deformable body with index `id` given the generalized positions of
+   the deforamble body. */
+  void UpdateMesh(SoftBodyIndex id, const VectorX<T>& q) const {
+    const auto p_WVs = Eigen::Map<const Matrix3X<T>>(q.data(), 3, q.size() / 3);
+    std::vector<geometry::VolumeElement> tets = meshes_[id].tetrahedra();
+    // We assume the deformable body frame is always the same as the world frame
+    // for now. It probably makes sense to have the frame move with the body in
+    // the future.
+    std::vector<geometry::VolumeVertex<T>> vertices_D;
+    for (int i = 0; i < p_WVs.cols(); ++i) {
+      vertices_D.push_back(geometry::VolumeVertex<T>(p_WVs.col(i)));
+    }
+    meshes_[id] = {std::move(tets), std::move(vertices_D)};
+  }
+
+  /* Updates the world pose of all rigid collision geometries registered in
+   `this` SoftsimSystem. */
+  void UpdatePoseForAllCollisionObjects(const systems::Context<T>& context);
+
+  void AssembleContactSolverData(const systems::Context<T>& context0,
+                                 const VectorX<T>& v0, const MatrixX<T>& M0,
+                                 VectorX<T>&& minus_tau, VectorX<T>&& phi0,
+                                 const MatrixX<T>& contact_jacobians,
+                                 VectorX<T>&& stiffness, VectorX<T>&& damping,
+                                 VectorX<T>&& mu) final;
+
+  /* Calculates the point contact data associated with the contacts between all
+  rigid bodies and the deformable body with `deformable_id` and appends the
+  results to `point_contact_data_storage`.
+  @param context                     The system state at the time the
+                                     contact solver data is evaluated.
+  @param deformable_id               The SoftBodyIndex of the deformable
+                                     body of interest.
+  @param deformable_dof_offset       The starting index of the dofs of the
+                                     deformable body of interest.
+  @param point_contact_data_storage  Output variable that collects the appended
+                                     data. */
+  void AppendPointContactData(
+      const systems::Context<T>& context, SoftBodyIndex deformable_id,
+      int deformable_dof_offset,
+      internal::PointContactDataStorage<T>* point_contact_data_storage) const;
+
+  /* Calculates the DeformableRigidContactData with the contacts between the
+   rigid geometry with `rigid_id` and the deformable body with
+   `deformable_id`. */
+  internal::DeformableRigidContactData<T> CalcDeformableRigidContactData(
+      geometry::GeometryId rigid_id, SoftBodyIndex deformable_id) const;
+
+  /* Uses the `contact_data` to construct the contact jacobian entries with
+   respect to the rigid dofs and then offset the row indices of the entries by
+   `row_offset` and append the entries to `contact_jacobian_triplets`. */
+  void AppendContactJacobianRigid(
+      const systems::Context<T>& context,
+      const internal::DeformableRigidContactData<T>& contact_data,
+      int row_offset,
+      std::vector<Eigen::Triplet<T>>* contact_jacobian_triplets) const;
+
+  /* Uses the `contact_data` to construct the contact jacobian entries with
+   respect to the deformable dofs and then offset the row/column indices of the
+   entries by `row_offset`/`col_offset` and append the entries to
+   `contact_jacobian_triplets`. */
+  void AppendContactJacobianDeformable(
+      const internal::DeformableRigidContactData<T>& contact_data,
+      int row_offset, int col_offset,
+      std::vector<Eigen::Triplet<T>>* contact_jacobian_triplets) const;
+
+  void SolveContactProblem(
+      const contact_solvers::internal::ContactSolver<T>& contact_solver,
+      contact_solvers::internal::ContactSolverResults<T>* results) const final;
+
   /* Scratch space for the time n and time n+1 FEM states to avoid repeated
    allocation. */
   mutable std::vector<std::unique_ptr<FemStateBase<T>>> prev_fem_states_{};
   mutable std::vector<std::unique_ptr<FemStateBase<T>>> next_fem_states_{};
-  /* Initial mesh for all bodies at time of registration. */
-  std::vector<geometry::VolumeMesh<T>> initial_meshes_{};
+  /* Volume meshes for all deformablebodies. */
+  mutable std::vector<geometry::VolumeMesh<T>> meshes_{};
+  std::vector<geometry::ProximityProperties> deformable_proximity_properties_{};
   /* Solvers for all bodies. */
   std::vector<std::unique_ptr<FemSolver<T>>> fem_solvers_{};
   /* Names of all registered bodies. */
   std::vector<std::string> names_{};
+  /* Port Indexes. */
+  systems::OutputPortIndex vertex_positions_port_;
+  /* All rigid collision objects used in rigid-deformable contact. */
+  internal::CollisionObjects<T> collision_objects_;
 };
 }  // namespace fixed_fem
 }  // namespace multibody
