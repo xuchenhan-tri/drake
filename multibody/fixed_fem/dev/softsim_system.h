@@ -126,6 +126,11 @@ class SoftsimSystem final : public systems::LeafSystem<T> {
   void CopyVertexPositionsOut(const systems::Context<T>& context,
                               std::vector<VectorX<T>>* output) const;
 
+  /* Implements SoftsimBase::BuildRigidGeometryRepresentations(). */
+  void RegisterCollisionObject(geometry::GeometryId geometry_id,
+                               const geometry::Shape& shape,
+                               geometry::ProximityProperties properties) final;
+
   double dt_{0};
   const Vector3<T> gravity_{0, 0, -9.81};
   /* Scratch space for the time n and time n+1 FEM states to avoid repeated
@@ -140,6 +145,13 @@ class SoftsimSystem final : public systems::LeafSystem<T> {
   std::vector<std::string> names_{};
   /* Port Indexes. */
   systems::OutputPortIndex vertex_positions_port_;
+  /* A map from the GeometryId of the collision geometry to the index of its
+   corresponding collision object representation used for rigid-deformable
+   contact. */
+  std::map<GeometryId, CollisionObjectIndex>
+      geometry_id_to_collision_object_index;
+  /* The vector of all collision objects used in rigid-deformable contact. */
+  std::vector<CollisionObject> collision_objects;
 };
 }  // namespace fixed_fem
 }  // namespace multibody
