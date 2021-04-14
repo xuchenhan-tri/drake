@@ -205,6 +205,18 @@ void SoftsimSystem<T>::UpdatePoseForAllCollisionObjects(
     collision_objects.UpdatePoseInWorld(id, pose);
   }
 }
+
+template <typename T>
+void SoftsimSystem<T>::BuildContactSolverData(
+    const systems::Context<T>& context0, const VectorX<T>& v0,
+    const MatrixX<T>& M0, const VectorX<T>& minus_tau, const VectorX<T>& phi0,
+    const MatrixX<T>& contact_jacobians, const VectorX<T>& stiffness,
+    const VectorX<T>& damping, const VectorX<T>& mu) {}
+
+template <typename T>
+void SoftsimSystem<T>::SolveContactProblem(
+    const contact_solvers::internal::ContactSolver<T>& contact_solver,
+    contact_solvers::internal::ContactSolverResults<T>* results) const {}
 }  // namespace fixed_fem
 }  // namespace multibody
 }  // namespace drake

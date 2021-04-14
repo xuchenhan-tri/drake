@@ -2159,6 +2159,14 @@ void MultibodyPlant<T>::CalcTamsiResults(
     phi0[i] = contact_pairs[i].phi0;
   }
 
+  if (softsim_base_ != nullptr) {
+    softsim_base_->BuildContactSolverData(context0, v0, M0, minus_tau, phi0,
+                                          contact_jacobians.Jc, stiffness,
+                                          damping, mu);
+    softsim_base_->SolveContactProblem(*contact_solver_, results);
+    return;
+  }
+
   if (contact_solver_ != nullptr) {
     CallContactSolver(context0.get_time(), v0, M0, minus_tau, phi0,
                       contact_jacobians.Jc, stiffness, damping, mu, results);

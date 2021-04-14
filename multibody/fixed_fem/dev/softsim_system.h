@@ -139,6 +139,18 @@ class SoftsimSystem final : public SoftsimBase<T>,
    `this` SoftsimSystem. */
   void UpdatePoseForAllCollisionObjects(const systems::Context<T>& context);
 
+  /* Implements SoftsimBase::BuildContactSolverData(). */
+  void BuildContactSolverData(
+      const systems::Context<T>& context0, const VectorX<T>& v0,
+      const MatrixX<T>& M0, const VectorX<T>& minus_tau, const VectorX<T>& phi0,
+      const MatrixX<T>& contact_jacobians, const VectorX<T>& stiffness,
+      const VectorX<T>& damping, const VectorX<T>& mu) final;
+
+  /* Implements SoftsimBase::SolveContactProblem(). */
+  void SolveContactProblem(
+      const contact_solvers::internal::ContactSolver<T>& contact_solver,
+      contact_solvers::internal::ContactSolverResults<T>* results) const final;
+
   double dt_{0};
   const Vector3<T> gravity_{0, 0, -9.81};
   /* Scratch space for the time n and time n+1 FEM states to avoid repeated
