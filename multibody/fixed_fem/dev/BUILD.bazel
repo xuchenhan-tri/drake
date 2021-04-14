@@ -527,6 +527,15 @@ drake_cc_library(
 )
 # === test/ ===
 
+filegroup(
+    name = "test_obj_files",
+    testonly = 1,
+    srcs = [
+        "test/non_convex_mesh.obj",
+        "test/quad_cube.obj",
+    ],
+)
+
 drake_cc_library(
     name = "test_utilities",
     testonly = 1,
@@ -538,8 +547,10 @@ drake_cc_library(
 
 drake_cc_googletest(
     name = "collision_objects_test",
+    data = [":test_obj_files"],
     deps = [
         ":collision_objects",
+        "//common:find_resource",
     ],
 )
 

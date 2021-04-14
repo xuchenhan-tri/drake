@@ -44,7 +44,7 @@ class CollisionObjects : public geometry::ShapeReifier {
   }
 
  private:
- friend class CollisionObjectsTest;
+  friend class CollisionObjectsTest;
   /* Data to be used during reification. It is passed as the `user_data`
    parameter in the ImplementGeometry API. */
   struct ReifyData {
