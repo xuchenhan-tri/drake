@@ -79,6 +79,7 @@ drake_cc_library(
         "//math:orthonormal_basis",
         "//multibody/contact_solvers:contact_solver",
         "//multibody/contact_solvers:sparse_linear_operator",
+        "//multibody/fixed_fem:softsim_base",
         "//multibody/hydroelastics:hydroelastic_engine",
         "//multibody/topology:multibody_graph",
         "//multibody/tree",

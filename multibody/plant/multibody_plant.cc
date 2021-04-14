@@ -461,7 +461,9 @@ geometry::GeometryId MultibodyPlant<T>::RegisterCollisionGeometry(
   default_coulomb_friction_.push_back(coulomb_friction);
   DRAKE_ASSERT(num_bodies() == static_cast<int>(collision_geometries_.size()));
   collision_geometries_[body.index()].push_back(id);
-  softsim_base_->RegisterCollisionGeometry(id, shape, properties);
+  if (softsim_base_ != nullptr) {
+    softsim_base_->RegisterCollisionObject(id, shape, properties);
+  }
   return id;
 }
 

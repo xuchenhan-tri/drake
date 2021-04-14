@@ -26,6 +26,7 @@ bazel-bin/multibody/fixed_fem/dev/run_cantilever_beam
 #include "drake/multibody/fixed_fem/dev/deformable_visualizer.h"
 #include "drake/multibody/fixed_fem/dev/mesh_utilities.h"
 #include "drake/multibody/fixed_fem/dev/softsim_system.h"
+#include "drake/multibody/plant/multibody_plant.h"
 #include "drake/systems/analysis/simulator_gflags.h"
 #include "drake/systems/framework/diagram.h"
 #include "drake/systems/framework/diagram_builder.h"
@@ -61,7 +62,8 @@ int DoMain() {
   const double dt = 1.0 / 60.0;
   DRAKE_DEMAND(FLAGS_dx > 0);
   const double dx = std::min(0.1, FLAGS_dx);
-  auto* softsim_system = builder.AddSystem<SoftsimSystem<double>>(dt);
+  auto* mbp = builder.AddSystem<multibody::MultibodyPlant<double>>(dt);
+  auto* softsim_system = builder.AddSystem<SoftsimSystem<double>>(mbp);
   const geometry::Box box(1.5, 0.2, 0.2);
 
   /* Set up the corotated bar. */

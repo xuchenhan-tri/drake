@@ -20,6 +20,7 @@
 #include "drake/math/rigid_transform.h"
 #include "drake/multibody/contact_solvers/contact_solver.h"
 #include "drake/multibody/contact_solvers/contact_solver_results.h"
+#include "drake/multibody/fixed_fem/softsim_base.h"
 #include "drake/multibody/hydroelastics/hydroelastic_engine.h"
 #include "drake/multibody/plant/contact_jacobians.h"
 #include "drake/multibody/plant/contact_results.h"
@@ -3814,6 +3815,14 @@ class MultibodyPlant : public internal::MultibodyTreeSystem<T> {
   }
   /// @} <!-- Introspection -->
 
+  /// Connect `this` plant to the given Softsim utility class to allow for
+  /// experimentation with deformable simulation.
+  /// @pre softsim_base != nullptr.
+  void set_softsim_base(fixed_fem::SoftsimBase<T>* softsim_base) {
+    DRAKE_DEMAND(softsim_base != nullptr);
+    softsim_base_ = softsim_base;
+  }
+
   using internal::MultibodyTreeSystem<T>::is_discrete;
   using internal::MultibodyTreeSystem<T>::EvalPositionKinematics;
   using internal::MultibodyTreeSystem<T>::EvalVelocityKinematics;
@@ -4651,6 +4660,9 @@ class MultibodyPlant : public internal::MultibodyTreeSystem<T> {
   // Vector (with size num_bodies()) of default poses for each body. This is
   // only used if Body::is_floating() is true.
   std::vector<math::RigidTransform<double>> X_WB_default_list_;
+
+  // (Experimental) Bare pointer to softsim utilities.
+  fixed_fem::SoftsimBase<T>* softsim_base_{nullptr};
 };
 
 /// @cond

@@ -23,6 +23,28 @@ drake_cc_library(
 )
 
 drake_cc_library(
+    name = "collision_objects",
+    srcs = [
+        "collision_objects.cc",
+    ],
+    hdrs = [
+        "collision_objects.h",
+    ],
+    deps = [
+        "//geometry:geometry_ids",
+        "//geometry:proximity_properties",
+        "//geometry:shape_specification",
+        "//geometry/proximity:make_box_mesh",
+        "//geometry/proximity:make_capsule_mesh",
+        "//geometry/proximity:make_cylinder_mesh",
+        "//geometry/proximity:make_ellipsoid_mesh",
+        "//geometry/proximity:make_sphere_mesh",
+        "//geometry/proximity:obj_to_surface_mesh",
+        "//geometry/proximity:surface_mesh",
+    ],
+)
+
+drake_cc_library(
     name = "constitutive_model_utilities",
     hdrs = [
         "constitutive_model_utilities.h",
@@ -271,6 +293,7 @@ drake_cc_library(
         "softsim_system.h",
     ],
     deps = [
+        ":collision_objects",
         ":corotated_model",
         ":deformable_body_config",
         ":dirichlet_boundary_condition",
@@ -282,6 +305,8 @@ drake_cc_library(
         ":simplex_gaussian_quadrature",
         "//common:essential",
         "//geometry/proximity:volume_mesh",
+        "//multibody/fixed_fem:softsim_base",
+        "//multibody/plant",
         "//systems/framework:leaf_system",
     ],
 )
@@ -442,6 +467,7 @@ drake_cc_binary(
         ":softsim_system",
         "//common:add_text_logging_gflags",
         "//math:geometric_transform",
+        "//multibody/plant",
         "//systems/analysis:simulator_gflags",
         "//systems/framework:diagram_builder",
     ],
@@ -708,6 +734,7 @@ drake_cc_googletest(
         "//common/test_utilities:eigen_matrix_compare",
         "//common/test_utilities:expect_throws_message",
         "//geometry/proximity:make_box_mesh",
+        "//multibody/plant",
     ],
 )
 

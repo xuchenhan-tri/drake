@@ -5,6 +5,7 @@
 #include "drake/common/test_utilities/eigen_matrix_compare.h"
 #include "drake/common/test_utilities/expect_throws_message.h"
 #include "drake/geometry/proximity/make_box_mesh.h"
+#include "drake/multibody/plant/multibody_plant.h"
 
 namespace drake {
 namespace multibody {
@@ -75,7 +76,8 @@ class SoftsimSystemTest : public ::testing::Test {
   }
 
   /* The SoftsimSystem under test. */
-  SoftsimSystem<double> softsim_system_{kDt};
+  multibody::MultibodyPlant<double> mbp_{kDt};
+  SoftsimSystem<double> softsim_system_{&mbp_};
 };
 
 namespace {

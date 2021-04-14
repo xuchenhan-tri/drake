@@ -2,18 +2,20 @@
 
 #include "drake/multibody/fixed_fem/dev/corotated_model.h"
 #include "drake/multibody/fixed_fem/dev/linear_constitutive_model.h"
+#include "drake/multibody/plant/multibody_plant.h"
 
 namespace drake {
 namespace multibody {
 namespace fixed_fem {
 template <typename T>
-SoftsimSystem<T>::SoftsimSystem(double dt) : dt_(dt) {
-  DRAKE_DEMAND(dt > 0);
+SoftsimSystem<T>::SoftsimSystem(MultibodyPlant<T>* mbp)
+    : SoftsimBase<T>(mbp), dt_(mbp->time_step()) {
+  DRAKE_DEMAND(dt_ > 0);
   vertex_positions_port_ =
       this->DeclareAbstractOutputPort("vertex_positions",
                                       &SoftsimSystem::CopyVertexPositionsOut)
           .get_index();
-  this->DeclarePeriodicDiscreteUpdateEvent(dt, 0,
+  this->DeclarePeriodicDiscreteUpdateEvent(dt_, 0,
                                            &SoftsimSystem::AdvanceOneTimeStep);
 }
 
@@ -179,6 +181,13 @@ void SoftsimSystem<T>::CopyVertexPositionsOut(
     const auto& q = discrete_value.head(num_dofs);
     (*output)[i] = q;
   }
+}
+
+template <typename T>
+void SoftsimSystem<T>::RegisterCollisionObject(
+    geometry::GeometryId geometry_id, const geometry::Shape& shape,
+    geometry::ProximityProperties properties) {
+  collision_objects.AddCollisionObject(geometry_id, shape, properties);
 }
 }  // namespace fixed_fem
 }  // namespace multibody

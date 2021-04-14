@@ -1,0 +1,23 @@
+#- * - python - * -
+load("//tools/lint:lint.bzl", "add_lint_tests")
+load(
+    "//tools/skylark:drake_cc.bzl",
+    "drake_cc_library",
+)
+
+package(
+    default_visibility = ["//visibility:public"],
+)
+
+drake_cc_library(
+    name = "softsim_base",
+    hdrs = [
+        "softsim_base.h",
+    ],
+    deps = [
+        "//geometry:geometry_ids",
+        "//geometry:shape_specification",
+    ],
+)
+
+add_lint_tests()

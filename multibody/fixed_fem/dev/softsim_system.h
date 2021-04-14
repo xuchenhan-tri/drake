@@ -1,5 +1,6 @@
 #pragma once
 
+#include <map>
 #include <memory>
 #include <string>
 #include <utility>
@@ -7,6 +8,7 @@
 
 #include "drake/common/eigen_types.h"
 #include "drake/geometry/proximity/volume_mesh.h"
+#include "drake/multibody/fixed_fem/dev/collision_objects.h"
 #include "drake/multibody/fixed_fem/dev/deformable_body_config.h"
 #include "drake/multibody/fixed_fem/dev/dirichlet_boundary_condition.h"
 #include "drake/multibody/fixed_fem/dev/dynamic_elasticity_element.h"
@@ -14,6 +16,7 @@
 #include "drake/multibody/fixed_fem/dev/fem_solver.h"
 #include "drake/multibody/fixed_fem/dev/linear_simplex_element.h"
 #include "drake/multibody/fixed_fem/dev/simplex_gaussian_quadrature.h"
+#include "drake/multibody/fixed_fem/softsim_base.h"
 #include "drake/systems/framework/leaf_system.h"
 namespace drake {
 namespace multibody {
@@ -55,13 +58,14 @@ namespace fixed_fem {
 
  @tparam_non_symbolic T.*/
 template <typename T>
-class SoftsimSystem final : public systems::LeafSystem<T> {
+class SoftsimSystem final : public SoftsimBase<T>,
+                            public systems::LeafSystem<T> {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(SoftsimSystem)
 
   /* Construct a %SoftsimSystem with the fixed prescribed discrete time step.
    @pre dt > 0. */
-  explicit SoftsimSystem(double dt);
+  explicit SoftsimSystem(multibody::MultibodyPlant<T>* mbp);
 
   // TODO(xuchenhan-tri): Identify deformable bodies with actual identifiers,
   //  which would make deleting deformable bodies easier to track in the future.
@@ -150,8 +154,8 @@ class SoftsimSystem final : public systems::LeafSystem<T> {
    rigid-deformable contact. */
   std::map<geometry::GeometryId, CollisionObjectIndex>
       geometry_id_to_collision_object_index;
-  /* The vector of all collision objects used in rigid-deformable contact. */
-  std::vector<internal::CollisionObject> collision_objects;
+  /* All rigid collision objects used in rigid-deformable contact. */
+  internal::CollisionObjects collision_objects;
 };
 }  // namespace fixed_fem
 }  // namespace multibody
