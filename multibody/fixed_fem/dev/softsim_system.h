@@ -135,6 +135,10 @@ class SoftsimSystem final : public SoftsimBase<T>,
                                const geometry::Shape& shape,
                                geometry::ProximityProperties properties) final;
 
+  /* Updates the world pose of all rigid collision geometries registered in
+   `this` SoftsimSystem. */
+  void UpdatePoseForAllCollisionObjects(const systems::Context<T>& context);
+
   double dt_{0};
   const Vector3<T> gravity_{0, 0, -9.81};
   /* Scratch space for the time n and time n+1 FEM states to avoid repeated
@@ -149,13 +153,8 @@ class SoftsimSystem final : public SoftsimBase<T>,
   std::vector<std::string> names_{};
   /* Port Indexes. */
   systems::OutputPortIndex vertex_positions_port_;
-  /* A map from the GeometryId of the rigid collision geometries to the indexes
-   of their corresponding collision object representations used for
-   rigid-deformable contact. */
-  std::map<geometry::GeometryId, CollisionObjectIndex>
-      geometry_id_to_collision_object_index;
   /* All rigid collision objects used in rigid-deformable contact. */
-  internal::CollisionObjects collision_objects;
+  internal::CollisionObjects<T> collision_objects;
 };
 }  // namespace fixed_fem
 }  // namespace multibody

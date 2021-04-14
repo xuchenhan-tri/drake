@@ -56,7 +56,7 @@ class CollisionObjectsTest : public ::testing::Test {
 
   double resolution_hint() const { return collision_objects_.resolution_hint_; }
 
-  CollisionObjects collision_objects_;
+  CollisionObjects<double> collision_objects_;
   ProximityProperties proximity_properties_;
 };
 
@@ -147,6 +147,8 @@ TEST_F(CollisionObjectsTest, AddMesh) {
       ReadObjToSurfaceMesh(mesh.filename(), mesh.scale());
   EXPECT_TRUE(expected_surface_mesh.Equal(collision_objects_.mesh(id)));
 }
+
+// TODO(xuchenhan-tri): Add tests for halfspace and UpdatePose().
 }  // namespace
 }  // namespace internal
 }  // namespace fixed_fem

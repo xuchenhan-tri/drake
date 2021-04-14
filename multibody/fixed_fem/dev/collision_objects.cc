@@ -71,46 +71,55 @@ SurfaceMesh<double> MakeRigidSurfaceMesh(const Convex& convex_spec, double) {
   return ReadObjToSurfaceMesh(convex_spec.filename(), convex_spec.scale());
 }
 
-void CollisionObjects::ImplementGeometry(const Sphere& sphere,
+template <typename T>
+void CollisionObjects<T>::ImplementGeometry(const Sphere& sphere,
                                          void* user_data) {
   MakeRigidRepresentation(sphere, *reinterpret_cast<ReifyData*>(user_data));
 }
 
-void CollisionObjects::ImplementGeometry(const Cylinder& cylinder,
+template <typename T>
+void CollisionObjects<T>::ImplementGeometry(const Cylinder& cylinder,
                                          void* user_data) {
   MakeRigidRepresentation(cylinder, *reinterpret_cast<ReifyData*>(user_data));
 }
 
-void CollisionObjects::ImplementGeometry(const HalfSpace& half_space,
+template <typename T>
+void CollisionObjects<T>::ImplementGeometry(const HalfSpace& half_space,
                                          void* user_data) {
   MakeRigidRepresentation(half_space, *reinterpret_cast<ReifyData*>(user_data));
 }
 
-void CollisionObjects::ImplementGeometry(const Box& box, void* user_data) {
+template <typename T>
+void CollisionObjects<T>::ImplementGeometry(const Box& box, void* user_data) {
   MakeRigidRepresentation(box, *reinterpret_cast<ReifyData*>(user_data));
 }
 
-void CollisionObjects::ImplementGeometry(const Capsule& capsule,
+template <typename T>
+void CollisionObjects<T>::ImplementGeometry(const Capsule& capsule,
                                          void* user_data) {
   MakeRigidRepresentation(capsule, *reinterpret_cast<ReifyData*>(user_data));
 }
 
-void CollisionObjects::ImplementGeometry(const Ellipsoid& ellipsoid,
+template <typename T>
+void CollisionObjects<T>::ImplementGeometry(const Ellipsoid& ellipsoid,
                                          void* user_data) {
   MakeRigidRepresentation(ellipsoid, *reinterpret_cast<ReifyData*>(user_data));
 }
 
-void CollisionObjects::ImplementGeometry(const Mesh& mesh, void* user_data) {
+template <typename T>
+void CollisionObjects<T>::ImplementGeometry(const Mesh& mesh, void* user_data) {
   MakeRigidRepresentation(mesh, *reinterpret_cast<ReifyData*>(user_data));
 }
 
-void CollisionObjects::ImplementGeometry(const Convex& convex,
+template <typename T>
+void CollisionObjects<T>::ImplementGeometry(const Convex& convex,
                                          void* user_data) {
   MakeRigidRepresentation(convex, *reinterpret_cast<ReifyData*>(user_data));
 }
 
+template <typename T>
 template <typename ShapeType>
-void CollisionObjects::MakeRigidRepresentation(const ShapeType& shape,
+void CollisionObjects<T>::MakeRigidRepresentation(const ShapeType& shape,
                                                const ReifyData& data) {
   rigid_representations_[data.id] = {
       std::make_unique<SurfaceMesh<double>>(
@@ -121,3 +130,5 @@ void CollisionObjects::MakeRigidRepresentation(const ShapeType& shape,
 }  // namespace fixed_fem
 }  // namespace multibody
 }  // namespace drake
+DRAKE_DEFINE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_NONSYMBOLIC_SCALARS(
+    class ::drake::multibody::fixed_fem::internal::CollisionObjects);

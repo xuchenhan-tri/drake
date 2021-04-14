@@ -1,5 +1,6 @@
 #include "drake/multibody/fixed_fem/dev/softsim_system.h"
 
+#include "drake/geometry/query_object.h"
 #include "drake/multibody/fixed_fem/dev/corotated_model.h"
 #include "drake/multibody/fixed_fem/dev/linear_constitutive_model.h"
 #include "drake/multibody/plant/multibody_plant.h"
@@ -188,6 +189,21 @@ void SoftsimSystem<T>::RegisterCollisionObject(
     geometry::GeometryId geometry_id, const geometry::Shape& shape,
     geometry::ProximityProperties properties) {
   collision_objects.AddCollisionObject(geometry_id, shape, properties);
+}
+
+template <typename T>
+void SoftsimSystem<T>::UpdatePoseForAllCollisionObjects(
+    const systems::Context<T>& context) {
+  const MultibodyPlant<T>& mbp = this->multibody_plant();
+  const geometry::QueryObject<T>& query_object =
+      mbp.get_geometry_query_input_port()
+          .template Eval<geometry::QueryObject<T>>(context);
+  const std::vector<geometry::GeometryId>& geometry_ids =
+      collision_objects.geometry_ids();
+  for (geometry::GeometryId id : geometry_ids) {
+    const math::RigidTransform<T>& pose = query_object.GetPoseInWorld(id);
+    collision_objects.UpdatePoseInWorld(id, pose);
+  }
 }
 }  // namespace fixed_fem
 }  // namespace multibody

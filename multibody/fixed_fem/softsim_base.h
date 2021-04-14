@@ -33,6 +33,12 @@ class SoftsimBase {
       geometry::GeometryId geometry_id, const geometry::Shape& shape,
       geometry::ProximityProperties properties) = 0;
 
+ protected:
+  const MultibodyPlant<T>& multibody_plant() const {
+    DRAKE_DEMAND(mbp_ != nullptr);
+    return *mbp_;
+  }
+
  private:
   MultibodyPlant<T>* mbp_;
 };
