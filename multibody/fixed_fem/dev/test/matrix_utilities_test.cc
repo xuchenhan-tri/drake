@@ -105,6 +105,36 @@ GTEST_TEST(MatrixUtilitiesTest, AddScaledCofactorMatrixDerivative) {
     }
   }
 }
+
+/* Tests that given a sparse matrix A, if we convert it to a vector of triplets,
+ then the vector of triplets can reconstruct a sparse matrix B that is bitwise
+ equal to the original matrix A. */
+GTEST_TEST(MatrixUtilitiesTest, ConvertEigenSparseMatrixToTriplets) {
+  std::vector<Eigen::Triplet<double>> triplets;
+  triplets.emplace_back(0, 0, 7);
+  triplets.emplace_back(1, 3, 4);
+  triplets.emplace_back(2, 2, 8);
+  Eigen::SparseMatrix<double> A(4, 4);
+  A.setFromTriplets(triplets.begin(), triplets.end());
+  const auto expected_triplets = ConvertEigenSparseMatrixToTriplets(A);
+  Eigen::SparseMatrix<double> B(4, 4);
+  B.setFromTriplets(expected_triplets.begin(), expected_triplets.end());
+  // We verify the B is an exact bit by bit copy of A.
+  // Eigen does not offer SparseMatrix::operator==() and therefore we compare
+  // the results by explicitly comparing the individual components of the CCS
+  // format.
+  Eigen::Map<VectorX<double>> A_values(A.valuePtr(), A.nonZeros());
+  Eigen::Map<VectorX<double>> B_values(B.valuePtr(), B.nonZeros());
+  EXPECT_EQ(A_values, B_values);
+
+  Eigen::Map<VectorX<int>> A_inner(A.innerIndexPtr(), A.innerSize());
+  Eigen::Map<VectorX<int>> B_inner(B.innerIndexPtr(), B.innerSize());
+  EXPECT_EQ(A_inner, B_inner);
+
+  Eigen::Map<VectorX<int>> A_outer(A.outerIndexPtr(), A.outerSize());
+  Eigen::Map<VectorX<int>> B_outer(B.outerIndexPtr(), B.outerSize());
+  EXPECT_EQ(A_outer, B_outer);
+}
 }  // namespace
 }  // namespace internal
 }  // namespace fixed_fem

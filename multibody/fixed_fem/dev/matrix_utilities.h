@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Eigen/SparseCore>
+
 #include "drake/common/eigen_types.h"
 
 namespace drake {
@@ -172,6 +174,18 @@ void AddScaledCofactorMatrixDerivative(
   (*scaled_dCdM)(1, 8) += -A(0, 1);
   (*scaled_dCdM)(3, 8) += -A(1, 0);
   (*scaled_dCdM)(4, 8) += A(0, 0);
+}
+
+/* Return the entries of the given sparse matrix A in the form an
+ std::vector<Eigen::Triplet<T>>. */
+template <typename T>
+std::vector<Eigen::Triplet<T>> ConvertEigenSparseMatrixToTriplets(
+    const Eigen::SparseMatrix<T>& A) {
+  std::vector<Eigen::Triplet<T>> triplets;
+  for (int i = 0; i < A.outerSize(); i++)
+    for (typename Eigen::SparseMatrix<T>::InnerIterator it(A, i); it; ++it)
+      triplets.emplace_back(it.row(), it.col(), it.value());
+  return triplets;
 }
 }  // namespace internal
 }  // namespace fixed_fem

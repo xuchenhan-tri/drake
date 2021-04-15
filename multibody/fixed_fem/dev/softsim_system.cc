@@ -125,10 +125,12 @@ void SoftsimSystem<T>::RegisterDeformableBodyHelper(
   next_fem_states_.emplace_back(std::make_unique<StateType>(state));
   fem_solvers_.emplace_back(
       std::make_unique<FemSolver<T>>(std::move(fem_model)));
-  initial_meshes_.emplace_back(mesh);
+  meshes_.emplace_back(mesh);
   names_.emplace_back(std::move(name));
 }
 
+// TODO(xuchenhan-tri): This function should be changed to only advance free
+//  positions/velocities of deformable objects.
 template <typename T>
 void SoftsimSystem<T>::AdvanceOneTimeStep(
     const systems::Context<T>& context,
@@ -157,6 +159,10 @@ void SoftsimSystem<T>::AdvanceOneTimeStep(
     next_fem_state.SetQdot(qdot);
     next_fem_state.SetQddot(qddot);
     fem_solvers_[i]->AdvanceOneTimeStep(prev_fem_state, &next_fem_state);
+    /* Update the pre-contact position of the deformable mesh. */
+    UpdateMesh(SoftBodyIndex(i), q);
+
+    // TODO(xuchenhan-tri): this should be refactored to another function.
     /* Copy new state to output variable. */
     systems::BasicVector<T>& next_discrete_state =
         next_states->get_mutable_vector(i);
@@ -209,9 +215,45 @@ void SoftsimSystem<T>::UpdatePoseForAllCollisionObjects(
 template <typename T>
 void SoftsimSystem<T>::BuildContactSolverData(
     const systems::Context<T>& context0, const VectorX<T>& v0,
-    const MatrixX<T>& M0, const VectorX<T>& minus_tau, const VectorX<T>& phi0,
-    const MatrixX<T>& contact_jacobians, const VectorX<T>& stiffness,
-    const VectorX<T>& damping, const VectorX<T>& mu) {}
+    const MatrixX<T>& M0, VectorX<T>&& minus_tau, const VectorX<T>&& phi0,
+    const MatrixX<T>& contact_jacobians, VectorX<T>&& stiffness,
+    VectorX<T>&& damping, VectorX<T>&& mu) {
+  const int num_rigid_dofs = v0.size();
+  const int num_rigid_contacts = phi0.size();
+  DRAKE_DEMAND(num_rigid_dofs == minus_tau.size());
+  DRAKE_DEMAND(num_rigid_contacts == stiffness.size());
+  DRAKE_DEMAND(num_rigid_contacts == damping.size());
+  DRAKE_DEMAND(num_rigid_contacts == mu.size());
+  DRAKE_DEMAND(3 * num_rigid_contacts == contact_jacobians.rows());
+  DRAKE_DEMAND(num_rigid_dofs == contact_jacobians.cols());
+  DRAKE_DEMAND(num_rigid_dofs == M0.cols());
+  DRAKE_DEMAND(num_rigid_dofs == M0.rows());
+
+  // Get the positions offsets for the deformable dofs.
+  // TODO(xuchenhan-tri): This can be precomputes.
+  int num_deformable_dofs = 0;
+  std::vector<int> deformable_dof_offsets(next_fem_states_.size());
+  for (int i = 0; i < num_bodies(); ++i) {
+    deformable_dof_offsets[i] = num_deformable_dofs + num_rigid_dofs;
+    num_deformable_dofs += next_fem_states_[i]->num_generalized_positions();
+  }
+
+  const int total_num_dofs = num_rigid_dofs + num_deformable_dofs;
+  std::vector<ContactSolverData<T>> contact_solver_data_vector;
+  // Rigid-rigid contact solver data.
+  contact_solver_data_vector.emplace_back(std::move(phi0), std::move(stiffness),
+                                          std::move(damping), std::move(mu),
+                                          contact_jacobian, num_total_dofs);
+
+  // Rigid-deformable contact solver data.
+  for (int i = 0; i < num_bodies(); ++i) {
+    contact_solver_data_vector.emplace_back(CalcContactSolverData(
+        meshes_[i], deformable_proximity_properties_[i], total_num_dofs));
+  }
+
+  contact_solver_data_ =
+      ConcatenateContactSolverData(contact_solver_data_vector);
+}
 
 template <typename T>
 void SoftsimSystem<T>::SolveContactProblem(

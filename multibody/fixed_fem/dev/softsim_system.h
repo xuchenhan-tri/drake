@@ -95,14 +95,12 @@ class SoftsimSystem final : public SoftsimBase<T>,
   }
 
   /** Returns the number of deformable bodies in the %SoftsimSystem. */
-  int num_bodies() const { return initial_meshes_.size(); }
+  int num_bodies() const { return meshes_.size(); }
 
-  /** The volume meshes of the deformable bodies at the time of registration.
+  /** The volume meshes of the deformable bodies.
    The meshes have the same order as the registration of their corresponding
    deformable bodies. */
-  const std::vector<geometry::VolumeMesh<T>>& initial_meshes() const {
-    return initial_meshes_;
-  }
+  const std::vector<geometry::VolumeMesh<T>>& meshes() const { return meshes_; }
 
   /** The names of all the registered bodies in the same order as the bodies
    were registered. */
@@ -135,6 +133,22 @@ class SoftsimSystem final : public SoftsimBase<T>,
                                const geometry::Shape& shape,
                                geometry::ProximityProperties properties) final;
 
+  /* Updates the positions of the vertices of the deformable mesh associated
+   with the deformable body with index `id` given the generalized positions of
+   the deforamble body. */
+  void UpdateMesh(SoftBodyIndex id, const VectorX<T>& q) const {
+    const auto p_WVs = Eigen::Map<const Matrix3X<T>>(q.data(), 3, q.size() / 3);
+    std::vector<geometry::VolumeElement> tets = meshes_[id].tetrahedra();
+    // We assume the deformable body frame is always the same as the world frame
+    // for now. It probably makes sense to have the frame move with the body in
+    // the future.
+    std::vector<geometry::VolumeVertex<T>> vertices_D;
+    for (int i = 0; i < p_WVs.cols(); ++i) {
+      vertices_D.push_back(geometry::VolumeVertex<T>(p_WVs.col(i)));
+    }
+    meshes_[id] = {std::move(tets), std::move(vertices_D)};
+  }
+
   /* Updates the world pose of all rigid collision geometries registered in
    `this` SoftsimSystem. */
   void UpdatePoseForAllCollisionObjects(const systems::Context<T>& context);
@@ -157,8 +171,8 @@ class SoftsimSystem final : public SoftsimBase<T>,
    allocation. */
   mutable std::vector<std::unique_ptr<FemStateBase<T>>> prev_fem_states_{};
   mutable std::vector<std::unique_ptr<FemStateBase<T>>> next_fem_states_{};
-  /* Initial mesh for all bodies at time of registration. */
-  std::vector<geometry::VolumeMesh<T>> initial_meshes_{};
+  /* Volume meshes for all deformablebodies. */
+  mutable std::vector<geometry::VolumeMesh<T>> meshes_{};
   /* Solvers for all bodies. */
   std::vector<std::unique_ptr<FemSolver<T>>> fem_solvers_{};
   /* Names of all registered bodies. */
@@ -167,6 +181,9 @@ class SoftsimSystem final : public SoftsimBase<T>,
   systems::OutputPortIndex vertex_positions_port_;
   /* All rigid collision objects used in rigid-deformable contact. */
   internal::CollisionObjects<T> collision_objects;
+  /* Contact solver data for both rigid-rigid contacts and rigid-deformable
+   contacts. */
+   ContactSolverData contact_solver_data_;
 };
 }  // namespace fixed_fem
 }  // namespace multibody
