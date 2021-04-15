@@ -23,7 +23,10 @@ SoftsimSystem<T>::SoftsimSystem(MultibodyPlant<T>* mbp)
 template <typename T>
 SoftBodyIndex SoftsimSystem<T>::RegisterDeformableBody(
     const geometry::VolumeMesh<T>& mesh, std::string name,
-    const DeformableBodyConfig<T>& config) {
+    const DeformableBodyConfig<T>& config,
+    geometry::ProximityProperties properties) {
+  DRAKE_THROW_UNLESS(properties.HasProperty(geometry::internal::kMaterialGroup,
+                                            geometry::internal::kFriction));
   /* Throw if name is not unique. */
   for (int i = 0; i < num_bodies(); ++i) {
     if (name == names_[i]) {
@@ -43,6 +46,7 @@ SoftBodyIndex SoftsimSystem<T>::RegisterDeformableBody(
                                                    config);
       break;
   }
+  deformable_proximity_properties_.emplace_back(std::move(properties));
   return body_index;
 }
 
@@ -193,7 +197,7 @@ void SoftsimSystem<T>::CopyVertexPositionsOut(
 template <typename T>
 void SoftsimSystem<T>::RegisterCollisionObject(
     geometry::GeometryId geometry_id, const geometry::Shape& shape,
-    geometry::ProximityProperties properties) {
+    const geometry::ProximityProperties& properties) {
   collision_objects.AddCollisionObject(geometry_id, shape, properties);
 }
 
@@ -213,10 +217,10 @@ void SoftsimSystem<T>::UpdatePoseForAllCollisionObjects(
 }
 
 template <typename T>
-void SoftsimSystem<T>::BuildContactSolverData(
+void SoftsimSystem<T>::AssembleContactSolverData(
     const systems::Context<T>& context0, const VectorX<T>& v0,
-    const MatrixX<T>& M0, VectorX<T>&& minus_tau, const VectorX<T>&& phi0,
-    const MatrixX<T>& contact_jacobians, VectorX<T>&& stiffness,
+    const MatrixX<T>& M0, VectorX<T>&& minus_tau, VectorX<T>&& phi0,
+    const MatrixX<T>& contact_jacobian, VectorX<T>&& stiffness,
     VectorX<T>&& damping, VectorX<T>&& mu) {
   const int num_rigid_dofs = v0.size();
   const int num_rigid_contacts = phi0.size();
@@ -224,10 +228,13 @@ void SoftsimSystem<T>::BuildContactSolverData(
   DRAKE_DEMAND(num_rigid_contacts == stiffness.size());
   DRAKE_DEMAND(num_rigid_contacts == damping.size());
   DRAKE_DEMAND(num_rigid_contacts == mu.size());
-  DRAKE_DEMAND(3 * num_rigid_contacts == contact_jacobians.rows());
-  DRAKE_DEMAND(num_rigid_dofs == contact_jacobians.cols());
+  DRAKE_DEMAND(3 * num_rigid_contacts == contact_jacobian.rows());
+  DRAKE_DEMAND(num_rigid_dofs == contact_jacobian.cols());
   DRAKE_DEMAND(num_rigid_dofs == M0.cols());
   DRAKE_DEMAND(num_rigid_dofs == M0.rows());
+
+  // Make sure the pose for the collision objects are up-to-date.
+  UpdatePoseForAllCollisionObjects();
 
   // Get the positions offsets for the deformable dofs.
   // TODO(xuchenhan-tri): This can be precomputes.
@@ -238,27 +245,160 @@ void SoftsimSystem<T>::BuildContactSolverData(
     num_deformable_dofs += next_fem_states_[i]->num_generalized_positions();
   }
 
-  const int total_num_dofs = num_rigid_dofs + num_deformable_dofs;
-  std::vector<ContactSolverData<T>> contact_solver_data_vector;
+  const int num_total_dofs = num_rigid_dofs + num_deformable_dofs;
+  std::vector<internal::ContactSolverData<T>> contact_solver_data_vector;
   // Rigid-rigid contact solver data.
-  contact_solver_data_vector.emplace_back(std::move(phi0), std::move(stiffness),
-                                          std::move(damping), std::move(mu),
-                                          contact_jacobian, num_total_dofs);
+  contact_solver_data_vector.emplace_back(
+      std::move(phi0), std::move(stiffness), std::move(damping), std::move(mu),
+      contact_jacobian, num_rigid_dofs, num_deformable_dofs);
 
   // Rigid-deformable contact solver data.
   for (int i = 0; i < num_bodies(); ++i) {
     contact_solver_data_vector.emplace_back(CalcContactSolverData(
-        meshes_[i], deformable_proximity_properties_[i], total_num_dofs));
+        context0, meshes_[i], deformable_proximity_properties_[i],
+        deformable_dof_offsets[i], num_total_dofs));
   }
 
   contact_solver_data_ =
-      ConcatenateContactSolverData(contact_solver_data_vector);
+      internal::ConcatenateContactSolverData(contact_solver_data_vector);
+}
+
+template <typename T>
+internal::ContactSolverData<T> SoftsimSystem<T>::CalcContactSolverData(
+    const systems::Context<T>& context0,
+    const geometry::VolumeMesh<T>& deformable_mesh_W,
+    const geometry::ProximityProperties& deformable_proximity_properties,
+    int deformable_dof_offset, int num_total_dofs) const {
+  const std::vector<geometry::GeometryId>& rigid_ids =
+      collision_objects_.geometry_ids();
+  // Number of contacts between rigid bodies and `deformable_mesh`.
+  int nc = 0;
+  std::vector<DeformableContactSurface<T>> contact_surfaces;
+  for (const geometry::GeometryId rigid_id : rigid_ids) {
+    contact_surfaces.emplace_back(ComputeTetMeshTriMeshContact(
+        deformable_mesh_W, collision_objects_.mesh(rigid_id),
+        collision_objects_.pose(rigid_id)));
+    nc += contact_surfaces.back().num_polygons();
+  }
+
+  // Extract the stiffness and dissipation parameters of the deformable body.
+  const auto [] get_point_contact_parameters(
+      const geometry::ProximityProperties& props)
+      ->std::pair<T, T> {
+    return std::pair(
+        props.template GetPropertyOrDefault<T>(
+            geometry::internal::kMaterialGroup,
+            geometry::internal::kPointStiffness, deformable_stiffness),
+        props.template GetPropertyOrDefault<T>(
+            geometry::internal::kMaterialGroup,
+            geometry::internal::kHcDissipation, deformable_dissipation));
+  };
+  const auto [deformable_stiffness, deformable_dissipation] =
+      get_point_contact_parameters(deformable_proximity_properties);
+  DRAKE_THROW_UNLESS(deformable_proximity_properties.HasProperty(
+      geometry::internal::kMaterialGroup, geometry::internal::kFriction));
+  const CoulombFriction<double> deformable_mu =
+      deformable_proximity_properties.GetProperty<CoulombFriction<double>>(
+          geometry::internal::kMaterialGroup, geometry::internal::kFriction);
+
+  VectorX<T> phi0(nc);
+  VectorX<T> stiffness(nc);
+  VectorX<T> dissipation(nc);
+  VectorX<T> friction(nc);
+  std::vector<Eigen::Triplet<T>> contact_jacobian_triplets;
+  Eigen::SparseMatrix<T> contact_jacobian(3 * nc, num_total_dofs);
+  // TODO(xuchenhan-tri): Set penetration data properly. This requires changes
+  // to DeformableContactSurface and ComputeTetMeshTriMeshContact() to support
+  // calculation of penetration depth. Currently, phi0 is set to zero because
+  // PGS does not use it.
+  phi0.setZero();
+  int contact_id_offset = 0;
+  for (int i = 0; i < static_cast<int>(rigid_ids.size()); ++i) {
+    const GeometryId rigid_id = rigid_ids[i];
+    const auto& rigid_proximity_properties =
+        collision_objects_.proximity_properties(rigid_id);
+    const auto [rigid_stiffness, rigid_dissipation] =
+        get_point_contact_parameters(rigid_proximity_properties);
+    const auto [k, d] = CombinePointContactParameters(
+        deformable_stiffness, rigid_stiffness, deformable_dissipation,
+        rigid_dissipation);
+    const CoulombFriction<double> rigid_mu =
+        rigid_proximity_properties.GetProperty<CoulombFriction<double>>(
+            geometry::internal::kMaterialGroup, geometry::internal::kFriction);
+    const CoulombFriction<double> contact_mu =
+        CalcContactFrictionFromSurfaceProperties(deformable_mu, rigid_mu);
+    // Number of contacts between the deformable body and the i-th rigid object.
+    const int nci = contact_surfaces[i].num_polygons();
+    for (int ic = 0; ic < nci; ++ic) {
+      const internal::ContactPolygonData<T>& polygon_data =
+          contact_surfaces[i].polygon_data(ic);
+      /* Get the rotation matrix mapping the world frame quantities to the
+      contact frame quantities. */
+      Matrix3<T> R_CW =
+          math::ComputeBasisFromAxis(2, polygon_data.unit_normal).transpose();
+      const int row = 3 * (contact_id_offset + ic);
+      /* Build the jacobian entries corresponding to the deformable dofs. */
+      {
+        /* The contribution to the contact velocity from the deformable object
+         A is R_CW * v_WAq. Note
+           v_WAq = b₀ * v_WVᵢ₀ + b₁ * v_WVᵢ₁ + b₂ * v_WVᵢ₂ + b₃ * v_WVᵢ₃,
+         where bₗ is the barycentric weight corresponding to vertex kₗ and
+         v_WVₖₗ is the velocity of that vertex. */
+        const Vector4<T>& barycentric_weights = polygon_data.b_centroid;
+        const geometry::VolumeElement tet_element =
+            deformable_mesh_W.element(polygon_data.tet_index);
+        for (int l = 0; l < 4; ++l) {
+          const int col = deformable_dof_offset + 3 * tet_element.vertex(l);
+          internal::AddMatrix3ToEigenTriplets(R_CW * barycentric_weights(l),
+                                              row, col,
+                                              &contact_jacobian_triplets);
+        }
+      }
+      /* Build the jacobian entries corresponding to the rigid dofs. */
+      {
+        const Frame<T>& frame_W = multibody_plant().world_frame();
+        // For point Rc (origin of rigid body's frame R shifted to the contact
+        // point C), calculate Jv_v_WRc (Rc's translational velocity Jacobian in
+        // the world frame W with respect to generalized velocities v).  Note:
+        // Rc's translational velocity in W can be written in terms of this
+        // Jacobian as v_WRc = Jv_v_WRc * v.
+        Matrix3X<T> Jv_WRc_dense(3, multibody_plant()->num_velocities());
+        const BodyIndex rigid_body_index =
+            multibody_plant().geometry_id_to_body_index_.at(rigid_id);
+        const Body<T>& rigid_body = get_body(rigid_body_index);
+        /* The position of the contact point in the world frame. */
+        const Vector3<T>& p_WC = polygon_data.centroid;
+        multibody_plant().internal_tree().CalcJacobianTranslationalVelocity(
+            context0, JacobianWrtVariable::kV, rigid_body.body_frame(), frame_W,
+            p_WC, frame_W, frame_W, &Jv_WRc_dense);
+        Eigen::SparseMatrix<T> Jv_WRc = Jv_WRc_dense.sparseView();
+        /* The same Jacobian expressed in the contact frame. */
+        const Eigen::SparseMatrix<T> Jv_WRc_C = -R_CW * Jv_WRc;
+        contact_jacobian_triplets.emplace_back(
+            ConvertEigenSparseMatrixToTripletsWithOffsets(Jv_WRc_C, row, 0));
+      }
+      stiffness.segment(contact_id_offset, nci) = VectorX<T>::Ones(nci) * k;
+      dissipation.segment(contact_id_offset, nci) = VectorX<T>::Ones(nci) * d;
+      friction.segment(contact_id_offset, nci) =
+          VectorX<T>::Ones(nci) * contact_mu.dynamic_friction;
+      contact_id_offset += nci;
+    }
+  }
+
+  contact_jacobian.setFromTriplets(contact_jacobian_triplets.begin(),
+                                   contact_jacobian_triplets.end());
+  return ContactSolveData<T>(std::move(phi0), std::move(stiffness),
+                             std::move(dissipation), std::move(friction),
+                             std::move(contact_jacobian), num_total_dofs);
 }
 
 template <typename T>
 void SoftsimSystem<T>::SolveContactProblem(
     const contact_solvers::internal::ContactSolver<T>& contact_solver,
-    contact_solvers::internal::ContactSolverResults<T>* results) const {}
+    contact_solvers::internal::ContactSolverResults<T>* results) const {
+  unused(contact_solver);
+  unused(results);
+}
 }  // namespace fixed_fem
 }  // namespace multibody
 }  // namespace drake

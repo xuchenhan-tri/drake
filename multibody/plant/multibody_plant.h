@@ -4727,6 +4727,13 @@ AddMultibodyPlantSceneGraph(
     std::unique_ptr<MultibodyPlant<T>> plant,
     std::unique_ptr<geometry::SceneGraph<T>> scene_graph = nullptr);
 
+
+/// Combines the stiffness and dissipation parameters of two bodies in contact
+/// to form the stiffness and dissipation at the contact point.
+template <typename T>
+std::pair<T, T> CombinePointContactParameters(const T& k1, const T& k2,
+                                              const T& d1, const T& d2);
+
 /// Temporary result from `AddMultibodyPlantSceneGraph`. This cannot be
 /// constructed outside of this method.
 /// @warning Do NOT use this as a function argument or member variable. The

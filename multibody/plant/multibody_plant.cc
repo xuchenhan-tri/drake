@@ -451,6 +451,10 @@ geometry::GeometryId MultibodyPlant<T>::RegisterCollisionGeometry(
   GeometryId id = RegisterGeometry(
       body, X_BG, shape, GetScopedName(*this, body.model_instance(), name));
 
+  if (softsim_base_ != nullptr) {
+    softsim_base_->RegisterCollisionObject(id, shape, properties);
+  }
+
   member_scene_graph().AssignRole(*source_id_, id, std::move(properties));
   const int collision_index = geometry_id_to_collision_index_.size();
   geometry_id_to_collision_index_[id] = collision_index;
@@ -461,9 +465,6 @@ geometry::GeometryId MultibodyPlant<T>::RegisterCollisionGeometry(
   default_coulomb_friction_.push_back(coulomb_friction);
   DRAKE_ASSERT(num_bodies() == static_cast<int>(collision_geometries_.size()));
   collision_geometries_[body.index()].push_back(id);
-  if (softsim_base_ != nullptr) {
-    softsim_base_->RegisterCollisionObject(id, shape, properties);
-  }
   return id;
 }
 
@@ -1226,7 +1227,6 @@ void MultibodyPlant<T>::AppendContactResultsContinuousHydroelastic(
   }
 }
 
-namespace {
 template <typename T>
 std::pair<T, T> CombinePointContactParameters(const T& k1, const T& k2,
                                               const T& d1, const T& d2) {
@@ -1239,7 +1239,6 @@ std::pair<T, T> CombinePointContactParameters(const T& k1, const T& k2,
       safe_divide(k1 * k2, k1 + k2),                                   // k
       safe_divide(k2, k1 + k2) * d1 + safe_divide(k1, k1 + k2) * d2);  // d
 }
-}  // namespace
 
 template <typename T>
 void MultibodyPlant<T>::CalcContactResultsContinuousPointPair(
@@ -2160,9 +2159,10 @@ void MultibodyPlant<T>::CalcTamsiResults(
   }
 
   if (softsim_base_ != nullptr) {
-    softsim_base_->BuildContactSolverData(context0, v0, M0, minus_tau, phi0,
-                                          contact_jacobians.Jc, stiffness,
-                                          damping, mu);
+    softsim_base_->AssembleContactSolverData(
+        context0, v0, M0, std::move(minus_tau), std::move(phi0),
+        contact_jacobians.Jc, std::move(stiffness), std::move(damping),
+        std::move(mu));
     softsim_base_->SolveContactProblem(*contact_solver_, results);
     return;
   }

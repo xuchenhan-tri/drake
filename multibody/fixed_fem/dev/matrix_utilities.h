@@ -1,5 +1,7 @@
 #pragma once
 
+#include <vector>
+
 #include <Eigen/SparseCore>
 
 #include "drake/common/eigen_types.h"
@@ -176,17 +178,37 @@ void AddScaledCofactorMatrixDerivative(
   (*scaled_dCdM)(4, 8) += A(0, 0);
 }
 
-/* Return the entries of the given sparse matrix A in the form an
- std::vector<Eigen::Triplet<T>>. */
+/* Returns the entries of the given sparse matrix A in the form an
+ std::vector<Eigen::Triplet<T>> so that thw row/col stored in the triplet is
+ offset by the given row_offset/col_offset.
+ @pre row_offset > 0.
+ @pre col_offset > 0. */
 template <typename T>
-std::vector<Eigen::Triplet<T>> ConvertEigenSparseMatrixToTriplets(
-    const Eigen::SparseMatrix<T>& A) {
+std::vector<Eigen::Triplet<T>> ConvertEigenSparseMatrixToTripletsWithOffsets(
+    const Eigen::SparseMatrix<T>& A, int row_offset = 0, int col_offset = 0) {
+  DRAKE_DEMAND(row_offset >= 0);
+  DRAKE_DEMAND(col_offset >= 0);
   std::vector<Eigen::Triplet<T>> triplets;
   for (int i = 0; i < A.outerSize(); i++)
     for (typename Eigen::SparseMatrix<T>::InnerIterator it(A, i); it; ++it)
-      triplets.emplace_back(it.row(), it.col(), it.value());
+      triplets.emplace_back(it.row() + row_offset, it.col() + col_offset,
+                            it.value());
   return triplets;
 }
+
+/* Adds a 3-by-3 matrix block in its Eigen::Triplet form into a vector of
+ Eigen::Triplets given its row and col offsets. */
+template <typename T>
+void AddMatrix3ToEigenTriplets(const Eigen::Ref<const Matrix3<T>>& A,
+                               int starting_row, int starting_col,
+                               std::vector<Eigen::Triplet<T>>* triplets) {
+  for (int i = 0; i < 3; ++i) {
+    for (int j = 0; j < 3; ++j) {
+      triplets->emplace_back(starting_row + i, starting_col + j, A(i, j));
+    }
+  }
+}
+
 }  // namespace internal
 }  // namespace fixed_fem
 }  // namespace multibody

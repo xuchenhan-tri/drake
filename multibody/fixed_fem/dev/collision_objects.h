@@ -55,6 +55,15 @@ class CollisionObjects : public geometry::ShapeReifier {
     return it->second.properties;
   }
 
+  /* Returns the world pose of the geometry with GeometryId `id`.
+   @pre The geometry with `id` has been registered in `this` CollisionObject
+   with AddCollisionObject(). */
+  const math::RigidTransform<T>& pose(geometry::GeometryId id) const {
+    auto it = poses_.find(id);
+    DRAKE_DEMAND(it != poses_.end());
+    return it->second;
+  }
+
   /* Updates the pose of the geometry with GeometryId `id` in world frame to the
    given `pose`.
    @pre The geometry with `id` has been registered in `this` CollisionObject

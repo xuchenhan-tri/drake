@@ -23,6 +23,17 @@ drake_cc_library(
 )
 
 drake_cc_library(
+    name = "contact_solver_data",
+    hdrs = [
+        "contact_solver_data.h",
+    ],
+    deps = [
+        ":matrix_utilities",
+        "//common:essential",
+    ],
+)
+
+drake_cc_library(
     name = "collision_objects",
     srcs = [
         "collision_objects.cc",
@@ -294,6 +305,7 @@ drake_cc_library(
     ],
     deps = [
         ":collision_objects",
+        ":contact_solver_data",
         ":corotated_model",
         ":deformable_body_config",
         ":dirichlet_boundary_condition",
@@ -304,6 +316,7 @@ drake_cc_library(
         ":linear_simplex_element",
         ":simplex_gaussian_quadrature",
         "//common:essential",
+        "//common:unused",
         "//geometry/proximity:volume_mesh",
         "//multibody/fixed_fem:softsim_base",
         "//multibody/plant",
@@ -466,6 +479,7 @@ drake_cc_binary(
         ":mesh_utilities",
         ":softsim_system",
         "//common:add_text_logging_gflags",
+        "//geometry:proximity_properties",
         "//math:geometric_transform",
         "//multibody/plant",
         "//systems/analysis:simulator_gflags",
@@ -551,6 +565,14 @@ drake_cc_googletest(
     deps = [
         ":collision_objects",
         "//common:find_resource",
+    ],
+)
+
+drake_cc_googletest(
+    name = "contact_solver_data_test",
+    deps = [
+        ":contact_solver_data",
+        "//common/test_utilities:eigen_matrix_compare",
     ],
 )
 

@@ -34,7 +34,7 @@ class SoftsimBase {
   */
   virtual void RegisterCollisionObject(
       geometry::GeometryId geometry_id, const geometry::Shape& shape,
-      geometry::ProximityProperties properties) = 0;
+      const geometry::ProximityProperties& properties) = 0;
 
   // TODO(xuchenhan-tri): Consider returns the contact solver data instead of
   //  keeping it in the SoftsimBase.
@@ -50,11 +50,11 @@ class SoftsimBase {
    @param damping            The contact dissipation for rigid-rigid contacts.
    @param mu                 The friction coefficients for rigid-rigid contacts.
   */
-  virtual void BuildContactSolverData(
+  virtual void AssembleContactSolverData(
       const systems::Context<T>& context0, const VectorX<T>& v0,
-      const MatrixX<T>& M0, const VectorX<T>& minus_tau, const VectorX<T>& phi0,
-      const MatrixX<T>& contact_jacobians, const VectorX<T>& stiffness,
-      const VectorX<T>& damping, const VectorX<T>& mu) = 0;
+      const MatrixX<T>& M0, VectorX<T>&& minus_tau, VectorX<T>&& phi0,
+      const MatrixX<T>& contact_jacobians, VectorX<T>&& stiffness,
+      VectorX<T>&& damping, VectorX<T>&& mu) = 0;
 
   /* Solves the contact problem with the given contact solver and writes out the
    contact results. */

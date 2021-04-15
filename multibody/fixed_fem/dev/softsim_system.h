@@ -7,8 +7,10 @@
 #include <vector>
 
 #include "drake/common/eigen_types.h"
+#include "drake/common/unused.h"
 #include "drake/geometry/proximity/volume_mesh.h"
 #include "drake/multibody/fixed_fem/dev/collision_objects.h"
+#include "drake/multibody/fixed_fem/dev/contact_solver_data.h"
 #include "drake/multibody/fixed_fem/dev/deformable_body_config.h"
 #include "drake/multibody/fixed_fem/dev/dirichlet_boundary_condition.h"
 #include "drake/multibody/fixed_fem/dev/dynamic_elasticity_element.h"
@@ -72,11 +74,20 @@ class SoftsimSystem final : public SoftsimBase<T>,
   /** Adds a deformable body modeled with linear simplex element, linear
    quadrature rule, mid-point integration rule and the given `config`. Returns
    the index of the newly added deformable body.
+   @param[in] mesh        The volume mesh representing the deformable body
+                          geometry.
+   @param[in] name        The name of the deformable body.
+   @param[in] config      The physical properties of the deformable body.
+   @param[in] properties  The proximity properties associated with the collision
+                          geometry. They *must* include the (`material`,
+                          `coulomb_friction`) property of type
+                          CoulombFriction<double>.
    @pre `name` is distinct from names of all previously registered bodies.
    @pre config.IsValid() == true. */
-  SoftBodyIndex RegisterDeformableBody(const geometry::VolumeMesh<T>& mesh,
-                                       std::string name,
-                                       const DeformableBodyConfig<T>& config);
+  SoftBodyIndex RegisterDeformableBody(
+      const geometry::VolumeMesh<T>& mesh, std::string name,
+      const DeformableBodyConfig<T>& config,
+      geometry::ProximityProperties properties);
 
   /** Set zero Dirichlet boundary conditions for a given body. All vertices in
    the mesh of corresponding to the deformable body with `body_id` within
@@ -129,9 +140,9 @@ class SoftsimSystem final : public SoftsimBase<T>,
                               std::vector<VectorX<T>>* output) const;
 
   /* Implements SoftsimBase::BuildRigidGeometryRepresentations(). */
-  void RegisterCollisionObject(geometry::GeometryId geometry_id,
-                               const geometry::Shape& shape,
-                               geometry::ProximityProperties properties) final;
+  void RegisterCollisionObject(
+      geometry::GeometryId geometry_id, const geometry::Shape& shape,
+      const geometry::ProximityProperties& properties) final;
 
   /* Updates the positions of the vertices of the deformable mesh associated
    with the deformable body with index `id` given the generalized positions of
@@ -153,14 +164,33 @@ class SoftsimSystem final : public SoftsimBase<T>,
    `this` SoftsimSystem. */
   void UpdatePoseForAllCollisionObjects(const systems::Context<T>& context);
 
-  /* Implements SoftsimBase::BuildContactSolverData(). */
-  void BuildContactSolverData(
-      const systems::Context<T>& context0, const VectorX<T>& v0,
-      const MatrixX<T>& M0, const VectorX<T>& minus_tau, const VectorX<T>& phi0,
-      const MatrixX<T>& contact_jacobians, const VectorX<T>& stiffness,
-      const VectorX<T>& damping, const VectorX<T>& mu) final;
+  void AssembleContactSolverData(const systems::Context<T>& context0,
+                                 const VectorX<T>& v0, const MatrixX<T>& M0,
+                                 VectorX<T>&& minus_tau, VectorX<T>&& phi0,
+                                 const MatrixX<T>& contact_jacobians,
+                                 VectorX<T>&& stiffness, VectorX<T>&& damping,
+                                 VectorX<T>&& mu) final;
 
-  /* Implements SoftsimBase::SolveContactProblem(). */
+  /* Calculates the ContactSolverData associated with the contacts between rigid
+  bodies and the deformable object represented by the given `deformable_mesh`.
+  @param context0                         The system context before the contact
+                                          solve.
+  @param deformable_mesh_W                The volume mesh of the deformable body
+                                          of interest whose vertices are
+                                          presented in the world frame.
+  @param deformable_proximity_properties  The proximity properties of the
+                                          deformable body of interest.
+  @param deformable_dof_offset            The starting index of the dofs of the
+                                          deformable body of interest.
+  @param num_total_dofs                   The total number of dofs, equal to the
+                                          sum of the number of rigid dofs plus
+                                          the number of deformable dofs. */
+  internal::ContactSolverData<T> CalcContactSolverData(
+      const systems::Context<T>& context0,
+      const geometry::VolumeMesh<T>& deformable_mesh_W,
+      const geometry::ProximityProperties& deformable_proximity_properties,
+      int deformable_dof_offset, int num_total_dofs) const;
+
   void SolveContactProblem(
       const contact_solvers::internal::ContactSolver<T>& contact_solver,
       contact_solvers::internal::ContactSolverResults<T>* results) const final;
@@ -173,6 +203,7 @@ class SoftsimSystem final : public SoftsimBase<T>,
   mutable std::vector<std::unique_ptr<FemStateBase<T>>> next_fem_states_{};
   /* Volume meshes for all deformablebodies. */
   mutable std::vector<geometry::VolumeMesh<T>> meshes_{};
+  std::vector<geometry::ProximityProperties> deformable_proximity_properties_{};
   /* Solvers for all bodies. */
   std::vector<std::unique_ptr<FemSolver<T>>> fem_solvers_{};
   /* Names of all registered bodies. */
@@ -183,7 +214,7 @@ class SoftsimSystem final : public SoftsimBase<T>,
   internal::CollisionObjects<T> collision_objects;
   /* Contact solver data for both rigid-rigid contacts and rigid-deformable
    contacts. */
-   ContactSolverData contact_solver_data_;
+  internal::ContactSolverData<T> contact_solver_data_;
 };
 }  // namespace fixed_fem
 }  // namespace multibody

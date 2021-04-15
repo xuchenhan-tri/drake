@@ -106,34 +106,39 @@ GTEST_TEST(MatrixUtilitiesTest, AddScaledCofactorMatrixDerivative) {
   }
 }
 
-/* Tests that given a sparse matrix A, if we convert it to a vector of triplets,
- then the vector of triplets can reconstruct a sparse matrix B that is bitwise
- equal to the original matrix A. */
 GTEST_TEST(MatrixUtilitiesTest, ConvertEigenSparseMatrixToTriplets) {
+  const int kMatrixSize = 10;
+  const int kRowOffset = 2;
+  const int kColOffset = 3;
   std::vector<Eigen::Triplet<double>> triplets;
   triplets.emplace_back(0, 0, 7);
   triplets.emplace_back(1, 3, 4);
   triplets.emplace_back(2, 2, 8);
-  Eigen::SparseMatrix<double> A(4, 4);
+  Eigen::SparseMatrix<double> A(kMatrixSize, kMatrixSize);
   A.setFromTriplets(triplets.begin(), triplets.end());
-  const auto expected_triplets = ConvertEigenSparseMatrixToTriplets(A);
-  Eigen::SparseMatrix<double> B(4, 4);
-  B.setFromTriplets(expected_triplets.begin(), expected_triplets.end());
-  // We verify the B is an exact bit by bit copy of A.
-  // Eigen does not offer SparseMatrix::operator==() and therefore we compare
-  // the results by explicitly comparing the individual components of the CCS
-  // format.
-  Eigen::Map<VectorX<double>> A_values(A.valuePtr(), A.nonZeros());
-  Eigen::Map<VectorX<double>> B_values(B.valuePtr(), B.nonZeros());
-  EXPECT_EQ(A_values, B_values);
+  auto expected_triplets =
+      ConvertEigenSparseMatrixToTripletsWithOffsets(A, kRowOffset, kColOffset);
 
-  Eigen::Map<VectorX<int>> A_inner(A.innerIndexPtr(), A.innerSize());
-  Eigen::Map<VectorX<int>> B_inner(B.innerIndexPtr(), B.innerSize());
-  EXPECT_EQ(A_inner, B_inner);
-
-  Eigen::Map<VectorX<int>> A_outer(A.outerIndexPtr(), A.outerSize());
-  Eigen::Map<VectorX<int>> B_outer(B.outerIndexPtr(), B.outerSize());
-  EXPECT_EQ(A_outer, B_outer);
+  // Sort the two triplets before comparing because the two sets of triplets are
+  // equivalent even they are permutations of each other.
+  const auto triplet_compare = [](const Eigen::Triplet<double>& t1,
+                                  const Eigen::Triplet<double>& t2) -> bool {
+    if (t1.row() != t2.row()) {
+      return t1.row() < t2.row();
+    }
+    if (t1.col() != t2.col()) {
+      return t1.col() < t2.col();
+    }
+    return t1.value() < t2.value();
+  };
+  std::sort(triplets.begin(), triplets.end(), triplet_compare);
+  std::sort(expected_triplets.begin(), expected_triplets.end(),
+            triplet_compare);
+  for (int i = 0; i < static_cast<int>(triplets.size()); ++i) {
+    EXPECT_EQ(triplets[i].row() + kRowOffset, expected_triplets[i].row());
+    EXPECT_EQ(triplets[i].col() + kColOffset, expected_triplets[i].col());
+    EXPECT_EQ(triplets[i].value(), expected_triplets[i].value());
+  }
 }
 }  // namespace
 }  // namespace internal

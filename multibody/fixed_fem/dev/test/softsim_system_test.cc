@@ -71,8 +71,13 @@ class SoftsimSystemTest : public ::testing::Test {
 
   /* Add a dummy box shaped deformable body with the given "name". */
   int AddDeformableBox(std::string name) {
+    const CoulombFriction<double> friction(0, 0);
+    geometry::ProximityProperties dummy_proximity_props;
+    geometry::AddContactMaterial(std::nullopt, std::nullopt, std::nullopt,
+                                 friction, &dummy_proximity_props);
     return softsim_system_.RegisterDeformableBody(
-        MakeBoxTetMesh(), std::move(name), MakeDeformableConfig());
+        MakeBoxTetMesh(), std::move(name), MakeDeformableConfig(),
+        dummy_proximity_props);
   }
 
   /* The SoftsimSystem under test. */
@@ -87,10 +92,10 @@ TEST_F(SoftsimSystemTest, RegisterDeformableBody) {
   const std::vector<std::string>& registered_names = softsim_system_.names();
   EXPECT_EQ(registered_names.size(), 1);
   EXPECT_EQ(registered_names[0], "box");
-  const std::vector<geometry::VolumeMesh<double>>& initial_meshes =
-      softsim_system_.initial_meshes();
-  EXPECT_EQ(initial_meshes.size(), 1);
-  EXPECT_TRUE(MakeBoxTetMesh().Equal(initial_meshes[0]));
+  const std::vector<geometry::VolumeMesh<double>>& meshes =
+      softsim_system_.meshes();
+  EXPECT_EQ(meshes.size(), 1);
+  EXPECT_TRUE(MakeBoxTetMesh().Equal(meshes[0]));
   EXPECT_EQ(softsim_system_.dt(), kDt);
 }
 
