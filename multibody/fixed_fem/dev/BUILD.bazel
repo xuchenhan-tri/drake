@@ -308,6 +308,7 @@ drake_cc_library(
         ":contact_solver_data",
         ":corotated_model",
         ":deformable_body_config",
+        ":deformable_contact",
         ":dirichlet_boundary_condition",
         ":dynamic_elasticity_element",
         ":dynamic_elasticity_model",

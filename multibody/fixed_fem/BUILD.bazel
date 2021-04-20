@@ -11,12 +11,18 @@ package(
 
 drake_cc_library(
     name = "softsim_base",
+    srcs = [
+        "softsim_base.cc",
+    ],
     hdrs = [
         "softsim_base.h",
     ],
     deps = [
         "//geometry:geometry_ids",
         "//geometry:shape_specification",
+        "//multibody/contact_solvers:contact_solver",
+        "//multibody/plant:multibody_plant_softsim_attorney",
+        "//systems/framework:context",
     ],
 )
 

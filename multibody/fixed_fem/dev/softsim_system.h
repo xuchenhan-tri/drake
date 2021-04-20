@@ -211,7 +211,7 @@ class SoftsimSystem final : public SoftsimBase<T>,
   /* Port Indexes. */
   systems::OutputPortIndex vertex_positions_port_;
   /* All rigid collision objects used in rigid-deformable contact. */
-  internal::CollisionObjects<T> collision_objects;
+  internal::CollisionObjects<T> collision_objects_;
   /* Contact solver data for both rigid-rigid contacts and rigid-deformable
    contacts. */
   internal::ContactSolverData<T> contact_solver_data_;

@@ -21,6 +21,7 @@
 #include "drake/math/random_rotation.h"
 #include "drake/math/rotation_matrix.h"
 #include "drake/multibody/contact_solvers/sparse_linear_operator.h"
+#include "drake/multibody/fixed_fem/softsim_base.h"
 #include "drake/multibody/plant/discrete_contact_pair.h"
 #include "drake/multibody/plant/externally_applied_spatial_force.h"
 #include "drake/multibody/plant/hydroelastic_traction_calculator.h"
@@ -3411,6 +3412,15 @@ AddMultibodyPlantSceneGraph(
 
 template AddMultibodyPlantSceneGraphResult<AutoDiffXd>
 AddMultibodyPlantSceneGraph(systems::DiagramBuilder<AutoDiffXd>* builder);
+
+// Add explicit instantiations for `CombinePointContactParameters`.
+// This does *not* support symbolic::Expression.
+template std::pair<double, double> CombinePointContactParameters(const double&,
+                                                                 const double&,
+                                                                 const double&,
+                                                                 const double&);
+template std::pair<AutoDiffXd, AutoDiffXd> CombinePointContactParameters(
+    const AutoDiffXd&, const AutoDiffXd&, const AutoDiffXd&, const AutoDiffXd&);
 
 }  // namespace multibody
 }  // namespace drake
