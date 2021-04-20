@@ -1,7 +1,6 @@
 #include "drake/multibody/fixed_fem/dev/softsim_system.h"
 
 #include "drake/geometry/query_object.h"
-#include "drake/math/orthonormal_basis.h"
 #include "drake/multibody/fixed_fem/dev/corotated_model.h"
 #include "drake/multibody/fixed_fem/dev/deformable_contact.h"
 #include "drake/multibody/fixed_fem/dev/linear_constitutive_model.h"
@@ -256,10 +255,9 @@ void SoftsimSystem<T>::AssembleContactSolverData(
       contact_jacobian, num_rigid_dofs, num_deformable_dofs);
 
   // Rigid-deformable contact solver data.
-  for (int i = 0; i < num_bodies(); ++i) {
+  for (SoftBodyIndex i(0); i < num_bodies(); ++i) {
     contact_solver_data_vector.emplace_back(CalcContactSolverData(
-        context0, meshes_[i], deformable_proximity_properties_[i],
-        deformable_dof_offsets[i], num_total_dofs));
+        context0, i, deformable_dof_offsets[i], num_total_dofs));
   }
 
   contact_solver_data_ =
@@ -268,41 +266,21 @@ void SoftsimSystem<T>::AssembleContactSolverData(
 
 template <typename T>
 internal::ContactSolverData<T> SoftsimSystem<T>::CalcContactSolverData(
-    const systems::Context<T>& context0,
-    const geometry::VolumeMesh<T>& deformable_mesh_W,
-    const geometry::ProximityProperties& deformable_proximity_properties,
+    const systems::Context<T>& context, SoftBodyIndex deformable_id,
     int deformable_dof_offset, int num_total_dofs) const {
   const std::vector<geometry::GeometryId>& rigid_ids =
       collision_objects_.geometry_ids();
-  // Number of contacts between rigid bodies and `deformable_mesh`.
+  // Number of contacts between all rigid bodies and the deformable body`.
   int nc = 0;
-  std::vector<DeformableContactSurface<T>> contact_surfaces;
-  for (const geometry::GeometryId rigid_id : rigid_ids) {
-    contact_surfaces.emplace_back(ComputeTetMeshTriMeshContact(
-        deformable_mesh_W, collision_objects_.mesh(rigid_id),
-        collision_objects_.pose(rigid_id)));
-    nc += contact_surfaces.back().num_polygons();
+  std::vector<internal::DeformableRigidContactData<T>> contact_data;
+  contact_data.reserve(rigid_ids.size());
+  std::vector<int> contact_id_offsets(rigid_ids.size());
+  for (int i = 0; i < static_cast<int>(rigid_ids.size()); ++i) {
+    contact_data.emplace_back(
+        CalcDeformableRigidContactData(rigid_ids[i], deformable_id));
+    contact_id_offsets[i] = nc;
+    nc += contact_data.back().contact_surface.num_polygons();
   }
-
-  // Extract the stiffness and dissipation parameters of the deformable body.
-  const auto get_point_contact_parameters =
-      [&](const geometry::ProximityProperties& props) -> std::pair<T, T> {
-    return std::make_pair(props.template GetPropertyOrDefault<T>(
-                              geometry::internal::kMaterialGroup,
-                              geometry::internal::kPointStiffness,
-                              this->default_contact_stiffness()),
-                          props.template GetPropertyOrDefault<T>(
-                              geometry::internal::kMaterialGroup,
-                              geometry::internal::kHcDissipation,
-                              this->default_contact_dissipation()));
-  };
-  const auto [deformable_stiffness, deformable_dissipation] =
-      get_point_contact_parameters(deformable_proximity_properties);
-  DRAKE_THROW_UNLESS(deformable_proximity_properties.HasProperty(
-      geometry::internal::kMaterialGroup, geometry::internal::kFriction));
-  const CoulombFriction<double> deformable_mu =
-      deformable_proximity_properties.GetProperty<CoulombFriction<double>>(
-          geometry::internal::kMaterialGroup, geometry::internal::kFriction);
 
   VectorX<T> phi0(nc);
   VectorX<T> stiffness(nc);
@@ -315,83 +293,136 @@ internal::ContactSolverData<T> SoftsimSystem<T>::CalcContactSolverData(
   // calculation of penetration depth. Currently, phi0 is set to zero because
   // PGS does not use it.
   phi0.setZero();
-  int contact_id_offset = 0;
-  for (int i = 0; i < static_cast<int>(rigid_ids.size()); ++i) {
-    const geometry::GeometryId rigid_id = rigid_ids[i];
-    const auto& rigid_proximity_properties =
-        collision_objects_.proximity_properties(rigid_id);
-    const auto [rigid_stiffness, rigid_dissipation] =
-        get_point_contact_parameters(rigid_proximity_properties);
-    const auto [k, d] = CombinePointContactParameters(
-        deformable_stiffness, rigid_stiffness, deformable_dissipation,
-        rigid_dissipation);
-    const CoulombFriction<double> rigid_mu =
-        rigid_proximity_properties
-            .template GetProperty<CoulombFriction<double>>(
-                geometry::internal::kMaterialGroup,
-                geometry::internal::kFriction);
-    const CoulombFriction<double> contact_mu =
-        CalcContactFrictionFromSurfaceProperties(deformable_mu, rigid_mu);
-    // Number of contacts between the deformable body and the i-th rigid object.
-    const int nci = contact_surfaces[i].num_polygons();
-    for (int ic = 0; ic < nci; ++ic) {
-      const ContactPolygonData<T>& polygon_data =
-          contact_surfaces[i].polygon_data(ic);
-      /* Get the rotation matrix mapping the world frame quantities to the
-      contact frame quantities. */
-      Matrix3<T> R_CW =
-          math::ComputeBasisFromAxis(2, polygon_data.unit_normal).transpose();
-      const int row = 3 * (contact_id_offset + ic);
-      /* Build the jacobian entries corresponding to the deformable dofs. */
-      {
-        /* The contribution to the contact velocity from the deformable object
-         A is R_CW * v_WAq. Note
-           v_WAq = b₀ * v_WVᵢ₀ + b₁ * v_WVᵢ₁ + b₂ * v_WVᵢ₂ + b₃ * v_WVᵢ₃,
-         where bₗ is the barycentric weight corresponding to vertex kₗ and
-         v_WVₖₗ is the velocity of that vertex. */
-        const Vector4<T>& barycentric_weights = polygon_data.b_centroid;
-        const geometry::VolumeElement tet_element =
-            deformable_mesh_W.element(polygon_data.tet_index);
-        for (int l = 0; l < 4; ++l) {
-          const int col = deformable_dof_offset + 3 * tet_element.vertex(l);
-          internal::AddMatrix3ToEigenTriplets<T>(R_CW * barycentric_weights(l),
-                                                 row, col,
-                                                 &contact_jacobian_triplets);
-        }
-      }
-      /* Build the jacobian entries corresponding to the rigid dofs. */
-      {
-        // For point Rc (origin of rigid body's frame R shifted to the contact
-        // point C), calculate Jv_v_WRc (Rc's translational velocity Jacobian in
-        // the world frame W with respect to generalized velocities v).
-        Matrix3X<T> Jv_v_WRc_dense(3, this->multibody_plant().num_velocities());
-        /* The position of the contact point in the world frame. */
-        const Vector3<T>& p_WC = polygon_data.centroid;
-        this->CalcJacobianTranslationVelocity(context0, p_WC, rigid_id,
-                                              &Jv_v_WRc_dense);
-        /* The same Jacobian expressed in the contact frame. */
-        const Eigen::SparseMatrix<T> Jv_v_WRc_C =
-            (-R_CW * Jv_v_WRc_dense).sparseView();
-        std::vector<Eigen::Triplet<T>> triplets =
-            internal::ConvertEigenSparseMatrixToTripletsWithOffsets(Jv_v_WRc_C,
-                                                                    row, 0);
 
-        contact_jacobian_triplets.insert(contact_jacobian_triplets.end(),
-                                         triplets.begin(), triplets.end());
-      }
-      stiffness.segment(contact_id_offset, nci) = VectorX<T>::Ones(nci) * k;
-      dissipation.segment(contact_id_offset, nci) = VectorX<T>::Ones(nci) * d;
-      friction.segment(contact_id_offset, nci) =
-          VectorX<T>::Ones(nci) * contact_mu.dynamic_friction();
-      contact_id_offset += nci;
-    }
+  for (int i = 0; i < static_cast<int>(contact_data.size()); ++i) {
+    const internal::DeformableRigidContactData<T>& data_i = contact_data[i];
+    // The number of contacts in data_i.
+    const int nci = data_i.contact_surface.num_polygons();
+
+    stiffness.segment(contact_id_offsets[i], nci) =
+        VectorX<T>::Ones(nci) * data_i.stiffness;
+    dissipation.segment(contact_id_offsets[i], nci) =
+        VectorX<T>::Ones(nci) * data_i.dissipation;
+    friction.segment(contact_id_offsets[i], nci) =
+        VectorX<T>::Ones(nci) * data_i.friction;
+
+    AppendContactJacobianRigid(context, data_i, 3 * contact_id_offsets[i],
+                               &contact_jacobian_triplets);
+    AppendContactJacobianDeformable(data_i, 3 * contact_id_offsets[i],
+                                    deformable_dof_offset,
+                                    &contact_jacobian_triplets);
   }
-
   contact_jacobian.setFromTriplets(contact_jacobian_triplets.begin(),
                                    contact_jacobian_triplets.end());
   return internal::ContactSolverData<T>(
       std::move(phi0), std::move(stiffness), std::move(dissipation),
       std::move(friction), std::move(contact_jacobian), num_total_dofs);
+}
+
+template <typename T>
+internal::DeformableRigidContactData<T>
+SoftsimSystem<T>::CalcDeformableRigidContactData(
+    geometry::GeometryId rigid_id, SoftBodyIndex deformable_id) const {
+  DeformableContactSurface<T> contact_surface = ComputeTetMeshTriMeshContact(
+      meshes_[deformable_id], collision_objects_.mesh(rigid_id),
+      collision_objects_.pose(rigid_id));
+
+  const auto get_point_contact_parameters =
+      [&](const geometry::ProximityProperties& props) -> std::pair<T, T> {
+    return std::make_pair(props.template GetPropertyOrDefault<T>(
+                              geometry::internal::kMaterialGroup,
+                              geometry::internal::kPointStiffness,
+                              this->default_contact_stiffness()),
+                          props.template GetPropertyOrDefault<T>(
+                              geometry::internal::kMaterialGroup,
+                              geometry::internal::kHcDissipation,
+                              this->default_contact_dissipation()));
+  };
+  // Extract the stiffness, dissipation and friction parameters of the
+  // deformable body.
+  const geometry::ProximityProperties& deformable_props =
+      deformable_proximity_properties_[deformable_id];
+  const auto [deformable_stiffness, deformable_dissipation] =
+      get_point_contact_parameters(deformable_props);
+  DRAKE_THROW_UNLESS(deformable_props.HasProperty(
+      geometry::internal::kMaterialGroup, geometry::internal::kFriction));
+  const CoulombFriction<double> deformable_mu =
+      deformable_props.GetProperty<CoulombFriction<double>>(
+          geometry::internal::kMaterialGroup, geometry::internal::kFriction);
+
+  // Extract the stiffness, dissipation and friction parameters of the rigid
+  // body.
+  const auto& rigid_proximity_properties =
+      collision_objects_.proximity_properties(rigid_id);
+  const auto [rigid_stiffness, rigid_dissipation] =
+      get_point_contact_parameters(rigid_proximity_properties);
+  const CoulombFriction<double> rigid_mu =
+      rigid_proximity_properties.template GetProperty<CoulombFriction<double>>(
+          geometry::internal::kMaterialGroup, geometry::internal::kFriction);
+
+  // Combine the stiffness, dissipation and friction parameters for the
+  // contact points.
+  auto [k, d] =
+      CombinePointContactParameters(deformable_stiffness, rigid_stiffness,
+                                    deformable_dissipation, rigid_dissipation);
+  const CoulombFriction<double> mu =
+      CalcContactFrictionFromSurfaceProperties(deformable_mu, rigid_mu);
+  return internal::DeformableRigidContactData<T>(
+      std::move(contact_surface), rigid_id, deformable_id, std::move(k),
+      std::move(d), mu.dynamic_friction());
+}
+
+template <typename T>
+void SoftsimSystem<T>::AppendContactJacobianRigid(
+    const systems::Context<T>& context,
+    const internal::DeformableRigidContactData<T>& contact_data, int row_offset,
+    std::vector<Eigen::Triplet<T>>* contact_jacobian_triplets) const {
+  const DeformableContactSurface<T>& contact_surface =
+      contact_data.contact_surface;
+  for (int i = 0; i < contact_surface.num_polygons(); ++i) {
+    // For point Rc (origin of rigid body's frame R shifted to the contact
+    // point C), calculate Jv_v_WRc (Rc's translational velocity Jacobian
+    // in the world frame W with respect to generalized velocities v).
+    Matrix3X<T> Jv_v_WRc_dense(3, this->multibody_plant().num_velocities());
+    /* The position of the contact point in the world frame. */
+    const Vector3<T>& p_WC = contact_surface.polygon_data(i).centroid;
+    this->CalcJacobianTranslationVelocity(context, p_WC, contact_data.rigid_id,
+                                          &Jv_v_WRc_dense);
+    /* The same Jacobian expressed in the contact frame. */
+    const Eigen::SparseMatrix<T> Jv_v_WRc_C =
+        (-contact_data.R_CWs[i] * Jv_v_WRc_dense).sparseView();
+    std::vector<Eigen::Triplet<T>> triplets =
+        internal::ConvertEigenSparseMatrixToTripletsWithOffsets(
+            Jv_v_WRc_C, row_offset + 3 * i, 0);
+    contact_jacobian_triplets->insert(contact_jacobian_triplets->end(),
+                                      triplets.begin(), triplets.end());
+  }
+}
+
+template <typename T>
+void SoftsimSystem<T>::AppendContactJacobianDeformable(
+    const internal::DeformableRigidContactData<T>& contact_data, int row_offset,
+    int col_offset,
+    std::vector<Eigen::Triplet<T>>* contact_jacobian_triplets) const {
+  const DeformableContactSurface<T>& contact_surface =
+      contact_data.contact_surface;
+  for (int i = 0; i < contact_surface.num_polygons(); ++i) {
+    const ContactPolygonData<T>& polygon_data = contact_surface.polygon_data(i);
+    /* The contribution to the contact velocity from the deformable object
+     A is R_CW * v_WAq. Note
+       v_WAq = b₀ * v_WVᵢ₀ + b₁ * v_WVᵢ₁ + b₂ * v_WVᵢ₂ + b₃ * v_WVᵢ₃,
+     where bₗ is the barycentric weight corresponding to vertex kₗ and
+     v_WVₖₗ is the velocity of that vertex. */
+    const Vector4<T>& barycentric_weights = polygon_data.b_centroid;
+    const geometry::VolumeElement tet_element =
+        meshes_[contact_data.deformable_id].element(polygon_data.tet_index);
+    for (int l = 0; l < 4; ++l) {
+      const int col = col_offset + 3 * tet_element.vertex(l);
+      internal::AddMatrix3ToEigenTriplets<T>(
+          contact_data.R_CWs[i] * barycentric_weights(l), row_offset + 3 * i,
+          col, contact_jacobian_triplets);
+    }
+  }
 }
 
 template <typename T>

@@ -12,6 +12,7 @@
 #include "drake/multibody/fixed_fem/dev/collision_objects.h"
 #include "drake/multibody/fixed_fem/dev/contact_solver_data.h"
 #include "drake/multibody/fixed_fem/dev/deformable_body_config.h"
+#include "drake/multibody/fixed_fem/dev/deformable_rigid_contact_data.h"
 #include "drake/multibody/fixed_fem/dev/dirichlet_boundary_condition.h"
 #include "drake/multibody/fixed_fem/dev/dynamic_elasticity_element.h"
 #include "drake/multibody/fixed_fem/dev/dynamic_elasticity_model.h"
@@ -171,25 +172,44 @@ class SoftsimSystem final : public SoftsimBase<T>,
                                  VectorX<T>&& stiffness, VectorX<T>&& damping,
                                  VectorX<T>&& mu) final;
 
-  /* Calculates the ContactSolverData associated with the contacts between rigid
-  bodies and the deformable object represented by the given `deformable_mesh`.
-  @param context0                         The system context before the contact
-                                          solve.
-  @param deformable_mesh_W                The volume mesh of the deformable body
-                                          of interest whose vertices are
-                                          presented in the world frame.
-  @param deformable_proximity_properties  The proximity properties of the
-                                          deformable body of interest.
+  /* Calculates the ContactSolverData associated with the contacts between all
+  rigid bodies and the deformable body with `deformable_id`.
+  @param context                          The system state at the time the
+                                          contact solver data is evaluated.
+  @param deformable_id                    The SoftBodyIndex of the deformable
+                                          body of interest.
   @param deformable_dof_offset            The starting index of the dofs of the
                                           deformable body of interest.
   @param num_total_dofs                   The total number of dofs, equal to the
                                           sum of the number of rigid dofs plus
                                           the number of deformable dofs. */
   internal::ContactSolverData<T> CalcContactSolverData(
-      const systems::Context<T>& context0,
-      const geometry::VolumeMesh<T>& deformable_mesh_W,
-      const geometry::ProximityProperties& deformable_proximity_properties,
+      const systems::Context<T>& context, SoftBodyIndex deformable_id,
       int deformable_dof_offset, int num_total_dofs) const;
+
+  /* Calculates the DeformableRigidContactData with the contacts between the
+   rigid geometry with `rigid_id` and the deformable body with
+   `deformable_id`. */
+  internal::DeformableRigidContactData<T> CalcDeformableRigidContactData(
+      geometry::GeometryId rigid_id, SoftBodyIndex deformable_id) const;
+
+  /* Uses the `contact_data` to construct the contact jacobian entries with
+   respect to the rigid dofs and then offset the row indices of the entries by
+   `row_offset` and append the entries to `contact_jacobian_triplets`. */
+  void AppendContactJacobianRigid(
+      const systems::Context<T>& context,
+      const internal::DeformableRigidContactData<T>& contact_data,
+      int row_offset,
+      std::vector<Eigen::Triplet<T>>* contact_jacobian_triplets) const;
+
+  /* Uses the `contact_data` to construct the contact jacobian entries with
+   respect to the deformable dofs and then offset the row/column indices of the
+   entries by `row_offset`/`col_offset` and append the entries to
+   `contact_jacobian_triplets`. */
+  void AppendContactJacobianDeformable(
+      const internal::DeformableRigidContactData<T>& contact_data,
+      int row_offset, int col_offset,
+      std::vector<Eigen::Triplet<T>>* contact_jacobian_triplets) const;
 
   void SolveContactProblem(
       const contact_solvers::internal::ContactSolver<T>& contact_solver,
