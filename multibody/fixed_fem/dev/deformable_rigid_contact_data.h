@@ -39,8 +39,8 @@ struct DeformableRigidContactData {
   T stiffness;                    // Combined stiffness at the contact point.
   T dissipation;                  // Combined dissipation at the contact point.
   double friction;                // Combined friction at the contact point.
-  /* The rotation matrix mapping world frame quantities into
-  contact frames at each contact point. */
+  /* The rotation matrix mapping world frame quantities into contact frames at
+   each contact point. */
   std::vector<Matrix3<T>> R_CWs;
 };
 }  // namespace internal
