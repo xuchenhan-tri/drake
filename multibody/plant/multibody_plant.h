@@ -66,8 +66,7 @@ struct HydroelasticContactInfoAndBodySpatialForces {
 };
 
 // Forward declaration.
-template <typename> class MultibodyPlantAccess;
-
+template <typename> class MultibodyPlantContactComputationManagerAttorney;
 }  // namespace internal
 
 // TODO(amcastro-tri): Add a section on contact models in
@@ -1622,13 +1621,15 @@ class MultibodyPlant : public internal::MultibodyTreeSystem<T> {
     DRAKE_MBP_THROW_IF_NOT_FINALIZED();
     DRAKE_DEMAND(manager != nullptr);
     static_assert(
-        std::is_base_of<ContactComputationManager<T>, ManagerType>::value,
+        std::is_base_of<internal::ContactComputationManager<T>,
+                        ManagerType>::value,
         "ManagerType must be a sub-class of ContactComputationManager.");
-    ManagerType* manager_ptr = manager.get();
     contact_computation_manager_ = std::move(manager);
     // Give the manager a chance to declare additional state and ports.
-    manager_ptr->DeclareStateCacheAndPorts(this);
-    return *manager_ptr;
+    contact_computation_manager_->DeclareStateCacheAndPorts(this);
+    ManagerType* concrete_manager_ptr =
+        static_cast<ManagerType*>(contact_computation_manager_.get());
+    return *concrete_manager_ptr;
   }
 #endif
 
@@ -3898,7 +3899,7 @@ class MultibodyPlant : public internal::MultibodyTreeSystem<T> {
 
   // Friend attorney class to provide private access to those internal::
   // implementations that need it.
-  friend struct internal::MultibodyPlantAccess<T>;
+  friend class internal::MultibodyPlantContactComputationManagerAttorney<T>;
 
   // This struct stores in one single place all indexes related to
   // MultibodyPlant specific cache entries. These are initialized at Finalize()
@@ -4718,7 +4719,8 @@ class MultibodyPlant : public internal::MultibodyTreeSystem<T> {
   // states.
   // TODO(amcastro-tri): migrate the entirety of computations related to contact
   // resolution into a default contact manager.
-  std::unique_ptr<ContactComputationManager<T>> contact_computation_manager_;
+  std::unique_ptr<internal::ContactComputationManager<T>>
+      contact_computation_manager_;
 
   hydroelastics::internal::HydroelasticEngine<T> hydroelastics_engine_;
 
