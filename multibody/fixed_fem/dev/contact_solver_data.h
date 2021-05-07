@@ -17,7 +17,18 @@ class PointContactDataStorage {
  public:
   DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(PointContactDataStorage);
 
-  PointContactDataStorage(int nv) : nv_(nv) {}
+  PointContactDataStorage() = default;
+
+  /* Resize the PointContactDataStorage to fit `nv` generalized velocities and
+   clear all existing contact data. */
+  void Resize(int nv) {
+    nv_ = nv;
+    nc_ = 0;
+    phi0_.clear();
+    stiffness_.clear();
+    damping_.clear();
+    mu_.clear();
+  }
 
   void AppendData(VectorX<T>&& phi0, VectorX<T>&& stiffness,
                   VectorX<T>&& damping, VectorX<T>&& mu, const MatrixX<T>& Jc) {
@@ -51,7 +62,7 @@ class PointContactDataStorage {
   const std::vector<T>& stiffness() const { return stiffness_; }
   const std::vector<T>& damping() const { return damping_; }
   const std::vector<T>& mu() const { return mu_; }
-  const std::vector<Eigen::Triplet<T>> Jc_triplets() const {
+  const std::vector<Eigen::Triplet<T>>& Jc_triplets() const {
     return Jc_triplets_;
   }
 
@@ -76,11 +87,11 @@ class PointContactDataStorage {
       Jc_triplets_.emplace_back(t.row() + 3 * nc_, t.col(), t.value());
     }
   }
-  std::vector<T> phi0_;
-  std::vector<T> stiffness_;
-  std::vector<T> damping_;
-  std::vector<T> mu_;
-  std::vector<Eigen::Triplet<T>> Jc_triplets_;
+  std::vector<T> phi0_{};
+  std::vector<T> stiffness_{};
+  std::vector<T> damping_{};
+  std::vector<T> mu_{};
+  std::vector<Eigen::Triplet<T>> Jc_triplets_{};
   int nc_{0};  // Number of contact points.
   int nv_{0};  // Number of generalized velocities.
 };

@@ -182,15 +182,15 @@ class EigenConjugateGradientSolver : public LinearSystemSolver<T> {
   void set_tolerance(const T& tol) final { cg_.setTolerance(tol); }
 
  private:
-  void DoCompute() final {
+  void DoCompute() const final {
     matrix_proxy_.Resize();
     cg_.compute(matrix_proxy_);
   }
 
-  EigenMatrixProxy<T> matrix_proxy_;
+  mutable EigenMatrixProxy<T> matrix_proxy_;
   /* TODO(xuchenhan-tri): Allow for custom preconditioner if needed in the
    future. */
-  Eigen::ConjugateGradient<EigenMatrixProxy<T>, Eigen::Lower | Eigen::Upper,
+  mutable Eigen::ConjugateGradient<EigenMatrixProxy<T>, Eigen::Lower | Eigen::Upper,
                            Eigen::IdentityPreconditioner>
       cg_;
 };

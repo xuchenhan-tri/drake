@@ -305,6 +305,16 @@ drake_cc_library(
 )
 
 drake_cc_library(
+    name = "eigen_cholesky_solver",
+    hdrs = [
+        "eigen_cholesky_solver.h",
+    ],
+    deps = [
+        ":linear_system_solver",
+    ],
+)
+
+drake_cc_library(
     name = "softsim_system",
     srcs = [
         "softsim_system.cc",
@@ -313,6 +323,9 @@ drake_cc_library(
         "softsim_system.h",
     ],
     deps = [
+        ":inverse_operator",
+        ":block_diagonal_operator",
+        ":eigen_cholesky_solver",
         ":collision_objects",
         ":contact_solver_data",
         ":corotated_model",
@@ -537,6 +550,35 @@ drake_cc_library(
         ":elasticity_model",
         ":zeroth_order_state_updater",
         "//geometry/proximity:volume_mesh",
+    ],
+)
+
+drake_cc_library(
+    name = "block_diagonal_operator",
+    srcs = [
+        "block_diagonal_operator.cc",
+    ],
+    hdrs = [
+        "block_diagonal_operator.h",
+    ],
+    deps = [
+        "//common:essential",
+        "//multibody/contact_solvers:linear_operator",
+    ],
+)
+
+drake_cc_library(
+    name = "inverse_operator",
+    srcs = [
+        "inverse_operator.cc",
+    ],
+    hdrs = [
+        "inverse_operator.h",
+    ],
+    deps = [
+        ":linear_system_solver",
+        "//common:essential",
+        "//multibody/contact_solvers:sparse_linear_operator",
     ],
 )
 

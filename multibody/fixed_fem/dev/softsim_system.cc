@@ -3,13 +3,21 @@
 #include "drake/geometry/query_object.h"
 #include "drake/multibody/fixed_fem/dev/corotated_model.h"
 #include "drake/multibody/fixed_fem/dev/deformable_contact.h"
+#include "drake/multibody/fixed_fem/dev/eigen_cholesky_solver.h"
 #include "drake/multibody/fixed_fem/dev/linear_constitutive_model.h"
 #include "drake/multibody/plant/coulomb_friction.h"
 #include "drake/multibody/plant/multibody_plant.h"
 
 namespace drake {
 namespace multibody {
+using contact_solvers::internal::BlockDiagonalOperator;
+using contact_solvers::internal::InverseOperator;
+using contact_solvers::internal::LinearOperator;
+using contact_solvers::internal::SparseLinearOperator;
+
 namespace fixed_fem {
+using internal::EigenCholeskySolver;
+
 template <typename T>
 SoftsimSystem<T>::SoftsimSystem(MultibodyPlant<T>* mbp)
     : multibody::internal::DeformableSolverBase<T>(mbp) {
@@ -46,6 +54,15 @@ SoftBodyIndex SoftsimSystem<T>::RegisterDeformableBody(
   this->DeclareDeformableState(deformable_state->q(), deformable_state->qdot(),
                                deformable_state->qddot());
   deformable_proximity_properties_.emplace_back(std::move(properties));
+  Eigen::SparseMatrix<T> tangent_matrix(
+      deformable_state->num_generalized_positions(),
+      deformable_state->num_generalized_positions());
+  const FemModelBase<T>& model = fem_solvers_.back()->model();
+  model.SetTangentMatrixSparsityPattern(&tangent_matrix);
+  tangent_matrices_.emplace_back(std::move(tangent_matrix));
+  tangent_matrix_operators_.emplace_back(
+      std::make_unique<SparseLinearOperator<T>>("deformable tangent matrix",
+                                                &tangent_matrices_.back()));
   return body_index;
 }
 
@@ -126,8 +143,7 @@ void SoftsimSystem<T>::RegisterDeformableBodyHelper(
   names_.emplace_back(std::move(name));
 }
 
-// TODO(xuchenhan-tri): This function should be changed to only advance free
-//  positions/velocities of deformable objects.
+// TODO(xuchenhan-tri): Change this to a calc function for a cache entry.
 template <typename T>
 VectorX<T> SoftsimSystem<T>::CalcFreeMotion(const VectorX<T>& state0,
                                             int deformable_body_index) const {
@@ -156,6 +172,10 @@ VectorX<T> SoftsimSystem<T>::CalcFreeMotion(const VectorX<T>& state0,
   next_state.head(num_dofs) = next_fem_state.q();
   next_state.segment(num_dofs, num_dofs) = next_fem_state.qdot();
   next_state.tail(num_dofs) = next_fem_state.qddot();
+
+  const FemModelBase<T>& model = fem_solvers_[deformable_body_index]->model();
+  model.CalcTangentMatrix(next_fem_state,
+                          &tangent_matrices_[deformable_body_index]);
   return next_state;
 }
 
@@ -163,7 +183,6 @@ template <typename T>
 void SoftsimSystem<T>::RegisterCollisionObject(
     geometry::GeometryId geometry_id, const geometry::Shape& shape,
     const geometry::ProximityProperties& properties) {
-  std::cout << "Registering collision objects" << std::endl;
   collision_objects_.AddCollisionObject(geometry_id, shape, properties);
 }
 
@@ -212,17 +231,59 @@ void SoftsimSystem<T>::AssembleContactSolverData(
   }
   const int num_total_dofs = num_rigid_dofs + num_deformable_dofs;
 
-  internal::PointContactDataStorage<T> point_contact_data_storage(
-      num_total_dofs);
+  contact_data_storage_.Resize(num_total_dofs);
   // Append rigid-rigid point contact data.
-  point_contact_data_storage.AppendData(std::move(phi0), std::move(stiffness),
-                                        std::move(damping), std::move(mu),
-                                        contact_jacobian);
+  contact_data_storage_.AppendData(std::move(phi0), std::move(stiffness),
+                                   std::move(damping), std::move(mu),
+                                   contact_jacobian);
   // Append rigid-deformable point contact data.
   for (SoftBodyIndex i(0); i < num_bodies(); ++i) {
     AppendPointContactData(context0, i, deformable_dof_offsets[i],
-                           &point_contact_data_storage);
+                           &contact_data_storage_);
   }
+
+  // Assemble the Ainv operator.
+  rigid_mass_matrix_ = M0.sparseView();
+  rigid_mass_matrix_operator_ = std::make_unique<SparseLinearOperator<T>>(
+      "rigid mass", &rigid_mass_matrix_);
+  rigid_mass_matrix_inverter_ = std::make_unique<EigenCholeskySolver<T>>(
+      rigid_mass_matrix_operator_.get());
+  inverse_mass_operator_ = std::make_unique<InverseOperator<T>>(
+      "inverse rigid mass", rigid_mass_matrix_inverter_.get());
+
+  tangent_matrix_inverters_.resize(num_bodies());
+  inverse_tangent_operators_.resize(num_bodies());
+  for (int i = 0; i < num_bodies(); ++i) {
+    tangent_matrix_inverters_[i] = std::make_unique<EigenCholeskySolver<T>>(
+        tangent_matrix_operators_[i].get());
+    inverse_tangent_operators_[i] = std::make_unique<InverseOperator<T>>(
+        "tangent_inverse", tangent_matrix_inverters_[i].get());
+  }
+  std::vector<const LinearOperator<T>*> A_inv_blocks;
+  A_inv_blocks.push_back(inverse_mass_operator_.get());
+  for (int i = 0; i < num_bodies(); ++i) {
+    A_inv_blocks.push_back(inverse_tangent_operators_[i].get());
+  }
+  Ainv_ = std::make_unique<BlockDiagonalOperator<T>>("A inverse", A_inv_blocks);
+
+  // Assemble the free velocities.
+  rigid_free_velocities_.resize(num_rigid_dofs);
+  inverse_mass_operator_->Multiply(minus_tau,
+                                   &rigid_free_velocities_);  // v_star = -M⁻¹⋅τ
+  rigid_free_velocities_ *= -this->dt();  // v_star = dt⋅M⁻¹⋅τ
+  rigid_free_velocities_ += v0;           // v_star = v₀ + dt⋅M⁻¹⋅τ
+
+  deformable_free_velocities_.resize(num_deformable_dofs);
+  int id = 0;
+  for (int i = 0; i < num_bodies(); ++i) {
+    const int body_dofs = next_fem_states_[i]->num_generalized_positions();
+    deformable_free_velocities_.segment(id, body_dofs) =
+        next_fem_states_[i]->qdot();
+    id += body_dofs;
+  }
+  v_star_.resize(num_total_dofs);
+  v_star_.head(num_rigid_dofs) = rigid_free_velocities_;
+  v_star_.tail(num_deformable_dofs) = deformable_free_velocities_;
 }
 
 template <typename T>
@@ -387,10 +448,40 @@ void SoftsimSystem<T>::AppendContactJacobianDeformable(
 
 template <typename T>
 void SoftsimSystem<T>::SolveContactProblem(
-    const contact_solvers::internal::ContactSolver<T>& contact_solver,
+    contact_solvers::internal::ContactSolver<T>* contact_solver,
     contact_solvers::internal::ContactSolverResults<T>* results) const {
-  unused(contact_solver);
-  unused(results);
+  contact_solvers::internal::SystemDynamicsData<T> dynamics_data(Ainv_.get(),
+                                                                 &v_star_);
+  const int nc = contact_data_storage_.num_contacts();
+  VectorX<T> phi0 =
+      Eigen::Map<const VectorX<T>>(contact_data_storage_.phi0().data(), nc);
+  VectorX<T> stiffness = Eigen::Map<const VectorX<T>>(
+      contact_data_storage_.stiffness().data(), nc);
+  VectorX<T> damping =
+      Eigen::Map<const VectorX<T>>(contact_data_storage_.damping().data(), nc);
+  VectorX<T> mu =
+      Eigen::Map<const VectorX<T>>(contact_data_storage_.mu().data(), nc);
+  DRAKE_DEMAND(contact_data_storage_.num_dofs() == v_star_.size());
+  Eigen::SparseMatrix<T> Jc(contact_data_storage_.num_contacts(),
+                            contact_data_storage_.num_dofs());
+  Jc.setFromTriplets(contact_data_storage_.Jc_triplets().begin(),
+                     contact_data_storage_.Jc_triplets().end());
+  const contact_solvers::internal::SparseLinearOperator<T> Jc_op("Jc", &Jc);
+
+  contact_solvers::internal::PointContactData<T> contact_data(
+      &phi0, &Jc_op, &stiffness, &damping, &mu);
+  const contact_solvers::internal::ContactSolverStatus info =
+      contact_solver->SolveWithGuess(this->dt(), dynamics_data, contact_data,
+                                     v_star_, results);
+
+  if (info != contact_solvers::internal::ContactSolverStatus::kSuccess) {
+    const std::string msg = fmt::format(
+        "Contact solver of type '" + NiceTypeName::Get(*contact_solver) +
+            "' failed to converge with discrete update "
+            "period = {:7.3g}.",
+        this->dt());
+    throw std::runtime_error(msg);
+  }
 }
 }  // namespace fixed_fem
 }  // namespace multibody

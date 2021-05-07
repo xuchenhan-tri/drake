@@ -2181,7 +2181,7 @@ void MultibodyPlant<T>::CalcTamsiResults(
         context0, v0, M0, std::move(minus_tau), std::move(phi0),
         contact_jacobians.Jc, std::move(stiffness), std::move(damping),
         std::move(mu));
-    deformable_solver_->SolveContactProblem(*contact_solver_, results);
+    deformable_solver_->SolveContactProblem(contact_solver_.get(), results);
     return;
   }
 

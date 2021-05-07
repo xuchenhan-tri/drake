@@ -9,6 +9,8 @@
 #include "drake/common/eigen_types.h"
 #include "drake/common/unused.h"
 #include "drake/geometry/proximity/volume_mesh.h"
+#include "drake/multibody/contact_solvers/sparse_linear_operator.h"
+#include "drake/multibody/fixed_fem/dev/block_diagonal_operator.h"
 #include "drake/multibody/fixed_fem/dev/collision_objects.h"
 #include "drake/multibody/fixed_fem/dev/contact_solver_data.h"
 #include "drake/multibody/fixed_fem/dev/deformable_body_config.h"
@@ -17,6 +19,7 @@
 #include "drake/multibody/fixed_fem/dev/dynamic_elasticity_element.h"
 #include "drake/multibody/fixed_fem/dev/dynamic_elasticity_model.h"
 #include "drake/multibody/fixed_fem/dev/fem_solver.h"
+#include "drake/multibody/fixed_fem/dev/inverse_operator.h"
 #include "drake/multibody/fixed_fem/dev/linear_simplex_element.h"
 #include "drake/multibody/fixed_fem/dev/simplex_gaussian_quadrature.h"
 #include "drake/multibody/plant/deformable_solver_base.h"
@@ -199,7 +202,7 @@ class SoftsimSystem final
       std::vector<Eigen::Triplet<T>>* contact_jacobian_triplets) const;
 
   void SolveContactProblem(
-      const contact_solvers::internal::ContactSolver<T>& contact_solver,
+      contact_solvers::internal::ContactSolver<T>* contact_solver,
       contact_solvers::internal::ContactSolverResults<T>* results) const final;
 
   /* Scratch space for the time n and time n+1 FEM states to avoid repeated
@@ -208,6 +211,34 @@ class SoftsimSystem final
   mutable std::vector<std::unique_ptr<FemStateBase<T>>> next_fem_states_{};
   /* Volume meshes for all deformablebodies. */
   mutable std::vector<geometry::VolumeMesh<T>> meshes_{};
+
+  mutable VectorX<T> deformable_free_velocities_{};
+  mutable VectorX<T> rigid_free_velocities_{};
+  mutable VectorX<T> v_star_{};
+
+  mutable std::vector<Eigen::SparseMatrix<T>> tangent_matrices_{};
+  mutable std::vector<std::unique_ptr<
+      multibody::contact_solvers::internal::SparseLinearOperator<T>>>
+      tangent_matrix_operators_{};
+  mutable std::vector<std::unique_ptr<internal::LinearSystemSolver<T>>>
+      tangent_matrix_inverters_;
+  mutable std::vector<
+      std::unique_ptr<multibody::contact_solvers::internal::InverseOperator<T>>>
+      inverse_tangent_operators_;
+
+  mutable Eigen::SparseMatrix<T> rigid_mass_matrix_;
+  std::unique_ptr<multibody::contact_solvers::internal::SparseLinearOperator<T>>
+      rigid_mass_matrix_operator_{};
+  mutable std::unique_ptr<internal::LinearSystemSolver<T>>
+      rigid_mass_matrix_inverter_;
+  mutable std::unique_ptr<
+      multibody::contact_solvers::internal::InverseOperator<T>>
+      inverse_mass_operator_;
+
+  mutable std::unique_ptr<
+      multibody::contact_solvers::internal::BlockDiagonalOperator<T>>
+      Ainv_;
+
   std::vector<geometry::ProximityProperties> deformable_proximity_properties_{};
   /* Solvers for all bodies. */
   std::vector<std::unique_ptr<FemSolver<T>>> fem_solvers_{};
@@ -217,6 +248,7 @@ class SoftsimSystem final
   systems::OutputPortIndex vertex_positions_port_;
   /* All rigid collision objects used in rigid-deformable contact. */
   internal::CollisionObjects<T> collision_objects_;
+  internal::PointContactDataStorage<T> contact_data_storage_;
 };
 }  // namespace fixed_fem
 }  // namespace multibody
