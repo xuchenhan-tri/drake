@@ -201,7 +201,7 @@ class SoftsimSystem final
       int row_offset, int col_offset,
       std::vector<Eigen::Triplet<T>>* contact_jacobian_triplets) const;
 
-  void SolveContactProblem(
+  void SolveContactProblem(int num_rigid_dofs,
       contact_solvers::internal::ContactSolver<T>* contact_solver,
       contact_solvers::internal::ContactSolverResults<T>* results) const final;
 

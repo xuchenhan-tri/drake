@@ -34,7 +34,7 @@ class DynamicElasticityModel : public ElasticityModel<Element> {
    */
   explicit DynamicElasticityModel(double dt)
       : ElasticityModel<Element>(
-            std::make_unique<NewmarkScheme<FemState<Element>>>(dt, 0.5, 0.25)) {
+            std::make_unique<NewmarkScheme<FemState<Element>>>(dt, 1, 0.5)) {
   }
 
   ~DynamicElasticityModel() = default;

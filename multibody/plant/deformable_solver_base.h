@@ -75,7 +75,7 @@ class DeformableSolverBase {
 
   /* Solves the contact problem with the given contact solver and writes out the
    contact results. */
-  virtual void SolveContactProblem(
+  virtual void SolveContactProblem(int num_rigid_dofs,
       contact_solvers::internal::ContactSolver<T>* contact_solver,
       contact_solvers::internal::ContactSolverResults<T>* results) const = 0;
 

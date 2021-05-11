@@ -28,6 +28,7 @@ class PointContactDataStorage {
     stiffness_.clear();
     damping_.clear();
     mu_.clear();
+    Jc_triplets_.clear();
   }
 
   void AppendData(VectorX<T>&& phi0, VectorX<T>&& stiffness,
@@ -45,6 +46,7 @@ class PointContactDataStorage {
         ConvertEigenSparseMatrixToTripletsWithOffsets(Jc_sparse, 0, 0);
     AppendDataHelper(phi0.data(), stiffness.data(), damping.data(), mu.data(),
                      num_new_contacts, Jc_triplets);
+    nc_ += num_new_contacts;
   }
 
   void AppendData(std::vector<T>&& phi0, std::vector<T>&& stiffness,
@@ -56,6 +58,7 @@ class PointContactDataStorage {
     DRAKE_DEMAND(static_cast<int>(mu.size()) == num_new_contacts);
     AppendDataHelper(&phi0[0], &stiffness[0], &damping[0], &mu[0],
                      num_new_contacts, Jc_triplets);
+    nc_ += num_new_contacts;
   }
 
   const std::vector<T>& phi0() const { return phi0_; }

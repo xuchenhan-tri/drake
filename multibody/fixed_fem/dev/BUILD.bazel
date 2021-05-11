@@ -510,6 +510,33 @@ drake_cc_binary(
     ],
 )
 
+drake_cc_binary(
+    name = "run_simple_gripper",
+    srcs = [
+        "run_simple_gripper.cc",
+    ],
+    data = [
+        "//examples/simple_gripper:simple_gripper_models",
+    ],
+    deps = [
+        ":deformable_visualizer",
+        ":mesh_utilities",
+        ":softsim_system",
+        "//common:add_text_logging_gflags",
+        "//geometry:proximity_properties",
+        "//multibody/plant",
+        "//multibody/parsing:parser",
+        "//multibody/contact_solvers:pgs_solver",
+        "//geometry:scene_graph",
+        "//geometry:drake_visualizer",
+        "//systems/analysis:simulator_gflags",
+        "//systems/primitives:adder",
+        "//systems/primitives:constant_vector_source",
+        "//systems/primitives:sine",
+        "//systems/framework:diagram_builder",
+    ],
+)
+
 drake_cc_library(
     name = "simplex_gaussian_quadrature",
     hdrs = [

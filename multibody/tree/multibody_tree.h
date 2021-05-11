@@ -2552,6 +2552,10 @@ class MultibodyTree {
       const systems::Context<T>& context,
       const PositionKinematicsCache<T>& pc,
       std::vector<Vector6<T>>* H_PB_W_cache) const;
+  
+  void set_discrete_state_index(systems::DiscreteStateIndex index){
+    discrete_state_index_ = index;
+  }
 
  private:
   // Make MultibodyTree templated on every other scalar type a friend of
@@ -3076,6 +3080,10 @@ class MultibodyTree {
   MultibodyTreeTopology topology_;
 
   const MultibodyTreeSystem<T>* tree_system_{};
+
+  // The discrete state index for the one and only discrete state if the system
+  // is discrete.
+  systems::DiscreteStateIndex discrete_state_index_;
 };
 
 }  // namespace internal

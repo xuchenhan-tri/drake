@@ -100,6 +100,7 @@ ContactSolverStatus PgsSolver<T>::SolveWithGuess(
     const bool converged = VerifyConvergenceCriteria(
         nc, vc_, vc_kp, gamma, gamma_kp, &stats_.vc_err, &stats_.gamma_err);
     ++stats_.iterations;
+    // std::cout << "vc error = " << stats_.vc_err << ", gamma error = " << stats_.gamma_err << std::endl;
 
     // Update state for the next iteration.
     state_ = state_kp;

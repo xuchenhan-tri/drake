@@ -2103,10 +2103,8 @@ void MultibodyPlant<T>::CalcTamsiResults(
       deformable_v_star[i] = x_star.segment(num_dofs, num_dofs);
     }
   }
-  // TODO(xuchenhan-tri): Account for deformable contact.
-  // Without contact, the free motion velocity is the final velocity.
-  results->deformable_v_next = deformable_v_star;
 
+  // TODO(xuchenhan-tri): Allow deformable only sim.
   // Quick exit if there are no rigid moving objects.
   if (nv == 0) return;
 
@@ -2181,7 +2179,7 @@ void MultibodyPlant<T>::CalcTamsiResults(
         context0, v0, M0, std::move(minus_tau), std::move(phi0),
         contact_jacobians.Jc, std::move(stiffness), std::move(damping),
         std::move(mu));
-    deformable_solver_->SolveContactProblem(contact_solver_.get(), results);
+    deformable_solver_->SolveContactProblem(nv, contact_solver_.get(), results);
     return;
   }
 
@@ -2499,7 +2497,7 @@ void MultibodyPlant<T>::DoCalcForwardDynamicsDiscrete(
       this->get_discrete_state_index_or_throw();
   auto x0 = context0.get_discrete_state(rigid_state_index).get_value();
   const VectorX<T> v0 = x0.bottomRows(this->num_velocities());
-  ac->get_mutable_vdot() = (v_next - v0) / time_step();
+  ac->get_mutable_vdot() = (v_next.head(this->num_velocities()) - v0) / time_step();
 
   // Calculate the acceleration for deformable dofs.
   const int num_deformable_bodies = deformable_state_indexes_.size();
@@ -2510,15 +2508,13 @@ void MultibodyPlant<T>::DoCalcForwardDynamicsDiscrete(
         context0.get_discrete_state(deformable_state_indexes_[i]).get_value();
     const int num_dofs = deformable_x0.size() / 3;
     const auto& deformable_v0 = deformable_x0.segment(num_dofs, num_dofs);
-    const auto& deformable_a0 = deformable_x0.tail(num_dofs);
     // The deformable solver uses the Newmark scheme with
-    //  v = v₀ + dt ⋅ (1/2 ⋅ a + 1/2 ⋅ a₀)
-    //  x = x₀ + dt ⋅ v₀ + dt²/2 ⋅ (1/2 ⋅ a + 1/2 ⋅ a₀).
+    //  v = v₀ + dt ⋅ a.
+    //  x = x₀ + dt ⋅ v₀ + dt²/2 ⋅ a.
     // Rewriting the first equation we get
-    //  a = 2 * (v - v₀)/dt - a₀
+    //  a = (v - v₀)/dt
     deformable_vdot[i] =
-        2.0 * (deformable_v_next[i] - deformable_v0) / time_step() -
-        deformable_a0;
+        (deformable_v_next[i] - deformable_v0) / time_step();
   }
 
   // N.B. Pool of spatial accelerations indexed by BodyNodeIndex.
@@ -2574,14 +2570,13 @@ void MultibodyPlant<T>::DoCalcDiscreteVariableUpdates(
   updates->get_mutable_vector(rigid_state_index).SetFromVector(x_next);
 
   // Advance the deformable state with the Newmark scheme
-  //  v = v₀ + dt ⋅ (1/2 ⋅ a + 1/2 ⋅ a₀)
-  //  x = x₀ + dt ⋅ v₀ + dt²/2 ⋅ (1/2 ⋅ a + 1/2 ⋅ a₀).
+  //  v = v₀ + dt ⋅ a
+  //  x = x₀ + dt ⋅ v₀ + dt²/2 ⋅ a.
   std::vector<VectorX<T>> deformable_v_next(num_deformable_bodies);
   std::vector<VectorX<T>> deformable_q_next(num_deformable_bodies);
   for (int i = 0; i < num_deformable_bodies; ++i) {
     deformable_v_next[i] =
-        deformable_v0[i] +
-        time_step() * (0.5 * deformable_vdot[i] + 0.5 * deformable_a0[i]);
+        deformable_v0[i] + time_step() * deformable_vdot[i];
     deformable_q_next[i] = deformable_q0[i] +
                            0.5 * time_step() * deformable_v0[i] +
                            0.5 * time_step() * deformable_v_next[i];

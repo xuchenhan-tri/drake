@@ -220,6 +220,11 @@ void SoftsimSystem<T>::AssembleContactSolverData(
 
   // Make sure the pose for the collision objects are up-to-date.
   UpdatePoseForAllCollisionObjects(context0);
+  // Makes sure the pose for the deformable objects are up-to-date.
+  for (SoftBodyIndex i(0); i < num_bodies(); ++i) {
+    const FemStateBase<T>& fem_state = *next_fem_states_[i];
+    UpdateMesh(i, fem_state.q());
+  }
 
   // Get the positions offsets for the deformable dofs.
   // TODO(xuchenhan-tri): This should be precomputes.
@@ -448,6 +453,7 @@ void SoftsimSystem<T>::AppendContactJacobianDeformable(
 
 template <typename T>
 void SoftsimSystem<T>::SolveContactProblem(
+    int num_rigid_dofs,
     contact_solvers::internal::ContactSolver<T>* contact_solver,
     contact_solvers::internal::ContactSolverResults<T>* results) const {
   contact_solvers::internal::SystemDynamicsData<T> dynamics_data(Ainv_.get(),
@@ -462,7 +468,7 @@ void SoftsimSystem<T>::SolveContactProblem(
   VectorX<T> mu =
       Eigen::Map<const VectorX<T>>(contact_data_storage_.mu().data(), nc);
   DRAKE_DEMAND(contact_data_storage_.num_dofs() == v_star_.size());
-  Eigen::SparseMatrix<T> Jc(contact_data_storage_.num_contacts(),
+  Eigen::SparseMatrix<T> Jc(3 * contact_data_storage_.num_contacts(),
                             contact_data_storage_.num_dofs());
   Jc.setFromTriplets(contact_data_storage_.Jc_triplets().begin(),
                      contact_data_storage_.Jc_triplets().end());
@@ -470,17 +476,16 @@ void SoftsimSystem<T>::SolveContactProblem(
 
   contact_solvers::internal::PointContactData<T> contact_data(
       &phi0, &Jc_op, &stiffness, &damping, &mu);
-  const contact_solvers::internal::ContactSolverStatus info =
-      contact_solver->SolveWithGuess(this->dt(), dynamics_data, contact_data,
-                                     v_star_, results);
+  contact_solver->SolveWithGuess(this->dt(), dynamics_data, contact_data,
+                                 v_star_, results);
+  results->deformable_v_next.resize(num_bodies());
 
-  if (info != contact_solvers::internal::ContactSolverStatus::kSuccess) {
-    const std::string msg = fmt::format(
-        "Contact solver of type '" + NiceTypeName::Get(*contact_solver) +
-            "' failed to converge with discrete update "
-            "period = {:7.3g}.",
-        this->dt());
-    throw std::runtime_error(msg);
+  int dof_offset = num_rigid_dofs;
+  for (int i = 0; i < num_bodies(); ++i) {
+    const int num_dofs = next_fem_states_[i]->num_generalized_positions();
+    results->deformable_v_next[i] =
+        results->v_next.segment(dof_offset, num_dofs);
+    dof_offset += num_dofs;
   }
 }
 }  // namespace fixed_fem
