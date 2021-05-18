@@ -92,9 +92,10 @@ int DoMain() {
   SoftsimSystem<double>& deformable_solver =
       static_cast<SoftsimSystem<double>&>(plant->mutable_deformable_solver());
 
-  const geometry::Box box(0.06, 0.06, 0.06);
+  // Size of the deformable block.
+  const geometry::Box box(L, L, L);
 
-  /* Set up the corotated bar. */
+  /* Set up the deformable block. */
   const math::RigidTransform<double> p_WB(Vector3<double>(0.03, 0.01, 0.06));
   DeformableBodyConfig<double> nonlinear_bar_config;
   nonlinear_bar_config.set_youngs_modulus(FLAGS_E);
@@ -110,25 +111,10 @@ int DoMain() {
   // Use default stiffness and dissipation.
   geometry::AddContactMaterial({}, {}, {}, surface_friction,
                                &corotated_proximity_props);
+  // Use the Corotated constitutive model.
   deformable_solver.RegisterDeformableBody(nonlinear_bar_geometry, "Corotated",
                                            nonlinear_bar_config,
                                            corotated_proximity_props);
-
-  //   /* Add a ground as collision geometry. */
-  //   geometry::Box ground(4, 4, 1);
-  //   const math::RigidTransform<double> X_WG(Vector3<double>{0, 0, -0.5});
-  //   geometry::ProximityProperties ground_proximity_props;
-  //   geometry::AddContactMaterial({}, {}, {}, CoulombFriction<double>(0.0,
-  //   0.0),
-  //                                &ground_proximity_props);
-  //   plant->RegisterCollisionGeometry(plant->world_body(), X_WG, ground,
-  //                                    "ground_collision",
-  //                                    std::move(ground_proximity_props));
-  //   geometry::IllustrationProperties illus_prop;
-  //   illus_prop.AddProperty("phong", "diffuse",
-  //                          Vector4<double>(0.7, 0.5, 0.4, 0.5));
-  //   plant->RegisterVisualGeometry(plant->world_body(), X_WG, ground,
-  //                                 "ground_visual", std::move(illus_prop));
 
   Parser parser(plant);
   std::string full_name =
@@ -139,20 +125,17 @@ int DoMain() {
       std::make_unique<contact_solvers::internal::PgsSolver<double>>());
   plant->Finalize();
 
-  // Sinusoidal force input. We want the gripper to follow a trajectory of the
-  // form x(t) = X0 * sin(ω⋅t). By differentiating once, we can compute the
-  // velocity initial condition, and by differentiating twice, we get the input
-  // force we need to apply.
-  // The mass of the gripper in simple_gripper.sdf.
-  const double mass = 1.0890 + 0.06 * 0.06 * 0.06 * FLAGS_density;  // kg.
+  // The mass of the gripper in simple_gripper.sdf + the mass of the deformable
+  // block.
+  const double mass = 1.0890 + L * L * L * FLAGS_density;  // kg.
   const double g = 9.81;
   const double f0 = mass * g;  // Force amplitude, Newton.
 
   // Notice we are using the same Sine source to:
-  //   1. Generate a harmonic forcing of the gripper with amplitude f0 and
-  //      angular frequency omega.
-  //   2. Impose a constant force to the left finger. That is, a harmonic
-  //      forcing with "zero" frequency.
+  //   1. Generate a harmonic forcing of the finger with the prescribed phase,
+  //      amplitude and frequency.
+  //   2. Impose a constant force to hold up the gripper. There will be some
+  //      drift over time but we don't care.
   const Vector2<double> amplitudes(0, FLAGS_amplitude);
   const Vector2<double> frequencies(0.0, FLAGS_frequency);
   const Vector2<double> phases(0, 3*M_PI_2);
@@ -180,7 +163,6 @@ int DoMain() {
       plant->get_geometry_poses_output_port(),
       scene_graph->get_source_pose_port(plant->get_source_id().value()));
   geometry::DrakeVisualizerd::AddToBuilder(&builder, *scene_graph);
-  //   ConnectContactResultsToDrakeVisualizer(&builder, *plant);
 
   auto diagram = builder.Build();
   auto context = diagram->CreateDefaultContext();
@@ -191,9 +173,7 @@ int DoMain() {
       plant->GetJointByName<PrismaticJoint>("finger_sliding_joint");
   // Set initial position of the left finger.
   finger_slider.set_translation(&plant_context, -FLAGS_grip_width);
-  // Set the initial height of the gripper and its initial velocity so that with
-  // the applied harmonic forces it continues to move in a harmonic oscillation
-  // around this initial position.
+  // Set the initial height of the gripper and its initial velocity.
   const PrismaticJoint<double>& translate_joint =
       plant->GetJointByName<PrismaticJoint>("translate_joint");
   translate_joint.set_translation(&plant_context, 0.0);
