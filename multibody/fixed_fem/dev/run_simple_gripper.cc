@@ -93,6 +93,7 @@ int DoMain() {
       static_cast<SoftsimSystem<double>&>(plant->mutable_deformable_solver());
 
   // Size of the deformable block.
+  const double L = 0.06;
   const geometry::Box box(L, L, L);
 
   /* Set up the deformable block. */
