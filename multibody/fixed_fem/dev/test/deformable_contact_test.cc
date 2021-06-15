@@ -91,9 +91,7 @@ VolumeMesh<T> OctahedronVolume() {
   -Y-----●-------●------●---+Y
                 /      v2
                /
-              ● v1
-             /
-           +X
+              ● v6
 */
 template <typename T>
 SurfaceMesh<T> MakePyramidSurface() {

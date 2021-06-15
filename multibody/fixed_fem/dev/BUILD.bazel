@@ -166,7 +166,11 @@ drake_cc_library(
         ":deformable_model",
         ":deformable_rigid_contact_pair",
         ":fem_solver",
+        ":inverse_operator",
+        ":permute_tangent_matrix",
+        ":schur_complement",
         "//common:essential",
+        "//multibody/contact_solvers:block_sparse_linear_operator",
         "//multibody/contact_solvers:block_sparse_matrix",
         "//multibody/plant",
     ],
@@ -376,6 +380,20 @@ drake_cc_library(
 )
 
 drake_cc_library(
+    name = "inverse_operator",
+    srcs = [
+        "inverse_operator.cc",
+    ],
+    hdrs = [
+        "inverse_operator.h",
+    ],
+    deps = [
+        "//common:essential",
+        "//multibody/contact_solvers:linear_operator",
+    ],
+)
+
+drake_cc_library(
     name = "isoparametric_element",
     hdrs = [
         "isoparametric_element.h",
@@ -470,6 +488,16 @@ drake_cc_library(
 )
 
 drake_cc_library(
+    name = "permute_tangent_matrix",
+    hdrs = [
+        "permute_tangent_matrix.h",
+    ],
+    deps = [
+        "//common:essential",
+    ],
+)
+
+drake_cc_library(
     name = "quadrature",
     hdrs = [
         "quadrature.h",
@@ -508,6 +536,48 @@ drake_cc_binary(
         "//math:geometric_transform",
         "//systems/analysis:simulator_gflags",
         "//systems/framework:diagram_builder",
+    ],
+)
+
+drake_cc_binary(
+    name = "run_simple_gripper",
+    srcs = [
+        "run_simple_gripper.cc",
+    ],
+    data = [
+        "//examples/simple_gripper:simple_gripper_models",
+    ],
+    deps = [
+        ":deformable_model",
+        ":deformable_rigid_manager",
+        ":deformable_visualizer",
+        ":mesh_utilities",
+        "//common:add_text_logging_gflags",
+        "//geometry:drake_visualizer",
+        "//geometry:proximity_properties",
+        "//geometry:scene_graph",
+        "//multibody/contact_solvers:pgs_solver",
+        "//multibody/parsing:parser",
+        "//multibody/plant",
+        "//systems/analysis:simulator_gflags",
+        "//systems/framework:diagram_builder",
+        "//systems/primitives:adder",
+        "//systems/primitives:constant_vector_source",
+        "//systems/primitives:sine",
+    ],
+)
+
+drake_cc_library(
+    name = "schur_complement",
+    srcs = [
+        "schur_complement.cc",
+    ],
+    hdrs = [
+        "schur_complement.h",
+    ],
+    deps = [
+        "//common:default_scalars",
+        "//common:essential",
     ],
 )
 
@@ -788,6 +858,22 @@ drake_cc_googletest(
     deps = [
         ":dummy_element",
         ":newmark_scheme",
+        "//common/test_utilities:eigen_matrix_compare",
+    ],
+)
+
+drake_cc_googletest(
+    name = "permute_tangent_matrix_test",
+    deps = [
+        ":permute_tangent_matrix",
+        "//common/test_utilities:eigen_matrix_compare",
+    ],
+)
+
+drake_cc_googletest(
+    name = "schur_complement_test",
+    deps = [
+        ":schur_complement",
         "//common/test_utilities:eigen_matrix_compare",
     ],
 )

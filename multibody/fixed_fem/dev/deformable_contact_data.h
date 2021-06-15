@@ -8,7 +8,6 @@ namespace drake {
 namespace multibody {
 namespace fixed_fem {
 namespace internal {
-
 /* DeformbaleContactData stores all the contact query information related to a
  particular deformable body. In addition, it stores information about the
  indexes of vertices participating in contact for this deformable body. See
@@ -66,7 +65,7 @@ class DeformableContactData {
   /* Returns the inverse mapping of `permuted_vertex_indexes()`. For the example
    above, the returned vector would be {1, 2, 5, 0, 3, 4}. */
   const std::vector<int>& permuted_to_original_indexes() const {
-    return permuted_vertex_indexes_;
+    return permuted_to_original_indexes_;
   }
 
   /* Returns the number of vertices of the deformable body that participate in

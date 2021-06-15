@@ -15,6 +15,8 @@
 #include "drake/multibody/fixed_fem/dev/deformable_model.h"
 #include "drake/multibody/fixed_fem/dev/deformable_rigid_contact_pair.h"
 #include "drake/multibody/fixed_fem/dev/fem_solver.h"
+#include "drake/multibody/fixed_fem/dev/permute_tangent_matrix.h"
+#include "drake/multibody/fixed_fem/dev/schur_complement.h"
 #include "drake/multibody/plant/contact_jacobians.h"
 #include "drake/multibody/plant/discrete_update_manager.h"
 
@@ -41,7 +43,8 @@ class DeformableRigidManager final
     contact_solver_ = std::move(contact_solver);
   }
 
-  // TODO(xuchenhan-tri): Remove this method when SceneGraph owns all rigid and
+  // TODO(xuchenhan-tri): Remove this method when SceneGraph owns all rigid
+  // and
   //  deformable geometries.
   // TODO(xuchenhan-tri): Reconcile the names of "deformable geometries" and
   //  "collision objects" when moving out of dev.
@@ -49,17 +52,17 @@ class DeformableRigidManager final
    MultibodyPlant that are registered in the given SceneGraph into `this`
    %DeformableRigidManager. The registered rigid collision geometries will be
    used to generate rigid-deformable contact pairs to be used for the
-   rigid-deformable two-way coupled contact solve. A common workflow to set up a
-   simulation where deformable and rigid bodies interact with each other through
-   contact looks like the following:
+   rigid-deformable two-way coupled contact solve. A common workflow to set up
+   a simulation where deformable and rigid bodies interact with each other
+   through contact looks like the following:
    ```
    // Set up a deformable model assciated with a MultibodyPlant.
    auto deformable_model = std::make_unique<DeformableModel<double>>(&plant);
    // Add deformable bodies to the model.
    deformable_model->RegisterDeformableBody(...);
    deformable_model->RegisterDeformableBody(...);
-   // Done building the model. Move the DeformableModel into the MultibodyPlant.
-   plant.AddPhysicalModel(std::move(deformable_model));
+   // Done building the model. Move the DeformableModel into the
+   MultibodyPlant. plant.AddPhysicalModel(std::move(deformable_model));
    // Register the plant as a source for scene graph for rigid geometries.
    plant.RegisterAsSourceForSceneGraph(&scene_graph);
    // Add rigid bodies.
@@ -85,13 +88,20 @@ class DeformableRigidManager final
   friend class DeformableRigidManagerTest;
   friend class DeformableRigidContactJacobianTest;
 
+  template <typename Scalar, int Options = 0, typename StorageIndex = int>
+  struct EigenSparseMatrixWrapper {
+    using NonTypeTemplateParameter = std::integral_constant<int, Options>;
+    Eigen::SparseMatrix<Scalar, Options, StorageIndex> sparse_matrix;
+  };
+
   // TODO(xuchenhan-tri): Implement CloneToDouble() and CloneToAutoDiffXd() and
   //  the corresponding is_cloneable methods.
 
   /* Implements DiscreteUpdateManager::ExtractModelInfo(). Verifies that
    exactly one DeformableModel is registered in the owning plant and
    sets up FEM solvers for deformable bodies. */
-  void ExtractModelInfo() final;
+  void
+  ExtractModelInfo() final;
 
   /* Make the FEM solvers that solve the deformable FEM models. */
   void MakeFemSolvers();
@@ -127,6 +137,15 @@ class DeformableRigidManager final
       EigenPtr<VectorX<T>> phi, EigenPtr<VectorX<T>> fn,
       EigenPtr<VectorX<T>> stiffness, EigenPtr<VectorX<T>> damping) const;
 
+  void CalcPerContactPointData(
+      const systems::Context<T>& context,
+      const std::vector<multibody::internal::DiscreteContactPair<T>>&
+          rigid_contact_pairs,
+      const std::vector<internal::DeformableContactData<T>>
+          deformable_contact_data,
+      EigenPtr<VectorX<T>> mu, EigenPtr<VectorX<T>> phi,
+      EigenPtr<VectorX<T>> stiffness, EigenPtr<VectorX<T>> damping) const;
+
   // TODO(xuchenhan-tri): Implement this once AccelerationKinematicsCache
   //  also caches acceleration for deformable dofs.
   void DoCalcAccelerationKinematicsCache(
@@ -148,8 +167,8 @@ class DeformableRigidManager final
         .template Eval<FemStateBase<T>>(context);
   }
 
-  /* Evaluates the free motion FEM state of the deformable body with index `id`.
-   */
+  /* Evaluates the free motion FEM state of the deformable body with index
+   `id`. */
   const FemStateBase<T>& EvalFreeMotionFemStateBase(
       const systems::Context<T>& context, SoftBodyIndex id) const {
     return this->plant()
@@ -157,14 +176,24 @@ class DeformableRigidManager final
         .template Eval<FemStateBase<T>>(context);
   }
 
-  // TODO(xuchenhan-tri): Remove this method when SceneGraph takes control of
-  //  all geometries. SceneGraph should be responsible for obtaining the most
-  //  up-to-date rigid body poses.
-  /* Updates the world poses of all rigid collision geometries registered in
-   `this` DeformableRigidManager. */
+  /* Evaluates the tangent matrix of the deformable body with index `id` at free
+   motion state. */
+  const Eigen::SparseMatrix<T>& EvalTangentMatrixAtFreeMotionState(
+      const systems::Context<T>& context, SoftBodyIndex id) const {
+    return this->plant()
+        .get_cache_entry(tangent_matrix_cache_indexes_[id])
+        .template Eval<EigenSparseMatrixWrapper<T>>(context).sparse_matrix;
+  }
+
+  // TODO(xuchenhan-tri): Remove this method when SceneGraph takes control
+  //  of all geometries. SceneGraph should be responsible for obtaining the
+  //  most up-to-date rigid body poses.
+  /* Updates the world poses of all rigid collision geometries registered
+   in `this` DeformableRigidManager. */
   void UpdateCollisionObjectPoses(const systems::Context<T>& context) const;
 
-  // TODO(xuchenhan-tri): This method (or similar) should belong to SceneGraph
+  // TODO(xuchenhan-tri): This method (or similar) should belong to
+  // SceneGraph
   //  when SceneGraph takes control of all geometries.
   /* Updates the vertex positions for all deformable meshes. */
   void UpdateDeformableVertexPositions(
@@ -261,6 +290,18 @@ class DeformableRigidManager final
       const systems::Context<T>& context,
       const internal::DeformableContactData<T>& contact_data) const;
 
+  /* Calculates the tangent matrix fed into the contact solver. */
+  multibody::contact_solvers::internal::BlockSparseMatrix<T> CalcTangentMatrix(
+      const systems::Context<T>& context,
+      const std::vector<internal::DeformableContactData<T>>&
+          deformable_contact_data) const;
+
+  void CalcFreeMotionVelocities(
+      const systems::Context<T>& context,
+      const std::vector<internal::DeformableContactData<T>>&
+          deformable_contact_data,
+      EigenPtr<VectorX<T>> v_star) const;
+
   /* Given the GeometryId of a rigid collision geometry, returns the body frame
    of the collision geometry.
    @pre The collision geometry with the given `id` is already registered with
@@ -277,6 +318,7 @@ class DeformableRigidManager final
   /* Cached FEM state quantities. */
   std::vector<systems::CacheIndex> fem_state_cache_indexes_;
   std::vector<systems::CacheIndex> free_motion_cache_indexes_;
+  std::vector<systems::CacheIndex> tangent_matrix_cache_indexes_;
   /* Cached contact query results. */
   systems::CacheIndex deformable_contact_data_cache_index_;
   /* Solvers for all deformable bodies. */
@@ -284,8 +326,15 @@ class DeformableRigidManager final
   std::unique_ptr<multibody::contact_solvers::internal::ContactSolver<T>>
       contact_solver_{nullptr};
 
-  /* Geometries temporarily managed by DeformableRigidManager. In the future,
-   SceneGraph will manage all the geometries. */
+  // TODO(xuchenhan-tri): Consider bumping these up to cache entries.
+  mutable std::vector<internal::SchurComplement<T>>
+      tangent_matrix_schur_complements_{};
+  // TODO(xuchenhan-tri): Consider storing them in ContactSolverResults instead
+  //  of keep them here as mutable members.
+  mutable std::vector<VectorX<T>> deformable_participating_velocities_{};
+
+  /* Geometries temporarily managed by DeformableRigidManager. In the
+   future, SceneGraph will manage all the geometries. */
   mutable std::vector<geometry::VolumeMesh<T>> deformable_meshes_{};
   mutable internal::CollisionObjects<T> collision_objects_;
 };
