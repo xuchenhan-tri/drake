@@ -11,6 +11,8 @@
 #include "drake/geometry/proximity/surface_mesh.h"
 #include "drake/geometry/proximity/volume_mesh.h"
 #include "drake/math/rigid_transform.h"
+#include "drake/multibody/fixed_fem/dev/deformable_contact_data.h"
+#include "drake/multibody/fixed_fem/dev/deformable_rigid_contact_pair.h"
 
 namespace drake {
 namespace multibody {
@@ -141,6 +143,16 @@ bool CompareSetOfVector3s(const std::vector<Vector3<T>>& A,
                              });
 }
 
+template <typename T>
+DeformableContactSurface<T> MakeDeformableContactSurface(
+    const math::RigidTransform<T>& X_DR) {
+  const VolumeMesh<T> volume_D = OctahedronVolume<T>();
+  /* Deformable contact assumes the rigid surface is double-valued, regardless
+   of the scalar value for the volume mesh.  */
+  const SurfaceMesh<double> surface_R = MakePyramidSurface<double>();
+  return ComputeTetMeshTriMeshContact<T>(volume_D, surface_R, X_DR);
+}
+
 /* Limited test to show correctness of ComputeTetMeshTriMeshContact<T>().
  Given a simple, tractable set of input meshes, we analytically compute the
  expected contact data and compare it against the result from
@@ -148,10 +160,9 @@ bool CompareSetOfVector3s(const std::vector<Vector3<T>>& A,
 template <typename T>
 void TestComputeTetMeshTriMeshContact() {
   constexpr double kEps = std::numeric_limits<double>::epsilon();
-  const VolumeMesh<T> volume_D = OctahedronVolume<T>();
-  /* Deformable contact assumes the rigid surface is double-valued, regardless
-   of the scalar value for the volume mesh.  */
-  const SurfaceMesh<double> surface_R = MakePyramidSurface<double>();
+  const auto X_DR = math::RigidTransform<T>(Vector3<T>(0, 0, 0.5));
+  const DeformableContactSurface<T> contact_D =
+      MakeDeformableContactSurface<T>(X_DR);
   /* Move the rigid pyramid up, so only its square base intersects the top
    pyramidal region of the deformable octahedron. The resulting implicit contact
    surface is made up of 4 triangles. The portion of the contact surface inside
@@ -178,10 +189,6 @@ void TestComputeTetMeshTriMeshContact() {
               /   |
             +X    |
                  -Z                                            */
-  const auto X_DR = math::RigidTransform<T>(Vector3<T>(0, 0, 0.5));
-
-  const DeformableContactSurface<T> contact_D =
-      ComputeTetMeshTriMeshContact<T>(volume_D, surface_R, X_DR);
   const int kNumPolys = 4;
   EXPECT_EQ(contact_D.num_polygons(), kNumPolys);
   EXPECT_FALSE(contact_D.empty());
@@ -214,6 +221,7 @@ void TestComputeTetMeshTriMeshContact() {
       CompareSetOfVector3s(calculated_centroids_D, expected_centroids_D, kEps));
 
   /* Verify the centroids in barycentric coordinates are as expected. */
+  const VolumeMesh<T> volume_D = OctahedronVolume<T>();
   calculated_centroids_D.clear();
   for (int i = 0; i < kNumPolys; ++i) {
     const Vector4<T> b_centroid = contact_data[i].b_centroid;
@@ -283,6 +291,35 @@ GTEST_TEST(DeformableContactTest, NonTriangleContactPolygon) {
   EXPECT_EQ(data.tet_index, 0);
   EXPECT_TRUE(CompareMatrices(data.unit_normal, Vector3d(0, 0, 1), kTol));
   EXPECT_TRUE(CompareMatrices(data.centroid, Vector3d(0, 0, 0), kTol));
+}
+
+/* Unit test for the class DeformableContactData verifying the participating
+ vertices and the mapping from the full set of vertices to participating
+ vertices are correct. */
+GTEST_TEST(DeformbableContactTest, DeformableContactData) {
+  /* Move the rigid pyramid down, so only its square base intersects the top
+   pyramidal region of the deformable octahedron. As a result, all vertices
+   except v5 are participating in contact. */
+  const auto X_DR = math::RigidTransformd(Vector3<double>(0, 0, -1.5));
+  DeformableContactSurface<double> contact_surface =
+      MakeDeformableContactSurface<double>(X_DR);
+  geometry::GeometryId dummy_rigid_id;
+  SoftBodyIndex dummy_deformable_id;
+  double dummy_stiffness = 0;
+  double dummy_dissipation = 0;
+  double dummy_friction = 0;
+  const internal::DeformableRigidContactPair<double> contact_pair(
+      std::move(contact_surface), dummy_rigid_id, dummy_deformable_id,
+      dummy_stiffness, dummy_dissipation, dummy_friction);
+  const VolumeMesh<double> volume_mesh = OctahedronVolume<double>();
+  const internal::DeformableContactData<double> contact_data({contact_pair},
+                                                             volume_mesh);
+  EXPECT_EQ(contact_data.num_contact_pairs(), 1);
+  /* v0, v1, v2, v3, v4, v6 are participating in contact so they get new indexes
+   0, 1, 2, 3, 4, 5. v5 is not participating in contact and gets new index 6. */
+  EXPECT_EQ(contact_data.num_vertices_in_contact(), 6);
+  std::vector<int> permuted_vertex_indexes = {0, 1, 2, 3, 4, 6, 5};
+  EXPECT_EQ(contact_data.permuted_vertex_indexes(), permuted_vertex_indexes);
 }
 
 }  // namespace

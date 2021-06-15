@@ -2,6 +2,7 @@
 
 #include <algorithm>
 
+#include "drake/common/profiler.h"
 #include "drake/common/unused.h"
 namespace drake {
 namespace multibody {
@@ -19,6 +20,8 @@ ContactSolverStatus PgsSolver<T>::SolveWithGuess(
     const T& time_step, const SystemDynamicsData<T>& dynamics_data,
     const PointContactData<T>& contact_data, const VectorX<T>& v_guess,
     ContactSolverResults<T>* results) {
+  static const common::TimerIndex foo_timer = addTimer("TimerForFoo");
+
   unused(time_step);
   PreProcessData(dynamics_data, contact_data);
   // Aliases to pre-processed (const) data.
@@ -26,9 +29,7 @@ ContactSolverStatus PgsSolver<T>::SolveWithGuess(
   const auto& v_star = pre_proc_data_.v_star;
   const auto& vc_star = pre_proc_data_.vc_star;
   const auto& Dinv = pre_proc_data_.Dinv;
-  // Use the Delassus operator in row major form for better locality in the
-  // Gauss-Seidel solve.
-  const auto& W = pre_proc_data_.W_row_major;
+  const auto& W = pre_proc_data_.W;
 
   // Aliases to solver's (mutable) state.
   auto& v = state_.mutable_v();
@@ -67,6 +68,7 @@ ContactSolverStatus PgsSolver<T>::SolveWithGuess(
   // Contact velocity initialized to the value before the contact solve.
   vc_ = vc_star;
   VectorX<T> vc_kp(3 * nc);  // Contact velocity at state_kp.
+  startTimer(foo_timer);
   for (int k = 0; k < max_iters; ++k) {
     // Initialize the contact velocity to the value before any contact impulse
     // is applied.
@@ -90,6 +92,7 @@ ContactSolverStatus PgsSolver<T>::SolveWithGuess(
       // Project the contact impulse at contact point i into the friction cone.
       gammai_kp = ProjectImpulse(vci_kp, gammai_kp, mu(i));
     }
+    lapTimer(foo_timer);
     // Update generalized velocities; v = v* + A⁻¹⋅Jᵀ⋅γ.
     contact_data.get_Jc().MultiplyByTranspose(gamma_kp,
                                               &tau_c_);  // tau_c = Jᵀ⋅γ
@@ -120,7 +123,6 @@ ContactSolverStatus PgsSolver<T>::SolveWithGuess(
 template <typename T>
 void PgsSolver<T>::PreProcessedData::Resize(int nv, int nc) {
   W.resize(3 * nc, 3 * nc);
-  W_row_major.resize(3 * nc, 3 * nc);
   vc_star.resize(3 * nc);
   v_star.resize(nv);
   Wii_norm.resize(nc);
@@ -163,7 +165,6 @@ void PgsSolver<T>::PreProcessData(const SystemDynamicsData<T>& dynamics_data,
     this->FormDelassusOperatorMatrix(contact_data.get_Jc(),
                                      dynamics_data.get_Ainv(),
                                      contact_data.get_Jc(), &W);
-    pre_proc_data_.W_row_major = W;
 
     // Compute scaling factors, one per contact.
     auto& Wii_norm = pre_proc_data_.Wii_norm;

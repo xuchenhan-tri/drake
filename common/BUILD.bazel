@@ -44,6 +44,7 @@ drake_cc_package_library(
         ":nice_type_name",
         ":pointer_cast",
         ":polynomial",
+        ":profiler",
         ":random",
         ":reset_after_move",
         ":reset_on_copy",
@@ -85,6 +86,13 @@ drake_cc_library(
         "@fmt",
         "@spdlog",
     ],
+)
+
+drake_cc_library(
+    name = "profiler",
+    srcs = ["profiler.cc"],
+    hdrs = ["profiler.h"],
+    deps = [":type_safe_index"],
 )
 
 # Specific traits and operators that are relevant to all ScalarTypes.
