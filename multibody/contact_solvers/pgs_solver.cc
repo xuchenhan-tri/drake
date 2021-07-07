@@ -29,7 +29,7 @@ ContactSolverStatus PgsSolver<T>::SolveWithGuess(
   const auto& v_star = pre_proc_data_.v_star;
   const auto& vc_star = pre_proc_data_.vc_star;
   const auto& Dinv = pre_proc_data_.Dinv;
-  const auto& W = pre_proc_data_.W;
+  const auto& W = pre_proc_data_.W.transpose();
 
   // Aliases to solver's (mutable) state.
   auto& v = state_.mutable_v();
