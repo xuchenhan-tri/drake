@@ -20,7 +20,7 @@ ContactSolverStatus PgsSolver<T>::SolveWithGuess(
     const T& time_step, const SystemDynamicsData<T>& dynamics_data,
     const PointContactData<T>& contact_data, const VectorX<T>& v_guess,
     ContactSolverResults<T>* results) {
-  static const common::TimerIndex foo_timer = addTimer("TimerForFoo");
+  static const common::TimerIndex pgs_timer = addTimer("PGS iterations");
 
   unused(time_step);
   PreProcessData(dynamics_data, contact_data);
@@ -68,7 +68,7 @@ ContactSolverStatus PgsSolver<T>::SolveWithGuess(
   // Contact velocity initialized to the value before the contact solve.
   vc_ = vc_star;
   VectorX<T> vc_kp(3 * nc);  // Contact velocity at state_kp.
-  startTimer(foo_timer);
+  startTimer(pgs_timer);
   for (int k = 0; k < max_iters; ++k) {
     // Initialize the contact velocity to the value before any contact impulse
     // is applied.
@@ -92,7 +92,7 @@ ContactSolverStatus PgsSolver<T>::SolveWithGuess(
       // Project the contact impulse at contact point i into the friction cone.
       gammai_kp = ProjectImpulse(vci_kp, gammai_kp, mu(i));
     }
-    lapTimer(foo_timer);
+    lapTimer(pgs_timer);
     // Update generalized velocities; v = v* + A⁻¹⋅Jᵀ⋅γ.
     contact_data.get_Jc().MultiplyByTranspose(gamma_kp,
                                               &tau_c_);  // tau_c = Jᵀ⋅γ

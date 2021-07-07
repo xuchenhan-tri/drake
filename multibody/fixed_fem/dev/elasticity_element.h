@@ -4,6 +4,7 @@
 #include <type_traits>
 
 #include "drake/common/eigen_types.h"
+#include "drake/common/profiler.h"
 #include "drake/common/unused.h"
 #include "drake/multibody/fixed_fem/dev/constitutive_model.h"
 #include "drake/multibody/fixed_fem/dev/fem_element.h"
@@ -392,6 +393,9 @@ class ElasticityElement : public FemElement<DerivedElement, DerivedTraits> {
   /* Implements FemElement::ComputeData(). */
   typename Traits::Data DoComputeData(
       const FemState<DerivedElement>& state) const {
+    static const common::TimerIndex constitutive_timer =
+        addTimer("Constitutive modelling.");
+    startTimer(constitutive_timer);
     typename Traits::Data data;
     data.deformation_gradient_cache_entry.mutable_deformation_gradient() =
         CalcDeformationGradient(state);
@@ -403,6 +407,7 @@ class ElasticityElement : public FemElement<DerivedElement, DerivedTraits> {
         data.deformation_gradient_cache_entry, &data.P);
     constitutive_model_.CalcFirstPiolaStressDerivative(
         data.deformation_gradient_cache_entry, &data.dPdF);
+    lapTimer(constitutive_timer);
     return data;
   }
 

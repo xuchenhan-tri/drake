@@ -5,6 +5,7 @@
 #include <utility>
 
 #include "drake/common/eigen_types.h"
+#include "drake/common/profiler.h"
 #include "drake/multibody/contact_solvers/sparse_linear_operator.h"
 #include "drake/multibody/fixed_fem/dev/eigen_conjugate_gradient_solver.h"
 #include "drake/multibody/fixed_fem/dev/fem_model_base.h"
@@ -151,10 +152,18 @@ class FemSolver {
      3. The relative error (the norm of the change in the state divided by the
         norm of the state) is smaller than the unitless relative tolerance. */
     do {
+      static const common::TimerIndex assembly_timer =
+          addTimer("Tangent matrix assembly.");
+      startTimer(assembly_timer);
       model_->CalcTangentMatrix(*state, &A_);
+      lapTimer(assembly_timer);
       linear_solver_->Compute();
       /* Solving for A * dz = -b. */
+      static const common::TimerIndex linear_solve_timer =
+          addTimer("Linear solve.");
+      startTimer(linear_solve_timer);
       linear_solver_->Solve(-b_, &dz_);
+      lapTimer(linear_solve_timer);
       model_->UpdateStateFromChangeInUnknowns(dz_, state);
       model_->CalcResidual(*state, &b_);
       ++iter;

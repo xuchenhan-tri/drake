@@ -87,6 +87,7 @@ drake_cc_library(
         ":point_contact_data",
         ":system_dynamics_data",
         "//common:default_scalars",
+        "//common:profiler",
     ],
 )
 

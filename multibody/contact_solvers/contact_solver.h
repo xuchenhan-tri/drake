@@ -8,6 +8,7 @@
 #include "drake/common/drake_copyable.h"
 #include "drake/common/drake_throw.h"
 #include "drake/common/eigen_types.h"
+#include "drake/common/profiler.h"
 #include "drake/multibody/contact_solvers/contact_solver_results.h"
 #include "drake/multibody/contact_solvers/point_contact_data.h"
 #include "drake/multibody/contact_solvers/system_dynamics_data.h"
@@ -290,6 +291,8 @@ class ContactSolver {
                                   const LinearOperator<T>& Ainv,
                                   const LinearOperator<T>& J,
                                   Eigen::SparseMatrix<T>* W) const {
+    static const common::TimerIndex delassus_timer = addTimer("Delassus");
+    startTimer(delassus_timer);
     const int num_velocities = Ainv.rows();
     const int num_impulses = J.rows();
     DRAKE_DEMAND(G.rows() == num_impulses);
@@ -330,6 +333,7 @@ class ContactSolver {
       G.Multiply(AinvJTcolj, &Wcolj);
       W->col(j) = Wcolj;
     }
+    lapTimer(delassus_timer);
   }
 };
 }  // namespace internal

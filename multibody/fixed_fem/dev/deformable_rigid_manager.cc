@@ -1,5 +1,6 @@
 #include "drake/multibody/fixed_fem/dev/deformable_rigid_manager.h"
 
+#include "drake/common/profiler.h"
 #include "drake/multibody/contact_solvers/block_sparse_linear_operator.h"
 #include "drake/multibody/contact_solvers/block_sparse_matrix.h"
 #include "drake/multibody/fixed_fem/dev/inverse_operator.h"
@@ -188,9 +189,17 @@ void DeformableRigidManager<T>::DeclareCacheEntries(MultibodyPlant<T>* plant) {
       auto& tangent_matrix =
           cache_value->template get_mutable_value<EigenSparseMatrixWrapper<T>>()
               .sparse_matrix;
+      static const common::TimerIndex free_motion_timer =
+          addTimer("Free motion");
+      startTimer(free_motion_timer);
       const FemStateBase<T>& fem_state =
           EvalFreeMotionFemStateBase(context, deformable_body_id);
+      lapTimer(free_motion_timer);
+      static const common::TimerIndex tangent_timer =
+          addTimer("Tangent matrix calculation");
+      startTimer(tangent_timer);
       fem_model.CalcTangentMatrix(fem_state, &tangent_matrix);
+      lapTimer(tangent_timer);
     };
     /* Declares the free-motion tangent matrix cache entry. */
     const auto& tangent_matrix_cache_entry = plant->DeclareCacheEntry(
@@ -296,11 +305,15 @@ void DeformableRigidManager<T>::DoCalcContactSolverResults(
   /* Quick exit if there are no moving rigid or deformable objects. */
   if (rigid_dofs == 0 && deformable_model_->num_bodies() == 0) return;
 
+  static const common::TimerIndex collision_timer =
+      addTimer("Collision detection");
+  startTimer(collision_timer);
   /* Compute all rigid-rigid and rigid-deformable contact pairs. */
   const std::vector<multibody::internal::DiscreteContactPair<T>>
       rigid_contact_pairs = this->CalcDiscreteContactPairs(context);
   const std::vector<internal::DeformableContactData<T>>&
       deformable_contact_data = EvalDeformableRigidContact(context);
+  lapTimer(collision_timer);
 
   /* Extract all information needed by the contact solver. */
   /* Point contact data. */
@@ -326,10 +339,14 @@ void DeformableRigidManager<T>::DoCalcContactSolverResults(
   VectorX<T> v_star(nv);
   CalcFreeMotionVelocities(context, deformable_contact_data, &v_star);
 
+  static const common::TimerIndex factorization_timer =
+      addTimer("Factorize tangent matrix");
+  startTimer(factorization_timer);
   // TODO(xuchenhan-tri): The inverse is currently calculated inefficiently.
   //  However, since the inverse tangent matrix won't be needed for the new
   //  contact solver. We do not try to optimize it right now.
   InverseOperator<T> A_inv_op("A_inv", A.MakeDenseMatrix());
+  lapTimer(factorization_timer);
   BlockSparseLinearOperator<T> Jop("Jc", &Jc);
   SystemDynamicsData<T> dynamics_data(&A_inv_op, &v_star);
   PointContactData<T> contact_data(&phi0, &Jop, &stiffness, &damping, &mu);
@@ -666,6 +683,9 @@ void DeformableRigidManager<T>::DoCalcDiscreteValues(
     const systems::Context<T>& context,
     systems::DiscreteValues<T>* updates) const {
   /* Get the rigid dofs from context. */
+  static const common::TimerIndex calc_discrete_timer =
+      addTimer("Total time per timestep");
+  startTimer(calc_discrete_timer);
   auto x =
       context.get_discrete_state(this->multibody_state_index()).get_value();
   const auto& q = x.topRows(this->plant().num_positions());
@@ -753,6 +773,7 @@ void DeformableRigidManager<T>::DoCalcDiscreteValues(
       next_discrete_value.tail(num_total_dofs) = a_next;
     }
   }
+  lapTimer(calc_discrete_timer);
 }
 
 template <typename T>

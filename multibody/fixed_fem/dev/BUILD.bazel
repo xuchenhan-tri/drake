@@ -257,6 +257,7 @@ drake_cc_library(
         ":quadrature",
         "//common:essential",
         "//common:unused",
+        "//common:profiler",
     ],
 )
 
@@ -347,6 +348,7 @@ drake_cc_library(
         ":linear_system_solver",
         ":state_updater",
         "//common:essential",
+        "//common:profiler",
         "//multibody/contact_solvers:sparse_linear_operator",
     ],
 )
