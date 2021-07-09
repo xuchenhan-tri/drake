@@ -5,18 +5,14 @@
 namespace drake {
 namespace multibody {
 namespace fem {
+namespace internal {
 /** Implements the interface StateUpdater with the zeroth-order state updater.
  Namely, q = z and dq = dz.
- @tparam State    The type of FemState to be updated by this %StateUpdater. The
- template parameter State must be an instantiation of FemState.
- @pre State::ode_order() == 0. */
-template <class State>
-class ZerothOrderStateUpdater final : public StateUpdater<State> {
+ @tparam_nonsymbolic_scalar */
+template <typename T>
+class ZerothOrderStateUpdater final : public StateUpdater<T> {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(ZerothOrderStateUpdater);
-
-  static_assert(State::ode_order() == 0);
-  using T = typename State::T;
 
   ZerothOrderStateUpdater() = default;
   ~ZerothOrderStateUpdater() = default;
@@ -25,12 +21,18 @@ class ZerothOrderStateUpdater final : public StateUpdater<State> {
   /* Implements StateUpdater::weights(). */
   Vector3<T> do_get_weights() const final { return {1, 0, 0}; }
 
+  /* Implements StateUpdater::DoGetUnknowns(). */
+  const VectorX<T>& DoGetUnknowns(const FemStateBase<T>& state) const final {
+    return state.q();
+  }
+
   /* Implements StateUpdater::DoUpdateStateFromChangeInUnknowns(). */
   void DoUpdateStateFromChangeInUnknowns(const VectorX<T>& dz,
-                                                  State* state) const final {
+                                         FemStateBase<T>* state) const final {
     state->SetQ(state->q() + dz);
   }
 };
+}  // namespace internal
 }  // namespace fem
 }  // namespace multibody
 }  // namespace drake
