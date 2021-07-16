@@ -8,7 +8,7 @@ load(
 )
 
 package(
-    default_visibility = ["//visibility:private"],
+    default_visibility = ["//visibility:public"],
 )
 
 drake_cc_library(
@@ -149,6 +149,17 @@ drake_cc_library(
         ":fem_indexes",
         "//geometry:geometry_ids",
         "//math:geometric_transform",
+    ],
+)
+
+drake_cc_library(
+    name = "parse_vtk",
+    hdrs = [
+        "parse_vtk.h",
+    ],
+    deps = [
+        "//common:essential",
+        "//geometry/proximity:volume_mesh",
     ],
 )
 

@@ -92,7 +92,7 @@ class CollisionObjects : public geometry::ShapeReifier {
   // question.
   /* The default resolution hint for surface mesh representations of the rigid
    geometries. */
-  static constexpr double kDefaultResolutionHint{0.01};
+  static constexpr double kDefaultResolutionHint{0.005};
 
  private:
   /* Data to be used during reification. It is passed as the `user_data`

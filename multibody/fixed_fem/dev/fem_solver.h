@@ -166,9 +166,9 @@ class FemSolver {
       // TODO(xuchenhan-tri): Provide some advice on how to get a "better
       //  initial guess". Or instead, return a status indicating the solver
       //  did not converge and let users decide what to do.
-      throw std::runtime_error(
-          "The solver did not converge " + std::to_string(kMaxIterations_) +
-          " iterations. Please provide a better initial guess.");
+      // throw std::runtime_error(
+      //     "The solver did not converge " + std::to_string(kMaxIterations_) +
+      //     " iterations. Please provide a better initial guess.");
     }
     return iter;
   }

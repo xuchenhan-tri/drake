@@ -12,10 +12,10 @@ struct PgsSolverParameters {
   // Over-relaxation parameter, in (0, 1]
   double omega{1};
   // Absolute contact velocity tolerance, m/s. See VerifyConvergenceCriteria().
-  double abs_tolerance{1.0e-4};
+  double abs_tolerance{1.0e-3};
   // Relative contact velocity tolerance, unitless. See
   // VerifyConvergenceCriteria().
-  double rel_tolerance{1.0e-4};
+  double rel_tolerance{1.0e-3};
   // Maximum number of PGS iterations.
   int max_iterations{100};
 };
