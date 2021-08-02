@@ -144,6 +144,9 @@ class RenderEngineVtk : public RenderEngine,
   /** Copy constructor for the purpose of cloning. */
   RenderEngineVtk(const RenderEngineVtk& other);
 
+  // Performs the common setup for all shape types.
+  void ImplementGeometry(vtkPolyDataAlgorithm* source, void* user_data);
+
  private:
   // @see RenderEngine::DoRegisterVisual().
   bool DoRegisterVisual(GeometryId id, const Shape& shape,
@@ -182,9 +185,6 @@ class RenderEngineVtk : public RenderEngine,
   // shapes.
   void ImplementObj(const std::string& file_name, double scale,
                     void* user_data);
-
-  // Performs the common setup for all shape types.
-  void ImplementGeometry(vtkPolyDataAlgorithm* source, void* user_data);
 
   // The rendering pipeline for a single image type (color, depth, or label).
   struct RenderingPipeline {
