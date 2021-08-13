@@ -16,7 +16,7 @@ using DofIndex = TypeSafeIndex<class DofTag>;
 
 // TODO(xuchenhan-tri): Consider renaming to deformable.
 /** Index into a vector of deformable bodies. */
-using SoftBodyIndex = TypeSafeIndex<class BodyTag>;
+using SoftBodyIndex = TypeSafeIndex<class SoftBodyTag>;
 }  // namespace fixed_fem
 }  // namespace multibody
 }  // namespace drake
