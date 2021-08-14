@@ -782,7 +782,8 @@ BlockSparseMatrix<T> DeformableRigidManager<T>::CalcContactJacobian(
   //  using contact graph for rigid dofs.
   /* For now, all rigid dofs are viewed as a single column block in the contact
    jacobian. */
-  const int num_rigid_block_cols = 1;
+  const int num_rigid_block_cols = (this->plant().num_velocities() > 0) ? 1 : 0;
+
   /* For now, all rigid-rigid contacts (if they exist) are viewed as a single
    row block in the contact jacobian. */
   const int num_rigid_block_rows = rigid_contact_pairs.empty() ? 0 : 1;
@@ -812,7 +813,6 @@ BlockSparseMatrix<T> DeformableRigidManager<T>::CalcContactJacobian(
   /* The block columns corresponding to deformable dofs start after the
    rigid dofs. */
   int col_block_deformable = num_rigid_block_cols;
-  const int col_block_rigid = 0;
 
   for (const internal::DeformableContactData<T>& contact_data :
        deformable_contact_data) {
@@ -820,8 +820,11 @@ BlockSparseMatrix<T> DeformableRigidManager<T>::CalcContactJacobian(
     if (contact_data.num_contact_points() == 0) {
       continue;
     }
-    builder.PushBlock(row_block, col_block_rigid,
-                      CalcContactJacobianRigidBlock(context, contact_data));
+    if (num_rigid_block_cols > 0) {
+      const int col_block_rigid = 0;
+      builder.PushBlock(row_block, col_block_rigid,
+                        CalcContactJacobianRigidBlock(context, contact_data));
+    }
     builder.PushBlock(row_block, col_block_deformable,
                       CalcContactJacobianDeformableBlock(contact_data));
     ++row_block;
@@ -944,17 +947,22 @@ BlockSparseMatrix<T> DeformableRigidManager<T>::CalcTangentMatrix(
       ++num_deformable_body_in_contact;
     }
   }
-  const int num_diagonal_blocks = 1 + num_deformable_body_in_contact;
-  BlockSparseMatrixBuilder<T> builder(num_diagonal_blocks, num_diagonal_blocks,
-                                      num_diagonal_blocks);
+  const int num_rigid_dofs = this->plant().num_velocities();
+  const int num_rigid_blocks = (num_rigid_dofs == 0) ? 0 : 1;
+  const int num_deformable_blocks = num_deformable_body_in_contact;
+  const int num_blocks = num_rigid_blocks + num_deformable_blocks;
+  BlockSparseMatrixBuilder<T> builder(num_blocks, num_blocks, num_blocks);
 
-  // TODO(xuchenhan-tri): use a Eval method here.
-  const int nv = this->plant().num_velocities();
-  MatrixX<T> M(nv, nv);
-  this->plant().CalcMassMatrix(context, &M);
-  builder.PushBlock(0, 0, M);
+  if (num_rigid_blocks > 0) {
+    const int nv = this->plant().num_velocities();
+    MatrixX<T> M(nv, nv);
+    this->plant().CalcMassMatrix(context, &M);
+    /* The rigid dofs come before the deformable dofs in the contact
+     formulation, so we put the rigid block on the top-left corner. */
+    builder.PushBlock(0, 0, M);
+  }
 
-  int block_index = 1;
+  int block_index = num_rigid_blocks;
   for (SoftBodyIndex i(0); i < deformable_model_->num_bodies(); ++i) {
     if (deformable_contact_data[i].num_contact_points() == 0) {
       continue;
