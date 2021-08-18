@@ -156,16 +156,23 @@ class FemElement {
    @param[in] element_index    The index of the new element within the model.
    @param[in] node_indices    The node indices of the nodes of this element
    within the model.
+   @param[in] matrix_free    Whether the element supports matrix-free operations
+   or matrix operations.
    @pre element_index is valid.
    @pre Entries in node_indices are valid. */
   FemElement(ElementIndex element_index,
-             const std::array<NodeIndex, Traits::kNumNodes>& node_indices)
-      : element_index_(element_index), node_indices_(node_indices) {
+             const std::array<NodeIndex, Traits::kNumNodes>& node_indices,
+             bool matrix_free)
+      : element_index_(element_index),
+        node_indices_(node_indices),
+        matrix_free_(matrix_free) {
     DRAKE_ASSERT(element_index.is_valid());
     for (int i = 0; i < Traits::kNumNodes; ++i) {
       DRAKE_ASSERT(node_indices[i].is_valid());
     }
   }
+
+  bool is_matrix_free() const { return matrix_free_; }
 
   /** `DerivedElement` must provide an implementation for `DoComputeData()`.
    @throw std::exception if `DerivedElement` does not provide an implementation
@@ -241,6 +248,9 @@ class FemElement {
   ElementIndex element_index_;
   /* The node indices of this element within the model. */
   std::array<NodeIndex, Traits::kNumNodes> node_indices_;
+  /* Whether the element uses provides data to support matrix-free operations.
+   */
+  bool matrix_free_{false};
 };
 }  // namespace fem
 }  // namespace multibody

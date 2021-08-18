@@ -23,7 +23,7 @@ namespace internal {
  constitutive models must shadow the `CalcFooImpl()` methods. The derived
  constitutive model must also be accompanied by a corresponding traits class
  that declares the compile time quantities and type declarations that this base
- class requires.
+ class requires. The derived constitutive model must also define a nested FirstPiolaStressDifferential class that cal
  @tparam DerivedConstitutiveModel The concrete constitutive model that inherits
  from ConstitutiveModel through CRTP.
  @tparam DerivedTraits The traits class associated with the
