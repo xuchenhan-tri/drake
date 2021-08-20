@@ -102,6 +102,15 @@ class ConstitutiveModel {
     derived().CalcFirstPiolaStressDerivativeImpl(data, dPdF);
   }
 
+  /* Calculates the first Piola stress differential dP = dP/dF * dF.
+   @pre `dP != nullptr`. */
+  void CalcFirstPiolaStressDifferential(
+      const Data& data, const std::array<Matrix3<T>, num_locations>& dF,
+      std::array<Matrix3<T>, num_locations>* dP) const {
+    DRAKE_ASSERT(dP != nullptr);
+    derived().CalcFirstPiolaStressDifferentialImpl(data, dF, dP);
+  }
+
  protected:
   DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(ConstitutiveModel);
 
@@ -135,6 +144,15 @@ class ConstitutiveModel {
     throw std::logic_error(
         fmt::format("The derived class {} must provide a shadow definition of "
                     "CalcFirstPiolaStressDerivativeImpl() to be correct.",
+                    NiceTypeName::Get(derived())));
+  }
+
+  void CalcFirstPiolaStressDifferentialImpl(
+      const Data& data, const std::array<Matrix3<T>, num_locations>& dF,
+      std::array<Matrix3<T>, num_locations>* dP) const {
+    throw std::logic_error(
+        fmt::format("The derived class {} must provide a shadow definition of "
+                    "CalcFirstPiolaStressDifferentialImpl() to be correct.",
                     NiceTypeName::Get(derived())));
   }
 

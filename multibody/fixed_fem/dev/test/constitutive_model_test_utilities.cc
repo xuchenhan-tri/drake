@@ -44,10 +44,6 @@ std::array<Matrix3<AutoDiffXd>, num_locations> MakeDeformationGradients() {
   return deformation_gradients_autodiff;
 }
 
-/* Tests the constructors correctly initializes St.Venant-Kichhoff like
-constitutive models and rejects invalid Young's modulus and poisson ratio.
-@tparam Model    Must be instantiations of LinearConstitutiveModel or
-CorotatedModel. */
 template <class Model>
 void TestParameters() {
   using T = typename Model::T;
@@ -77,10 +73,6 @@ void TestParameters() {
                               "Poisson ratio must be in \\(-1, 0.5\\).");
 }
 
-/* Tests that the energy density and the stress are zero at the undeformed
-state.
-@tparam Model    Must be instantiations of LinearConstitutiveModel or
-CorotatedModel. */
 template <class Model>
 void TestUndeformedState() {
   constexpr int num_locations = Model::Data::num_locations;
@@ -104,11 +96,6 @@ void TestUndeformedState() {
   EXPECT_EQ(stress, analytic_stress);
 }
 
-/* Tests that the energy density and the stress are consistent by verifying the
-stress matches the derivative of energy density produced by automatic
-differentiation.
-@tparam Model    Must be AutoDiffXd instantiations of LinearConstitutiveModel or
-CorotatedModel. */
 template <class Model>
 void TestPIsDerivativeOfPsi() {
   constexpr int num_locations = Model::Data::num_locations;
@@ -130,10 +117,6 @@ void TestPIsDerivativeOfPsi() {
   }
 }
 
-/* Tests that the stress and the stress derivatives are consistent by verifying
-the handcrafted derivative matches that produced by automatic differentiation.
-@tparam Model    Must be AutoDiffXd instantiations of LinearConstitutiveModel or
-CorotatedModel. */
 template <class Model>
 void TestdPdFIsDerivativeOfP() {
   constexpr int num_locations = Model::Data::num_locations;
@@ -149,11 +132,11 @@ void TestdPdFIsDerivativeOfP() {
   std::array<Eigen::Matrix<AutoDiffXd, 9, 9>, num_locations> dPdF;
   model.CalcFirstPiolaStressDerivative(data, &dPdF);
   for (int q = 0; q < num_locations; ++q) {
-    for (int i = 0; i < kSpaceDimension; ++i) {
-      for (int j = 0; j < kSpaceDimension; ++j) {
+    for (int i = 0; i < 3; ++i) {
+      for (int j = 0; j < 3; ++j) {
         Matrix3d dPijdF;
-        for (int k = 0; k < kSpaceDimension; ++k) {
-          for (int l = 0; l < kSpaceDimension; ++l) {
+        for (int k = 0; k < 3; ++k) {
+          for (int l = 0; l < 3; ++l) {
             dPijdF(k, l) = dPdF[q](3 * j + i, 3 * l + k).value();
           }
         }
@@ -163,6 +146,55 @@ void TestdPdFIsDerivativeOfP() {
             fem::test::CalcConditionNumber<AutoDiffXd>(P[q]) * kTolerance));
       }
     }
+  }
+}
+
+template <class Model>
+void TestStressDerivativeDifferentialConsistency() {
+  using T = typename Model::T;
+  constexpr int num_locations = Model::Data::num_locations;
+  const T kYoungsModulus = 100.0;
+  const T kPoissonRatio = 0.3;
+  const Model model(kYoungsModulus, kPoissonRatio);
+  typename Model::Traits::Data data;
+  std::array<Matrix3<T>, num_locations> deformation_gradients;
+  for (auto& F : deformation_gradients) {
+    // clang-format off
+    F << 0.18, 0.63, 0.54,
+         0.13, 0.92, 0.17,
+         0.03, 0.86, 0.85;
+    // clang-format on
+  }
+  data.UpdateData(deformation_gradients);
+  std::array<Eigen::Matrix<T, 9, 9>, num_locations> dPdF;
+  model.CalcFirstPiolaStressDerivative(data, &dPdF);
+
+  std::array<Matrix3<T>, num_locations> deformation_gradient_differentials;
+  for (auto& dF : deformation_gradient_differentials) {
+    // clang-format off
+    dF << 0.19, 0.64, 0.55,
+          0.14, 0.93, 0.18,
+          0.04, 0.87, 0.86;
+    // clang-format on
+  }
+  std::array<Matrix3<T>, num_locations> dP;
+  model.CalcFirstPiolaStressDifferential(
+      data, deformation_gradient_differentials, &dP);
+  for (int q = 0; q < num_locations; ++q) {
+    Matrix3<T> expected_dP = Matrix3<T>::Zero();
+    for (int i = 0; i < 3; ++i) {
+      for (int j = 0; j < 3; ++j) {
+        for (int k = 0; k < 3; ++k) {
+          for (int l = 0; l < 3; ++l) {
+            expected_dP(i, j) += dPdF[q](3 * j + i, 3 * l + k) *
+                                 deformation_gradient_differentials[q](k, l);
+          }
+        }
+      }
+    }
+    EXPECT_TRUE(CompareMatrices(
+        expected_dP, dP[q],
+        fem::test::CalcConditionNumber<T>(expected_dP) * kTolerance));
   }
 }
 
@@ -182,6 +214,14 @@ template void TestPIsDerivativeOfPsi<CorotatedModel<AutoDiffXd, 1>>();
 template void TestdPdFIsDerivativeOfP<LinearConstitutiveModel<AutoDiffXd, 1>>();
 template void TestdPdFIsDerivativeOfP<CorotatedModel<AutoDiffXd, 1>>();
 
+template void TestStressDerivativeDifferentialConsistency<
+    LinearConstitutiveModel<double, 1>>();
+template void
+TestStressDerivativeDifferentialConsistency<CorotatedModel<double, 1>>();
+template void TestStressDerivativeDifferentialConsistency<
+    LinearConstitutiveModel<AutoDiffXd, 1>>();
+template void
+TestStressDerivativeDifferentialConsistency<CorotatedModel<AutoDiffXd, 1>>();
 }  // namespace test
 }  // namespace internal
 }  // namespace fem

@@ -30,6 +30,13 @@ GTEST_TEST(CorotatedModelTest, dPdFIsDerivativeOfP) {
   TestdPdFIsDerivativeOfP<CorotatedModel<AutoDiffXd, kNumLocations>>();
 }
 
+GTEST_TEST(CorotatedModelTest, StressDerivativeDifferentialConsistency) {
+  TestStressDerivativeDifferentialConsistency<
+      CorotatedModel<double, kNumLocations>>();
+  TestStressDerivativeDifferentialConsistency<
+      CorotatedModel<AutoDiffXd, kNumLocations>>();
+}
+
 }  // namespace test
 }  // namespace internal
 }  // namespace fem

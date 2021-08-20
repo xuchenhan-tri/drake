@@ -79,6 +79,38 @@ GTEST_TEST(MatrixUtilitiesTest, AddScaledRotationalDerivative) {
   }
 }
 
+/* Verify that the derivative of the rotation matrix is consistent with the
+ differential, i.e., dR = dR/dF * dF. */
+GTEST_TEST(MatrixUtilitiesTest, AddScaledRotationalDifferential) {
+  const Matrix3<double> F = MakeArbitraryMatrix();
+  Matrix3<double> R, S;
+  PolarDecompose<double>(F, &R, &S);
+  Eigen::Matrix<double, 9, 9> scaled_dRdF = Eigen::Matrix<double, 9, 9>::Zero();
+  constexpr double scale = 1.23;
+  AddScaledRotationalDerivative<double>(R, S, scale, &scaled_dRdF);
+  Matrix3<double> dF;
+  // clang-format off
+  dF << 2.2, 3.3, 4.4,
+        5.5, 6.6, 6.8,
+        8.8, 9.9, 9.1;
+  // clang-format on
+  Matrix3<double> expected_dR = Matrix3<double>::Zero();
+  for (int i = 0; i < 3; ++i) {
+    for (int j = 0; j < 3; ++j) {
+      for (int k = 0; k < 3; ++k) {
+        for (int l = 0; l < 3; ++l) {
+          expected_dR(i, j) += scaled_dRdF(3 * j + i, 3 * l + k) * dF(k, l);
+        }
+      }
+    }
+  }
+
+  Matrix3<double> scaled_dR = Matrix3<double>::Zero();
+  AddScaledRotationalDifferential<double>(R, S, dF, scale, &scaled_dR);
+  EXPECT_TRUE(
+      CompareMatrices(expected_dR, scaled_dR, CalcTolerance(scaled_dR)));
+}
+
 GTEST_TEST(MatrixUtilitiesTest, CalcCofactorMatrix) {
   const Matrix3<double> A = MakeMatrix(3, 3);
   Matrix3<double> C;
@@ -109,6 +141,35 @@ GTEST_TEST(MatrixUtilitiesTest, AddScaledCofactorMatrixDerivative) {
                           scaled_dCijdA, CalcTolerance(A)));
     }
   }
+}
+
+/* Verify that the derivative of the cofactor matrix is consistent with the
+ differential, i.e., dC = dC/dA * dA. */
+GTEST_TEST(MatrixUtilitiesTest, AddScaledCofactorMatrixDifferential) {
+  const Matrix3<double> A = MakeArbitraryMatrix();
+  Eigen::Matrix<double, 9, 9> scaled_dCdA = Eigen::Matrix<double, 9, 9>::Zero();
+  constexpr double scale = 1.23;
+  AddScaledCofactorMatrixDerivative<double>(A, scale, &scaled_dCdA);
+  Matrix3<double> dA;
+  // clang-format off
+  dA << 2.2, 3.3, 4.4,
+        5.5, 6.6, 6.8,
+        8.8, 9.9, 9.1;
+  // clang-format on
+  Matrix3<double> expected_dC = Matrix3<double>::Zero();
+  for (int i = 0; i < 3; ++i) {
+    for (int j = 0; j < 3; ++j) {
+      for (int k = 0; k < 3; ++k) {
+        for (int l = 0; l < 3; ++l) {
+          expected_dC(i, j) += scaled_dCdA(3 * j + i, 3 * l + k) * dA(k, l);
+        }
+      }
+    }
+  }
+
+  Matrix3<double> scaled_dC = Matrix3<double>::Zero();
+  AddScaledCofactorMatrixDifferential<double>(A, dA, scale, &scaled_dC);
+  EXPECT_TRUE(CompareMatrices(expected_dC, scaled_dC, CalcTolerance(A)));
 }
 
 GTEST_TEST(MatrixUtilitiesTest, PermuteBlockVector) {

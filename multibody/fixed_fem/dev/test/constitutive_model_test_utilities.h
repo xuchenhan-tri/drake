@@ -46,6 +46,13 @@ ConstitutiveModel. */
 template <class Model>
 void TestdPdFIsDerivativeOfP();
 
+/* Tests that the stress differential and the stress derivatives are consistent
+by verifying dP = dP/dF * dF.
+@tparam Model    Must be instantiations of LinearConstitutiveModel or
+CorotatedModel. */
+template <class Model>
+void TestStressDerivativeDifferentialConsistency();
+
 }  // namespace test
 }  // namespace internal
 }  // namespace fem

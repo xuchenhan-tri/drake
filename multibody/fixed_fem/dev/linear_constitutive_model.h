@@ -81,6 +81,12 @@ class LinearConstitutiveModel final
       const Data& data,
       std::array<Eigen::Matrix<T, 9, 9>, num_locations>* dPdF) const;
 
+  /* Shadows ConstitutiveModel::CalcFirstPiolaStressDifferential() as required
+   by the CRTP base class. */
+  void CalcFirstPiolaStressDifferentialImpl(
+      const Data& data, const std::array<Matrix3<T>, num_locations>& dF,
+      std::array<Matrix3<T>, num_locations>* dP) const;
+
   T E_;       // Young's modulus, N/m².
   T nu_;      // Poisson ratio.
   T mu_;      // Lamé's second parameter/Shear modulus, N/m².

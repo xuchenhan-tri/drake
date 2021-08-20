@@ -66,6 +66,31 @@ void CorotatedModel<T, num_locations>::CalcFirstPiolaStressDerivativeImpl(
   }
 }
 
+template <typename T, int num_locations>
+void CorotatedModel<T, num_locations>::CalcFirstPiolaStressDifferentialImpl(
+    const Data& data, const std::array<Matrix3<T>, num_locations>& dF,
+    std::array<Matrix3<T>, num_locations>* dP) const {
+  for (int i = 0; i < num_locations; ++i) {
+    const T& Jm1 = data.Jm1()[i];
+    const Matrix3<T>& F = data.deformation_gradient()[i];
+    const Matrix3<T>& R = data.R()[i];
+    const Matrix3<T>& S = data.S()[i];
+    const Matrix3<T>& JFinvT = data.JFinvT()[i];
+    const Matrix3<T>& local_dF = dF[i];
+    Matrix3<T>& local_dP = (*dP)[i];
+    /* The contribution from derivatives of Jm1. */
+    local_dP = lambda_ * JFinvT.cwiseProduct(local_dF).sum() * JFinvT;
+    /* The contribution from derivatives of F. */
+    local_dP += 2 * mu_ * local_dF;
+    /* The contribution from derivatives of R. */
+    internal::AddScaledRotationalDifferential<T>(R, S, local_dF, -2.0 * mu_,
+                                              &local_dP);
+    /* The contribution from derivatives of JFinvT. */
+    internal::AddScaledCofactorMatrixDifferential<T>(F, local_dF, lambda_ * Jm1,
+                                                  &local_dP);
+  }
+}
+
 template class CorotatedModel<double, 1>;
 template class CorotatedModel<AutoDiffXd, 1>;
 

@@ -81,6 +81,35 @@ void AddScaledRotationalDerivative(
     const Matrix3<T>& R, const Matrix3<T>& S, const T& scale,
     EigenPtr<Eigen::Matrix<T, 9, 9>> scaled_dRdF);
 
+/* From the calculation in `AddScaledRotationalDerivative()`, we know that
+               δRᵢⱼ = 1/det(A) * Rᵢₘ(AₖₘAₗⱼ−AₖⱼAₗₘ)Bₖₗ,
+where Bₖₗ = RₐₖδFₐₗ. Plugging in, we get
+               δRᵢⱼ = 1/det(A) * Rᵢₘ(AₖₘAₗⱼ−AₖⱼAₗₘ)RₐₖδFₐₗ.
+Rewriting in matrix notation, we get
+               δR = 1/det(A) * R Aᵀ(RᵀδF − δFᵀR)A.
+                  = 1/det(A) * R * A(B − Bᵀ)A     (since A is symmetric). */
+/* Computes the differential of the rotation matrix from the polar decomposition
+ (see PolarDecompose()) with respect to the original matrix. See also
+ AddScaledRotationalDertivative().
+ @param[in] R            The rotation matrix in the polar decomposition F = RS.
+ @param[in] S            The symmetric matrix in the polar decomposition F = RS.
+ @param[in] dF           The differential of the original matrix.
+ @param[in] scale        The scalar multiple of the result.
+ @param[out] scaled_dR   The variable to which scale * dR is added.
+ @pre tr(S)I − S is invertible. */
+template <typename T>
+void AddScaledRotationalDifferential(const Matrix3<T>& R, const Matrix3<T>& S,
+                                     const Matrix3<T>& dF, const T& scale,
+                                     EigenPtr<Matrix3<T>> scaled_dR) {
+  Matrix3<T> A = -S;
+  A.diagonal().array() += S.trace();
+  const T J = A.determinant();
+  DRAKE_DEMAND(J != 0);
+  const T scale_over_J = scale / J;
+  Matrix3<T> B = R.transpose() * dF;
+  (*scaled_dR).noalias() += scale_over_J * R * A * (B - B.transpose()) * A;
+}
+
 /* Calculates the cofactor matrix of the given input 3-by-3 matrix M. */
 template <typename T>
 void CalcCofactorMatrix(const Matrix3<T>& M, EigenPtr<Matrix3<T>> cofactor);
@@ -95,6 +124,36 @@ template <typename T>
 void AddScaledCofactorMatrixDerivative(
     const Matrix3<T>& M, const T& scale,
     EigenPtr<Eigen::Matrix<T, 9, 9>> scaled_dCdM);
+
+/* Computes the differential of the cofactor matrix C of a 3-by-3 matrix M
+ given the differential in M, dM.
+ @param[in] M           The input matrix.
+ @param[in] dM          The differential of M.
+ @param[in] scale       The scalar multiple of the result.
+ @param[out] scaled_dC  The variable to which scale * dC is added. */
+template <typename T>
+void AddScaledCofactorMatrixDifferential(const Matrix3<T>& M,
+                                         const Matrix3<T>& dM, const T& scale,
+                                         EigenPtr<Matrix3<T>> scaled_dC) {
+  (*scaled_dC)(0, 0) += scale * (dM(1, 1) * M(2, 2) + M(1, 1) * dM(2, 2) -
+                                 dM(2, 1) * M(1, 2) - M(2, 1) * dM(1, 2));
+  (*scaled_dC)(1, 0) += scale * (dM(2, 1) * M(0, 2) + M(2, 1) * dM(0, 2) -
+                                 dM(0, 1) * M(2, 2) - M(0, 1) * dM(2, 2));
+  (*scaled_dC)(2, 0) += scale * (dM(0, 1) * M(1, 2) + M(0, 1) * dM(1, 2) -
+                                 dM(1, 1) * M(0, 2) - M(1, 1) * dM(0, 2));
+  (*scaled_dC)(0, 1) += scale * (dM(2, 0) * M(1, 2) + M(2, 0) * dM(1, 2) -
+                                 dM(1, 0) * M(2, 2) - M(1, 0) * dM(2, 2));
+  (*scaled_dC)(1, 1) += scale * (dM(0, 0) * M(2, 2) + M(0, 0) * dM(2, 2) -
+                                 dM(2, 0) * M(0, 2) - M(2, 0) * dM(0, 2));
+  (*scaled_dC)(2, 1) += scale * (dM(1, 0) * M(0, 2) + M(1, 0) * dM(0, 2) -
+                                 dM(0, 0) * M(1, 2) - M(0, 0) * dM(1, 2));
+  (*scaled_dC)(0, 2) += scale * (dM(1, 0) * M(2, 1) + M(1, 0) * dM(2, 1) -
+                                 dM(2, 0) * M(1, 1) - M(2, 0) * dM(1, 1));
+  (*scaled_dC)(1, 2) += scale * (dM(2, 0) * M(0, 1) + M(2, 0) * dM(0, 1) -
+                                 dM(0, 0) * M(2, 1) - M(0, 0) * dM(2, 1));
+  (*scaled_dC)(2, 2) += scale * (dM(0, 0) * M(1, 1) + M(0, 0) * dM(1, 1) -
+                                 dM(1, 0) * M(0, 1) - M(1, 0) * dM(0, 1));
+}
 
 /* Given a size 3N vector with block structure with size 3 block entries Bᵢ
  where i ∈ V = {0, ..., N-1} and a permutation P on V, this method builds the

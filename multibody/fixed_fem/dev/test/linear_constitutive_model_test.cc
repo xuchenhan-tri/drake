@@ -30,6 +30,14 @@ GTEST_TEST(LinearConstitutiveModelTest, dPdFIsDerivativeOfP) {
   TestdPdFIsDerivativeOfP<LinearConstitutiveModel<AutoDiffXd, kNumLocations>>();
 }
 
+GTEST_TEST(LinearConstitutiveModelTest,
+           StressDerivativeDifferentialConsistency) {
+  TestStressDerivativeDifferentialConsistency<
+      LinearConstitutiveModel<double, kNumLocations>>();
+  TestStressDerivativeDifferentialConsistency<
+      LinearConstitutiveModel<AutoDiffXd, kNumLocations>>();
+}
+
 }  // namespace test
 }  // namespace internal
 }  // namespace fem
