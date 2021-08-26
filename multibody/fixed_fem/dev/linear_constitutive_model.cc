@@ -75,14 +75,15 @@ void LinearConstitutiveModel<T, num_locations>::
 }
 
 template <typename T, int num_locations>
-void LinearConstitutiveModel<T, num_locations>::
-    CalcFirstPiolaStressDifferentialImpl(
-        const Data&, const std::array<Matrix3<T>, num_locations>& dF,
-        std::array<Matrix3<T>, num_locations>* dP) const {
+std::array<Matrix3<T>, num_locations>
+LinearConstitutiveModel<T, num_locations>::CalcFirstPiolaStressDifferentialImpl(
+    const Data&, const std::array<Matrix3<T>, num_locations>& dF) const {
+  std::array<Matrix3<T>, num_locations> dP;
   for (int i = 0; i < num_locations; ++i) {
-    (*dP)[i] = mu_ * (dF[i] + dF[i].transpose()) +
-               lambda_ * dF[i].trace() * Matrix3<T>::Identity();
+    dP[i] = mu_ * (dF[i] + dF[i].transpose()) +
+            lambda_ * dF[i].trace() * Matrix3<T>::Identity();
   }
+  return dP;
 }
 
 template class LinearConstitutiveModel<double, 1>;

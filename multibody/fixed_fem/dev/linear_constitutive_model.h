@@ -83,9 +83,9 @@ class LinearConstitutiveModel final
 
   /* Shadows ConstitutiveModel::CalcFirstPiolaStressDifferential() as required
    by the CRTP base class. */
-  void CalcFirstPiolaStressDifferentialImpl(
-      const Data& data, const std::array<Matrix3<T>, num_locations>& dF,
-      std::array<Matrix3<T>, num_locations>* dP) const;
+  std::array<Matrix3<T>, num_locations>
+  CalcFirstPiolaStressDifferentialImpl(
+      const Data& data, const std::array<Matrix3<T>, num_locations>& dF) const;
 
   T E_;       // Young's modulus, N/m².
   T nu_;      // Poisson ratio.

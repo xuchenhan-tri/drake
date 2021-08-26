@@ -177,9 +177,9 @@ void TestStressDerivativeDifferentialConsistency() {
           0.04, 0.87, 0.86;
     // clang-format on
   }
-  std::array<Matrix3<T>, num_locations> dP;
-  model.CalcFirstPiolaStressDifferential(
-      data, deformation_gradient_differentials, &dP);
+  const std::array<Matrix3<T>, num_locations> dP =
+      model.CalcFirstPiolaStressDifferential(
+          data, deformation_gradient_differentials);
   for (int q = 0; q < num_locations; ++q) {
     Matrix3<T> expected_dP = Matrix3<T>::Zero();
     for (int i = 0; i < 3; ++i) {
