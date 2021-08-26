@@ -150,18 +150,25 @@ class FemElement {
                                                                      df);
   }
 
-  /** Extract the dofs corresponding to the nodes in `this` element from the
-   given `state_dofs`. */
-  Vector<T, Traits::kSolutionDimension * Traits::kNumNodes> ExtractElementDofs(
+  /** Extract the dofs corresponding to the nodes given by `node_indices` from
+   the given `state_dofs`. */
+  static Vector<T, Traits::kSolutionDimension * Traits::kNumNodes>
+  ExtractElementDofs(
+      const std::array<NodeIndex, Traits::kNumNodes>& node_indices,
       const VectorX<T>& state_dofs) {
     constexpr int kDim = Traits::kSolutionDimension;
     Vector<T, kDim * Traits::kNumNodes> element_dofs;
     for (int i = 0; i < Traits::kNumNodes; ++i) {
-      DRAKE_ASSERT((node_indices_[i] + 1) * kDim <= state_dofs.size());
+      DRAKE_ASSERT((node_indices[i] + 1) * kDim <= state_dofs.size());
       element_dofs.template segment<kDim>(i * kDim) =
-          state_dofs.template segment<kDim>(node_indices_[i] * kDim);
+          state_dofs.template segment<kDim>(node_indices[i] * kDim);
     }
     return element_dofs;
+  }
+
+  Vector<T, Traits::kSolutionDimension * Traits::kNumNodes> ExtractElementDofs(
+      const VectorX<T>& state_dofs) const {
+    return ExtractElementDofs(node_indices_, state_dofs);
   }
 
  protected:

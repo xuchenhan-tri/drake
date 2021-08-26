@@ -84,7 +84,7 @@ class DynamicElasticityElement final
      the elastic force, fᵥ(x, v) is the damping force and fₑₓₜ is the external
      force. */
     *residual += this->mass_matrix() *
-                 this->ExtractElementDofs(this->node_indices(), state.qddot());
+                 this->ExtractElementDofs(state.qddot());
     this->AddNegativeElasticForce(state, residual);
     AddNegativeDampingForce(state, residual);
     this->AddScaledExternalForce(state, -1.0, residual);
@@ -102,8 +102,7 @@ class DynamicElasticityElement final
      As we are accumulating the negative damping force here, the `+=` sign
      should be used. */
     *negative_damping_force +=
-        damping_matrix *
-        this->ExtractElementDofs(this->node_indices(), state.qdot());
+        damping_matrix * this->ExtractElementDofs(state.qdot());
   }
 
   /* Implements FemElement::CalcStiffnessMatrix().
@@ -135,24 +134,22 @@ class DynamicElasticityElement final
   }
 
   void DoCalcStiffnessDifferential(
-      const FemState<DerivedElement>& state,
-      const Vector<T, Traits::kNumDofs>& dx,
+      const FemState<ElementType>& state, const Vector<T, Traits::kNumDofs>& dx,
       EigenPtr<Vector<T, Traits::kNumDofs>> df) const {
     df->setZero();
     this->AddScaledElasticForceDifferential(state, -1.0, dx, df);
   }
 
   void DoCalcDampingDifferential(
-      const FemState<DerivedElement>& state,
-      const Vector<T, Traits::kNumDofs>& dv,
+      const FemState<ElementType>& state, const Vector<T, Traits::kNumDofs>& dv,
       EigenPtr<Vector<T, Traits::kNumDofs>> df) const {
     this->DoCalcMassDifferential(state, dv, df);
     *df *= damping_model_.mass_coeff();
     this->AddScaledElasticForceDifferential(
-        state, -1.0 * damping_model_.stiffness_coeff(), dx, df);
+        state, -1.0 * damping_model_.stiffness_coeff(), dv, df);
   }
 
-  void DoCalcMassDifferential(const FemState<DerivedElement>& state,
+  void DoCalcMassDifferential(const FemState<ElementType>&,
                               const Vector<T, Traits::kNumDofs>& da,
                               EigenPtr<Vector<T, Traits::kNumDofs>> df) const {
     *df = ElasticityElementType::mass_matrix() * da;

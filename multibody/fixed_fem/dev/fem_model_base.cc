@@ -1,5 +1,7 @@
 #include "drake/multibody/fixed_fem/dev/fem_model_base.h"
 
+#include "drake/multibody/fixed_fem/dev/tangent_operator.h"
+
 namespace drake {
 namespace multibody {
 namespace fem {
@@ -44,7 +46,7 @@ template <typename T>
 std::unique_ptr<TangentOperator<T>> FemModelBase<T>::CalcTangentOperator(
     const FemStateBase<T>& state) const {
   ThrowIfModelStateIncompatible(__func__, state);
-  DoCalcTangentOperator(state);
+  return std::make_unique<TangentOperator<T>>(this, &state);
 }
 
 template <typename T>

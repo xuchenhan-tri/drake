@@ -82,7 +82,7 @@ GTEST_TEST(MatrixUtilitiesTest, AddScaledRotationalDerivative) {
 /* Verify that the derivative of the rotation matrix is consistent with the
  differential, i.e., dR = dR/dF * dF. */
 GTEST_TEST(MatrixUtilitiesTest, AddScaledRotationalDifferential) {
-  const Matrix3<double> F = MakeArbitraryMatrix();
+  const Matrix3<double> F = MakeMatrix(3, 3);
   Matrix3<double> R, S;
   PolarDecompose<double>(F, &R, &S);
   Eigen::Matrix<double, 9, 9> scaled_dRdF = Eigen::Matrix<double, 9, 9>::Zero();
@@ -146,7 +146,7 @@ GTEST_TEST(MatrixUtilitiesTest, AddScaledCofactorMatrixDerivative) {
 /* Verify that the derivative of the cofactor matrix is consistent with the
  differential, i.e., dC = dC/dA * dA. */
 GTEST_TEST(MatrixUtilitiesTest, AddScaledCofactorMatrixDifferential) {
-  const Matrix3<double> A = MakeArbitraryMatrix();
+  const Matrix3<double> A = MakeMatrix(3, 3);
   Eigen::Matrix<double, 9, 9> scaled_dCdA = Eigen::Matrix<double, 9, 9>::Zero();
   constexpr double scale = 1.23;
   AddScaledCofactorMatrixDerivative<double>(A, scale, &scaled_dCdA);

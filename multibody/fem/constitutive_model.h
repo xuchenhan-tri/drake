@@ -23,7 +23,8 @@ namespace internal {
  constitutive models must shadow the `CalcFooImpl()` methods. The derived
  constitutive model must also be accompanied by a corresponding traits class
  that declares the compile time quantities and type declarations that this base
- class requires. The derived constitutive model must also define a nested FirstPiolaStressDifferential class that cal
+ class requires. The derived constitutive model must also define a nested
+ FirstPiolaStressDifferential class that cal
  @tparam DerivedConstitutiveModel The concrete constitutive model that inherits
  from ConstitutiveModel through CRTP.
  @tparam DerivedTraits The traits class associated with the
@@ -102,13 +103,10 @@ class ConstitutiveModel {
     derived().CalcFirstPiolaStressDerivativeImpl(data, dPdF);
   }
 
-  /* Calculates the first Piola stress differential dP = dP/dF * dF.
-   @pre `dP != nullptr`. */
-  void CalcFirstPiolaStressDifferential(
-      const Data& data, const std::array<Matrix3<T>, num_locations>& dF,
-      std::array<Matrix3<T>, num_locations>* dP) const {
-    DRAKE_ASSERT(dP != nullptr);
-    derived().CalcFirstPiolaStressDifferentialImpl(data, dF, dP);
+  /* Calculates the first Piola stress differential dP = dP/dF * dF. */
+  std::array<Matrix3<T>, num_locations> CalcFirstPiolaStressDifferential(
+      const Data& data, const std::array<Matrix3<T>, num_locations>& dF) const {
+    return derived().CalcFirstPiolaStressDifferentialImpl(data, dF);
   }
 
  protected:
@@ -147,9 +145,8 @@ class ConstitutiveModel {
                     NiceTypeName::Get(derived())));
   }
 
-  void CalcFirstPiolaStressDifferentialImpl(
-      const Data& data, const std::array<Matrix3<T>, num_locations>& dF,
-      std::array<Matrix3<T>, num_locations>* dP) const {
+  std::array<Matrix3<T>, num_locations> CalcFirstPiolaStressDifferentialImpl(
+      const Data& data, const std::array<Matrix3<T>, num_locations>& dF) const {
     throw std::logic_error(
         fmt::format("The derived class {} must provide a shadow definition of "
                     "CalcFirstPiolaStressDifferentialImpl() to be correct.",

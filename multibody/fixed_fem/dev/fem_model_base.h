@@ -8,6 +8,7 @@
 
 #include "drake/common/default_scalars.h"
 #include "drake/common/eigen_types.h"
+#include "drake/multibody/contact_solvers/linear_operator.h"
 #include "drake/multibody/fixed_fem/dev/dirichlet_boundary_condition.h"
 #include "drake/multibody/fixed_fem/dev/fem_state_base.h"
 #include "drake/multibody/fixed_fem/dev/state_updater.h"
@@ -15,6 +16,9 @@
 namespace drake {
 namespace multibody {
 namespace fem {
+
+template <typename T>
+class TangentOperator;
 
 /** %FemModelBase calculates the components of the discretized FEM equations.
  Suppose the PDE at hand is of the form
@@ -106,34 +110,9 @@ class FemModelBase {
   void SetTangentMatrixSparsityPattern(
       Eigen::SparseMatrix<T>* tangent_matrix) const;
 
-  class TangentOperator : public contact_solvers::internal::LinearOperator<T> {
-    TangentOperator(const FemModelBase<T>* model, const FemStateBase<T>* state)
-        : contact_solvers::internal::LinearOperator<T>("Tangent operator"),
-          model_(model),
-          state_(state) {}
-
-    void DoMultiply(const Eigen::Ref<const Eigen::SparseVector<T>>& x,
-                    Eigen::SparseVector<T>* y) const final {
-      const VectorX<T> x_dense = x;
-      VectorX<T> y_dense(y->size());
-      this->Multiply(x_dense, &y_dense);
-      *y = y_dense.sparseView();
-    }
-
-    void DoMultiply(const Eigen::Ref<const VectorX<T>>& x,
-                    VectorX<T>* y) const final {
-      DRAKE_DEMAND(model_ != nullptr);
-      DRAKE_DEMAND(state_ != nullptr);
-      model_->CalcDifferential(*state, x, y);
-    }
-
-    const FemModelBase<T>* model_;
-    const FemStateBase<T>* state_;
-  };
-
   /** The resulting TangentOperator depends on `this` model and the input
    `state`, so they must outlive the resulting operator. */
-  std::unique_ptr<TangentOperator> CalcTangentOperator(
+  std::unique_ptr<TangentOperator<T>> CalcTangentOperator(
       const FemStateBase<T>& state) const;
 
   void CalcDifferential(const FemStateBase<T>& state,
@@ -253,9 +232,9 @@ class FemModelBase {
    with `this` FEM model, and the outpuit `differetial` is guaranteed to be
    non-null. The derived class should perform this operator as if no boundary
    condition is applied. */
-  void DoCalcDifferential(const FemStateBase<T>& state,
-                          const Eigen::Ref<const VectorX<T>>& dz,
-                          VectorX<T>* differential) const;
+  virtual void DoCalcDifferential(const FemStateBase<T>& state,
+                                  const Eigen::Ref<const VectorX<T>>& dz,
+                                  VectorX<T>* differential) const = 0;
 
   /** Derived classes must invoke this method to update the number of nodes in
    the model when they add more nodes to the FEM model. */

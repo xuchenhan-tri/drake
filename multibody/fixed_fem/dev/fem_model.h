@@ -209,8 +209,8 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
       const std::array<NodeIndex, kNumNodes>& element_node_indices =
           elements_[e].node_indices();
       for (int a = 0; a < kNumNodes; ++a) {
-        differential.segment<kDim>(element_node_indices[a] * kDim) +=
-            element_differential.segment<kDim>(a);
+        differential->template segment<kDim>(element_node_indices[a] * kDim) +=
+            element_differential.template segment<kDim>(a);
       }
     }
   }

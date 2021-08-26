@@ -210,8 +210,6 @@ class ElasticityElement : public FemElement<DerivedElement, DerivedTraits> {
    @param[in] denstiy    The mass density of the element with unit kg/m³.
    @param[in] gravity    The gravitational acceleration (in world frame) for the
    new element with unit m/s².
-   @param[in] matrix_free    Whether the element supports matrix-free operations
-   or matrix operations.
    @pre element_index must be valid.
    @pre density > 0. */
   ElasticityElement(
@@ -221,10 +219,8 @@ class ElasticityElement : public FemElement<DerivedElement, DerivedTraits> {
       const Eigen::Ref<
           const Eigen::Matrix<T, Traits::kSpatialDimension, Traits::kNumNodes>>&
           reference_positions,
-      const T& density, const Vector<T, Traits::kSpatialDimension>& gravity,
-      bool matrix_free)
-      : FemElement<DerivedElement, DerivedTraits>(element_index, node_indices,
-                                                  matrix_free),
+      const T& density, const Vector<T, Traits::kSpatialDimension>& gravity)
+      : FemElement<DerivedElement, DerivedTraits>(element_index, node_indices),
         constitutive_model_(constitutive_model),
         density_(density) {
     DRAKE_DEMAND(density_ > 0);
@@ -376,20 +372,21 @@ class ElasticityElement : public FemElement<DerivedElement, DerivedTraits> {
     }
   }
 
-  void AddNegativeElasticForceDifferential(
-      const FemState<DerivedElement>& state,
-      const Eigen::Vector<T, Traits::kNumDofs>& dx,
-      EigenPtr<Eigen::Vector<T, Traits::kNumDofs>> negative_df) const {
-    DRAKE_ASSERT(negative_df != nullptr);
-    auto neg_df_matrix = Eigen::Map<
+  void AddScaledElasticForceDifferential(
+      const FemState<DerivedElement>& state, const T& scale,
+      const Vector<T, Traits::kNumDofs>& dx,
+      EigenPtr<Vector<T, Traits::kNumDofs>> scaled_df) const {
+    DRAKE_ASSERT(scaled_df != nullptr);
+    auto scaled_df_matrix = Eigen::Map<
         Eigen::Matrix<T, Traits::kSolutionDimension, Traits::kNumNodes>>(
-        negative_df->data(), Traits::kSolutionDimension, Traits::kNumNodes);
+        scaled_df->data(), Traits::kSolutionDimension, Traits::kNumNodes);
     const typename Traits::Data& data = state.element_data(derived_element());
     const std::array<Matrix3<T>, Traits::kNumQuadraturePoints> dF =
-        CalcDeformationGraidentDifferential(dx);
+        CalcDeformationGradient(dx);
+    const std::array<Matrix3<T>, Traits::kNumQuadraturePoints> dP = data.dP(dF);
     for (int q = 0; q < Traits::kNumQuadraturePoints; ++q) {
-      const Matrix3<T> dP = data.dP[q](dF[q]);
-      negative_df_matrix += reference_volume_[q] * dP * dSdX_transpose_[q];
+      scaled_df_matrix -=
+          scale * reference_volume_[q] * dP[q] * dSdX_transpose_[q];
     }
   }
 
@@ -428,13 +425,15 @@ class ElasticityElement : public FemElement<DerivedElement, DerivedTraits> {
     constitutive_model_.CalcFirstPiolaStressDerivative(
         data.deformation_gradient_data, &data.dPdF);
     data.dP =
-        [&state, this](
-            std::array<Eigen::Matrix<T, kSpatialDimension, kSolutionDimension>,
-                       kNumQuadraturePoints>
-                dF)
-        -> std::array<Eigen::Matrix<T, kSpatialDimension, kSpatialDimension>> {
-      return this->constitutive_model_.CalcFirstPiolaStressDifferential(state,
-                                                                        dF);
+        [&deformation_gradient_data = data.deformation_gradient_data,
+         this](std::array<Eigen::Matrix<T, Traits::kSpatialDimension,
+                                        Traits::kSolutionDimension>,
+                          Traits::kNumQuadraturePoints>
+                   dF) -> std::array<Eigen::Matrix<T, Traits::kSpatialDimension,
+                                                   Traits::kSpatialDimension>,
+                                     Traits::kNumQuadraturePoints> {
+      return this->constitutive_model_.CalcFirstPiolaStressDifferential(
+          deformation_gradient_data, dF);
     };
     return data;
   }
@@ -443,10 +442,14 @@ class ElasticityElement : public FemElement<DerivedElement, DerivedTraits> {
    element. */
   std::array<Matrix3<T>, Traits::kNumQuadraturePoints> CalcDeformationGradient(
       const FemState<DerivedElement>& state) const {
+    const Vector<T, Traits::kNumDofs> element_x =
+        this->ExtractElementDofs(state.q());
+    return CalcDeformationGradient(element_x);
+  }
+
+  std::array<Matrix3<T>, Traits::kNumQuadraturePoints> CalcDeformationGradient(
+      const Vector<T, Traits::kNumDofs>& element_x) const {
     std::array<Matrix3<T>, Traits::kNumQuadraturePoints> F;
-    constexpr int kNumDofs = Traits::kSolutionDimension * Traits::kNumNodes;
-    const Vector<T, kNumDofs> element_x =
-        this->ExtractElementDofs(this->node_indices(), state.q());
     const auto& element_x_reshaped = Eigen::Map<
         const Eigen::Matrix<T, Traits::kSolutionDimension, Traits::kNumNodes>>(
         element_x.data(), Traits::kSolutionDimension, Traits::kNumNodes);

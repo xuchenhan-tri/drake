@@ -350,6 +350,7 @@ drake_cc_library(
     ],
     hdrs = [
         "fem_model_base.h",
+        "tangent_operator.h",
     ],
     deps = [
         ":dirichlet_boundary_condition",
@@ -357,6 +358,7 @@ drake_cc_library(
         ":state_updater",
         "//common:default_scalars",
         "//common:essential",
+        "//multibody/contact_solvers:linear_operator",
     ],
 )
 
