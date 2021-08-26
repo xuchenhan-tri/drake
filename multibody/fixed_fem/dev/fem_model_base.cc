@@ -41,6 +41,13 @@ void FemModelBase<T>::SetTangentMatrixSparsityPattern(
 }
 
 template <typename T>
+std::unique_ptr<TangentOperator<T>> FemModelBase<T>::CalcTangentOperator(
+    const FemStateBase<T>& state) const {
+  ThrowIfModelStateIncompatible(__func__, state);
+  DoCalcTangentOperator(state);
+}
+
+template <typename T>
 const VectorX<T>& FemModelBase<T>::GetUnknowns(
     const FemStateBase<T>& state) const {
   ThrowIfModelStateIncompatible(__func__, state);

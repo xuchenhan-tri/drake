@@ -134,6 +134,30 @@ class DynamicElasticityElement final
     *M = ElasticityElementType::mass_matrix();
   }
 
+  void DoCalcStiffnessDifferential(
+      const FemState<DerivedElement>& state,
+      const Vector<T, Traits::kNumDofs>& dx,
+      EigenPtr<Vector<T, Traits::kNumDofs>> df) const {
+    df->setZero();
+    this->AddScaledElasticForceDifferential(state, -1.0, dx, df);
+  }
+
+  void DoCalcDampingDifferential(
+      const FemState<DerivedElement>& state,
+      const Vector<T, Traits::kNumDofs>& dv,
+      EigenPtr<Vector<T, Traits::kNumDofs>> df) const {
+    this->DoCalcMassDifferential(state, dv, df);
+    *df *= damping_model_.mass_coeff();
+    this->AddScaledElasticForceDifferential(
+        state, -1.0 * damping_model_.stiffness_coeff(), dx, df);
+  }
+
+  void DoCalcMassDifferential(const FemState<DerivedElement>& state,
+                              const Vector<T, Traits::kNumDofs>& da,
+                              EigenPtr<Vector<T, Traits::kNumDofs>> df) const {
+    *df = ElasticityElementType::mass_matrix() * da;
+  }
+
   DampingModel<T> damping_model_;
 };
 }  // namespace fem

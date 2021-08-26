@@ -106,6 +106,71 @@ class FemModelBase {
   void SetTangentMatrixSparsityPattern(
       Eigen::SparseMatrix<T>* tangent_matrix) const;
 
+  class TangentOperator : public contact_solvers::internal::LinearOperator<T> {
+    TangentOperator(const FemModelBase<T>* model, const FemStateBase<T>* state)
+        : contact_solvers::internal::LinearOperator<T>("Tangent operator"),
+          model_(model),
+          state_(state) {}
+
+    void DoMultiply(const Eigen::Ref<const Eigen::SparseVector<T>>& x,
+                    Eigen::SparseVector<T>* y) const final {
+      const VectorX<T> x_dense = x;
+      VectorX<T> y_dense(y->size());
+      this->Multiply(x_dense, &y_dense);
+      *y = y_dense.sparseView();
+    }
+
+    void DoMultiply(const Eigen::Ref<const VectorX<T>>& x,
+                    VectorX<T>* y) const final {
+      DRAKE_DEMAND(model_ != nullptr);
+      DRAKE_DEMAND(state_ != nullptr);
+      model_->CalcDifferential(*state, x, y);
+    }
+
+    const FemModelBase<T>* model_;
+    const FemStateBase<T>* state_;
+  };
+
+  /** The resulting TangentOperator depends on `this` model and the input
+   `state`, so they must outlive the resulting operator. */
+  std::unique_ptr<TangentOperator> CalcTangentOperator(
+      const FemStateBase<T>& state) const;
+
+  void CalcDifferential(const FemStateBase<T>& state,
+                        const Eigen::Ref<const VectorX<T>>& dz,
+                        VectorX<T>* differential) const {
+    DRAKE_DEMAND(differential != nullptr);
+    DRAKE_DEMAND(dz.size() == differential->size());
+    DRAKE_DEMAND(dz.size() == state.num_generalized_positions());
+    ThrowIfModelStateIncompatible(__func__, state);
+    /* Suppose the tangent matrix
+           A = [A₁₁ A₁₂
+                A₂₁ A₂₂]
+     where A₁₁ is the block in the tangent matrix corresponding to the
+     Dirichlet dofs and A₂₂ is the block corresponding to the dofs not under
+     BC, then after the Dirichlet BC is applied, the tangent matrix is modified
+     to
+           Â = [I   0
+                0   A₂₂].
+     Here we want to produce Âdz by leveraging the Multiply operator built for
+     A. To do that, observe that
+           Â[x₁, x₂]ᵀ = [x₁, A₂₂x₂]ᵀ =
+                      = [x₁, 0]ᵀ + P(A[0, x₂]ᵀ)
+     where P is a projection such that
+           P([y₁, y₂]ᵀ) = [0, y₂]ᵀ. */
+    VectorX<T> dz_dirichlet = VectorX<T>::Zero(dz.size());
+    const std::map<DofIndex, VectorX<T>>& bcs = dirichlet_bc_->get_bcs();
+    for (const auto& it : bcs) {
+      const DofIndex dof_index = it.first;
+      dz_dirichlet(int{dof_index}) = dz(int{dof_index});
+    }
+    VectorX<T> dz_nondirichlet = dz;
+    dirichlet_bc_->ApplyBcToResidual(&dz_nondirichlet);
+    DoCalcDifferential(state, dz_nondirichlet, differential);
+    dirichlet_bc_->ApplyBcToResidual(differential);
+    *differential += dz_dirichlet;
+  }
+
   /** Extracts the unknown variable from the given FEM `state`.
    @throw std::exception if the type of concrete FemState for `state` is not
    compatible with the concrete FemModel for `this` model. */
@@ -182,6 +247,15 @@ class FemModelBase {
    the NVI SetTangentMatrixSparsityPattern(). */
   virtual void DoSetTangentMatrixSparsityPattern(
       Eigen::SparseMatrix<T>* tangent_matrix) const = 0;
+
+  /** Derived classes must override this method to provide an implementation for
+   the NVI CalcDifferential(). The input `state` is guaranteed to be compatible
+   with `this` FEM model, and the outpuit `differetial` is guaranteed to be
+   non-null. The derived class should perform this operator as if no boundary
+   condition is applied. */
+  void DoCalcDifferential(const FemStateBase<T>& state,
+                          const Eigen::Ref<const VectorX<T>>& dz,
+                          VectorX<T>* differential) const;
 
   /** Derived classes must invoke this method to update the number of nodes in
    the model when they add more nodes to the FEM model. */

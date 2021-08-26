@@ -425,148 +425,155 @@ class ElasticityElement : public FemElement<DerivedElement, DerivedTraits> {
                                                  &data.Psi);
     constitutive_model_.CalcFirstPiolaStress(data.deformation_gradient_data,
                                              &data.P);
-    constitutive_model_.CalcFirstPiolaStressDifferential(
-        data.deformation_gradient_data, &data.dP);
     constitutive_model_.CalcFirstPiolaStressDerivative(
         data.deformation_gradient_data, &data.dPdF);
+    data.dP =
+        [&state, this](
+            std::array<Eigen::Matrix<T, kSpatialDimension, kSolutionDimension>,
+                       kNumQuadraturePoints>
+                dF)
+        -> std::array<Eigen::Matrix<T, kSpatialDimension, kSpatialDimension>> {
+      return this->constitutive_model_.CalcFirstPiolaStressDifferential(state,
+                                                                        dF);
+    };
+    return data;
   }
-  return data;
-}
 
-/* Calculates the deformation gradient at all quadrature points in this
- element. */
-std::array<Matrix3<T>, Traits::kNumQuadraturePoints>
-CalcDeformationGradient(const FemState<DerivedElement>& state) const {
-  std::array<Matrix3<T>, Traits::kNumQuadraturePoints> F;
-  constexpr int kNumDofs = Traits::kSolutionDimension * Traits::kNumNodes;
-  const Vector<T, kNumDofs> element_x =
-      this->ExtractElementDofs(this->node_indices(), state.q());
-  const auto& element_x_reshaped = Eigen::Map<
-      const Eigen::Matrix<T, Traits::kSolutionDimension, Traits::kNumNodes>>(
-      element_x.data(), Traits::kSolutionDimension, Traits::kNumNodes);
-  const std::array<typename IsoparametricElementType::JacobianMatrix,
-                   Traits::kNumQuadraturePoints>
-      dxdxi = isoparametric_element_.CalcJacobian(element_x_reshaped);
-  for (int q = 0; q < Traits::kNumQuadraturePoints; ++q) {
-    F[q] = dxdxi[q] * dxidX_[q];
+  /* Calculates the deformation gradient at all quadrature points in this
+   element. */
+  std::array<Matrix3<T>, Traits::kNumQuadraturePoints> CalcDeformationGradient(
+      const FemState<DerivedElement>& state) const {
+    std::array<Matrix3<T>, Traits::kNumQuadraturePoints> F;
+    constexpr int kNumDofs = Traits::kSolutionDimension * Traits::kNumNodes;
+    const Vector<T, kNumDofs> element_x =
+        this->ExtractElementDofs(this->node_indices(), state.q());
+    const auto& element_x_reshaped = Eigen::Map<
+        const Eigen::Matrix<T, Traits::kSolutionDimension, Traits::kNumNodes>>(
+        element_x.data(), Traits::kSolutionDimension, Traits::kNumNodes);
+    const std::array<typename IsoparametricElementType::JacobianMatrix,
+                     Traits::kNumQuadraturePoints>
+        dxdxi = isoparametric_element_.CalcJacobian(element_x_reshaped);
+    for (int q = 0; q < Traits::kNumQuadraturePoints; ++q) {
+      F[q] = dxdxi[q] * dxidX_[q];
+    }
+    return F;
   }
-  return F;
-}
 
-/* Helper function that performs a contraction between a 4th order tensor A
- and two vectors u and v and returns a matrix B. In Einstein notation, the
- contraction is: Bᵢₖ = uⱼ Aᵢⱼₖₗ vₗ. The 4th order tensor A of dimension
- 3*3*3*3 is flattened to a 9*9 matrix that is organized as following
+  /* Helper function that performs a contraction between a 4th order tensor A
+   and two vectors u and v and returns a matrix B. In Einstein notation, the
+   contraction is: Bᵢₖ = uⱼ Aᵢⱼₖₗ vₗ. The 4th order tensor A of dimension
+   3*3*3*3 is flattened to a 9*9 matrix that is organized as following
 
-                  l = 1       l = 2       l = 3
-              -------------------------------------
-              |           |           |           |
-    j = 1     |   Aᵢ₁ₖ₁   |   Aᵢ₁ₖ₂   |   Aᵢ₁ₖ₃   |
-              |           |           |           |
-              -------------------------------------
-              |           |           |           |
-    j = 2     |   Aᵢ₂ₖ₁   |   Aᵢ₂ₖ₂   |   Aᵢ₂ₖ₃   |
-              |           |           |           |
-              -------------------------------------
-              |           |           |           |
-    j = 3     |   Aᵢ₃ₖ₁   |   Aᵢ₃ₖ₂   |   Aᵢ₃ₖ₃   |
-              |           |           |           |
-              -------------------------------------
-Namely the ik-th entry in the jl-th block corresponds to the value Aᵢⱼₖₗ. */
-static void PerformDoubleTensorContraction(
-    const Eigen::Ref<const Eigen::Matrix<T, 9, 9>>& A,
-    const Eigen::Ref<const Vector3<T>>& u,
-    const Eigen::Ref<const Vector3<T>>& v, EigenPtr<Matrix3<T>> B) {
-  B->setZero();
-  for (int l = 0; l < 3; ++l) {
-    for (int j = 0; j < 3; ++j) {
-      *B += A.template block<3, 3>(3 * j, 3 * l) * u(j) * v(l);
+                    l = 1       l = 2       l = 3
+                -------------------------------------
+                |           |           |           |
+      j = 1     |   Aᵢ₁ₖ₁   |   Aᵢ₁ₖ₂   |   Aᵢ₁ₖ₃   |
+                |           |           |           |
+                -------------------------------------
+                |           |           |           |
+      j = 2     |   Aᵢ₂ₖ₁   |   Aᵢ₂ₖ₂   |   Aᵢ₂ₖ₃   |
+                |           |           |           |
+                -------------------------------------
+                |           |           |           |
+      j = 3     |   Aᵢ₃ₖ₁   |   Aᵢ₃ₖ₂   |   Aᵢ₃ₖ₃   |
+                |           |           |           |
+                -------------------------------------
+  Namely the ik-th entry in the jl-th block corresponds to the value Aᵢⱼₖₗ. */
+  static void PerformDoubleTensorContraction(
+      const Eigen::Ref<const Eigen::Matrix<T, 9, 9>>& A,
+      const Eigen::Ref<const Vector3<T>>& u,
+      const Eigen::Ref<const Vector3<T>>& v, EigenPtr<Matrix3<T>> B) {
+    B->setZero();
+    for (int l = 0; l < 3; ++l) {
+      for (int j = 0; j < 3; ++j) {
+        *B += A.template block<3, 3>(3 * j, 3 * l) * u(j) * v(l);
+      }
     }
   }
-}
 
-/* Helper function that adds a 3x3 matrix into the 3x3 block in a bigger
- matrix `matrix` with starting row index 3*node_a and starting column index
- 3*node_b. Note that this function assumes the pointer `matrix` is not null.
- It also does not check the index it tries to write in `matrix` is valid and
- does not clear any stale data that might exist in `matrix`. */
-static void AccumulateMatrixBlock(
-    const Eigen::Ref<const Matrix3<T>>& block, int node_a, int node_b,
-    EigenPtr<Eigen::Matrix<T, Traits::kNumDofs, Traits::kNumDofs>> matrix) {
-  matrix->template block<3, 3>(3 * node_a, 3 * node_b) += block;
-}
-
-/* Return `this` element statically cast either as StaticElasticityElement or
- DynamicElasticityElement depending on its type. */
-const DerivedElement& derived_element() const {
-  return static_cast<const DerivedElement&>(*this);
-}
-
-Eigen::Matrix<T, Traits::kNumDofs, Traits::kNumDofs> PrecomputeMassMatrix()
-    const {
-  Eigen::Matrix<T, Traits::kNumDofs, Traits::kNumDofs> mass =
-      Eigen::Matrix<T, Traits::kNumDofs, Traits::kNumDofs>::Zero();
-  const std::array<Vector<T, Traits::kNumNodes>, Traits::kNumQuadraturePoints>&
-      S = isoparametric_element().GetShapeFunctions();
-  /* S_mat is the matrix representation of S. */
-  Eigen::Matrix<T, Traits::kNumNodes, Traits::kNumQuadraturePoints> S_mat;
-  for (int q = 0; q < Traits::kNumQuadraturePoints; ++q) {
-    S_mat.col(q) = S[q];
+  /* Helper function that adds a 3x3 matrix into the 3x3 block in a bigger
+   matrix `matrix` with starting row index 3*node_a and starting column index
+   3*node_b. Note that this function assumes the pointer `matrix` is not null.
+   It also does not check the index it tries to write in `matrix` is valid and
+   does not clear any stale data that might exist in `matrix`. */
+  static void AccumulateMatrixBlock(
+      const Eigen::Ref<const Matrix3<T>>& block, int node_a, int node_b,
+      EigenPtr<Eigen::Matrix<T, Traits::kNumDofs, Traits::kNumDofs>> matrix) {
+    matrix->template block<3, 3>(3 * node_a, 3 * node_b) += block;
   }
-  /* weighted_S stores the shape function weighted by the reference
-   volume of the quadrature point. */
-  Eigen::Matrix<T, Traits::kNumNodes, Traits::kNumQuadraturePoints> weighted_S(
-      S_mat);
-  for (int q = 0; q < Traits::kNumQuadraturePoints; ++q) {
-    weighted_S.col(q) *= reference_volume_[q];
+
+  /* Return `this` element statically cast either as StaticElasticityElement or
+   DynamicElasticityElement depending on its type. */
+  const DerivedElement& derived_element() const {
+    return static_cast<const DerivedElement&>(*this);
   }
-  /* weighted_SST = weighted_S * Sᵀ. The ij-th entry approximates the integral
-   ∫SᵢSⱼ dX */
-  Eigen::Matrix<T, Traits::kNumNodes, Traits::kNumNodes> weighted_SST =
-      weighted_S * S_mat.transpose();
-  constexpr int kDim = Traits::kSolutionDimension;
-  for (int i = 0; i < Traits::kNumNodes; ++i) {
-    for (int j = 0; j < Traits::kNumNodes; ++j) {
-      mass.template block<kDim, kDim>(kDim * i, kDim * j) =
-          Eigen::Matrix<T, kDim, kDim>::Identity() * weighted_SST(i, j) *
-          density_;
+
+  Eigen::Matrix<T, Traits::kNumDofs, Traits::kNumDofs> PrecomputeMassMatrix()
+      const {
+    Eigen::Matrix<T, Traits::kNumDofs, Traits::kNumDofs> mass =
+        Eigen::Matrix<T, Traits::kNumDofs, Traits::kNumDofs>::Zero();
+    const std::array<Vector<T, Traits::kNumNodes>,
+                     Traits::kNumQuadraturePoints>& S =
+        isoparametric_element().GetShapeFunctions();
+    /* S_mat is the matrix representation of S. */
+    Eigen::Matrix<T, Traits::kNumNodes, Traits::kNumQuadraturePoints> S_mat;
+    for (int q = 0; q < Traits::kNumQuadraturePoints; ++q) {
+      S_mat.col(q) = S[q];
     }
+    /* weighted_S stores the shape function weighted by the reference
+     volume of the quadrature point. */
+    Eigen::Matrix<T, Traits::kNumNodes, Traits::kNumQuadraturePoints>
+        weighted_S(S_mat);
+    for (int q = 0; q < Traits::kNumQuadraturePoints; ++q) {
+      weighted_S.col(q) *= reference_volume_[q];
+    }
+    /* weighted_SST = weighted_S * Sᵀ. The ij-th entry approximates the integral
+     ∫SᵢSⱼ dX */
+    Eigen::Matrix<T, Traits::kNumNodes, Traits::kNumNodes> weighted_SST =
+        weighted_S * S_mat.transpose();
+    constexpr int kDim = Traits::kSolutionDimension;
+    for (int i = 0; i < Traits::kNumNodes; ++i) {
+      for (int j = 0; j < Traits::kNumNodes; ++j) {
+        mass.template block<kDim, kDim>(kDim * i, kDim * j) =
+            Eigen::Matrix<T, kDim, kDim>::Identity() * weighted_SST(i, j) *
+            density_;
+      }
+    }
+    return mass;
   }
-  return mass;
-}
 
-// TODO(xuchenhan-tri): Consider bumping this up into FemElement when new
-//  FemElement types are added.
-/* The quadrature rule used for this element. */
-QuadratureType quadrature_;
-/* The isoparametric element used for this element. */
-IsoparametricElementType isoparametric_element_{quadrature_.get_points()};
-/* The constitutive model that describes the stress-strain relationship
- for this element. */
-ConstitutiveModelType constitutive_model_;
-/* The inverse element Jacobian evaluated at reference configuration at
- the quadrature points in this element. */
-std::array<
-    Eigen::Matrix<T, Traits::natural_dimension, Traits::kSolutionDimension>,
-    Traits::kNumQuadraturePoints>
-    dxidX_;
-/* The transpose of the derivatives of the shape functions with respect to the
- reference positions evaluated at the quadrature points in this element. */
-std::array<Eigen::Matrix<T, Traits::kSpatialDimension, Traits::kNumNodes>,
-           Traits::kNumQuadraturePoints>
-    dSdX_transpose_;
-/* The volume evaluated at reference configuration occupied by the
- quadrature points in this element. To integrate a function f over the
- reference domain, sum f(q)*reference_volume_[q] over all the quadrature
- points q in the element. */
-std::array<T, Traits::kNumQuadraturePoints> reference_volume_;
-/* The mass density of the element in the reference configuration with
- unit kg/m³. */
-T density_;
-/* Precomputed mass matrix. */
-Eigen::Matrix<T, Traits::kNumDofs, Traits::kNumDofs> mass_matrix_;
-/* Gravity force on the element. */
-Vector<T, Traits::kNumDofs> gravity_force_;
+  // TODO(xuchenhan-tri): Consider bumping this up into FemElement when new
+  //  FemElement types are added.
+  /* The quadrature rule used for this element. */
+  QuadratureType quadrature_;
+  /* The isoparametric element used for this element. */
+  IsoparametricElementType isoparametric_element_{quadrature_.get_points()};
+  /* The constitutive model that describes the stress-strain relationship
+   for this element. */
+  ConstitutiveModelType constitutive_model_;
+  /* The inverse element Jacobian evaluated at reference configuration at
+   the quadrature points in this element. */
+  std::array<
+      Eigen::Matrix<T, Traits::natural_dimension, Traits::kSolutionDimension>,
+      Traits::kNumQuadraturePoints>
+      dxidX_;
+  /* The transpose of the derivatives of the shape functions with respect to the
+   reference positions evaluated at the quadrature points in this element. */
+  std::array<Eigen::Matrix<T, Traits::kSpatialDimension, Traits::kNumNodes>,
+             Traits::kNumQuadraturePoints>
+      dSdX_transpose_;
+  /* The volume evaluated at reference configuration occupied by the
+   quadrature points in this element. To integrate a function f over the
+   reference domain, sum f(q)*reference_volume_[q] over all the quadrature
+   points q in the element. */
+  std::array<T, Traits::kNumQuadraturePoints> reference_volume_;
+  /* The mass density of the element in the reference configuration with
+   unit kg/m³. */
+  T density_;
+  /* Precomputed mass matrix. */
+  Eigen::Matrix<T, Traits::kNumDofs, Traits::kNumDofs> mass_matrix_;
+  /* Gravity force on the element. */
+  Vector<T, Traits::kNumDofs> gravity_force_;
 };
 }  // namespace fem
 }  // namespace multibody

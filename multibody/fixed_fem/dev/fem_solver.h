@@ -44,11 +44,19 @@ class FemSolver {
    in `this` %FemSolver and thus the FemModelBase object must outlive `this`
    %FemSolver.
    @pre model != nullptr. */
-  explicit FemSolver(const FemModelBase<T>* model) : model_(model) {
+  explicit FemSolver(bool matrix_free, const FemModelBase<T>* model)
+      : matrix_free(matrix_free), model_(model) {
     DRAKE_DEMAND(model_ != nullptr);
     Resize();
-    linear_solver_ =
-        std::make_unique<internal::EigenConjugateGradientSolver<T>>(&A_op_);
+    if (matrix_free) {
+      A_op_ = std::make_unique<contact_solvers::internal::TangentOperator<T>>(
+          "Matrix free tangent operator", model.tangent_operator());
+    } else {
+      A_op_ =
+          std::make_unique<contact_solvers::internal::SparseLinearOperator<T>>(
+              "Sparse tangent operator", &A_);
+    }
+    ReinitializeLinearSolver();
   }
 
   /** For dynamic models, advances the given FEM state from the previous time
@@ -152,7 +160,12 @@ class FemSolver {
      3. The relative error (the norm of the change in the state divided by the
         norm of the state) is smaller than the unitless relative tolerance. */
     do {
-      model_->CalcTangentMatrix(*state, &A_);
+      if (!matrix_free_) {
+        model_->CalcTangentMatrix(*state, &A_);
+      } else {
+        A_op_ = model_->CalcTangentOperator(*state);
+        ReinitializeLinearSolver();
+      }
       linear_solver_->Compute();
       /* Solving for A * dz = -b. */
       linear_solver_->Solve(-b_, &dz_);
@@ -179,11 +192,25 @@ class FemSolver {
     if (b_.size() != model_->num_dofs()) {
       b_.resize(model_->num_dofs());
       dz_.resize(model_->num_dofs());
-      A_.resize(model_->num_dofs(), model_->num_dofs());
-      model_->SetTangentMatrixSparsityPattern(&A_);
+      if (!matrix_free_) {
+        A_.resize(model_->num_dofs(), model_->num_dofs());
+        model_->SetTangentMatrixSparsityPattern(&A_);
+      }
     }
   }
 
+  // TODO(xuchenhan-tri): This is quite awkward. Perhaps let the linear solver
+  //  *own* the linear operator it's solving for?
+  //  In that case, `A_op` wouldn't be a class memeber. Instead, we create a new
+  //  A_op every time the linear operator changes, and then immediately transfer
+  //  that to a new linear solver.
+  void ReinitializeLinearSolver() {
+    linear_solver_ =
+        std::make_unique<internal::EigenConjugateGradientSolver<T>>(
+            A_op_.get());
+  }
+
+  bool matrix_free_;
   /* The FEM model being solved by `this` solver. */
   const FemModelBase<T>* model_;
   /* The linear solver used to solve the FEM model. */
@@ -191,7 +218,7 @@ class FemSolver {
   /* A scratch sparse matrix to store the tangent matrix of the model. */
   mutable Eigen::SparseMatrix<T> A_;
   /* The operator form of A_. */
-  const contact_solvers::internal::SparseLinearOperator<T> A_op_{"A", &A_};
+  std::unique_ptr<contact_solvers::internal::LinearOperator<T>> A_op_;
   /* A scratch vector to store the residual of the model. */
   mutable VectorX<T> b_;
   /* A scratch vector to store the solution to A * dz = -b. */

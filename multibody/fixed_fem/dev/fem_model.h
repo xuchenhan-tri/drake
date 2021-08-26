@@ -186,6 +186,35 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
     }
   }
 
+  /* Helper for DoCalcDifferential(). */
+  void CalcDifferentialForConcreteState(const FemState<Element>& state,
+                                        const Eigen::Ref<const VectorX<T>>& dz,
+                                        VectorX<T>* differential) const {
+    DRAKE_DEMAND(state.element_cache_size() == num_elements());
+    /* The values are accumulated in the output `differential`, so it is
+     important to clear the old data. */
+    differential->setZero();
+
+    /* Aliases to improve readability. */
+    constexpr int kNumDofs = Element::Traits::kNumDofs;
+    constexpr int kNumNodes = Element::Traits::kNumNodes;
+    constexpr int kDim = Element::Traits::kSolutionDimension;
+
+    /* Scratch space to store the contribution to the differential from each
+     element. */
+    Vector<T, kNumDofs> element_differential;
+    const Vector3<T>& weights = this->state_updater().weights();
+    for (ElementIndex e(0); e < num_elements(); ++e) {
+      element_differential = CalcElementDifferential(state, weights, e, dz);
+      const std::array<NodeIndex, kNumNodes>& element_node_indices =
+          elements_[e].node_indices();
+      for (int a = 0; a < kNumNodes; ++a) {
+        differential.segment<kDim>(element_node_indices[a] * kDim) +=
+            element_differential.segment<kDim>(a);
+      }
+    }
+  }
+
   /* Implements FemModelBase::SetTangentMatrixSparsityPattern(). */
   void DoSetTangentMatrixSparsityPattern(
       Eigen::SparseMatrix<T>* tangent_matrix) const final {
@@ -238,6 +267,15 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
     CalcTangentMatrixForConcreteState(concrete_state, tangent_matrix);
   }
 
+  /* Implements FemModelBase::CalcDifferential() by casting the FemStateBase to
+   its concrete type. */
+  void DoCalcDifferential(const FemStateBase<T>& state,
+                          const Eigen::Ref<const VectorX<T>>& dz,
+                          VectorX<T>* differential) const final {
+    const FemState<Element>& concrete_state = cast_to_concrete_state(state);
+    CalcDifferentialForConcreteState(concrete_state, dz, differential);
+  }
+
   /* Builds the element tangent matrix for the element with index
    `element_index` by combining the stiffness matrix, damping matrix, and the
    mass matrix according to the given `weights`.
@@ -268,6 +306,46 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
     elements_[element_index].CalcMassMatrix(state, &mass_matrix);
     return weights[0] * stiffness_matrix + weights[1] * damping_matrix +
            weights[2] * mass_matrix;
+  }
+
+  /* Calculates the element differential with the given differential in the
+   unknown, `dz`,  for the element with index `element_index` by combining the
+   stiffness matrix, damping matrix, and the mass matrix according to the given
+   `weights`.
+   @param[in] state          The FemState to evaluate the residual at.
+   @param[in] weights        The ordered weights to combine stiffness matrix,
+                             damping matrix and mass matrix into the tangent
+                             matrix.
+   @param[in] element_index  Index of the element whose differential is being
+                             calculated.
+   @param[in] dz             The differential in the unknown variable. */
+  Vector<T, Element::Traits::kNumDofs> CalcElementDifferential(
+      const FemState<Element>& state, const Vector3<T>& weights,
+      ElementIndex element_index,
+      const Eigen::Ref<const VectorX<T>>& dz) const {
+    DRAKE_ASSERT(element_index.is_valid() && element_index < num_elements());
+    using VectorType = Vector<T, Element::Traits::kNumDofs>;
+    VectorType stiffness_differential = VectorType::Zero();
+    const VectorType& element_dz =
+        elements_[element_index].ExtractElementDofs(dz);
+    elements_[element_index].CalcStiffnessDifferential(state, element_dz,
+                                                       &stiffness_differential);
+    if constexpr (FemState<Element>::ode_order() == 0) {
+      return weights[0] * stiffness_differential;
+    }
+    VectorType damping_differential = VectorType::Zero();
+    elements_[element_index].CalcDampingDifferential(state, element_dz,
+                                                     &damping_differential);
+    if constexpr (FemState<Element>::ode_order() == 1) {
+      return weights[0] * stiffness_differential +
+             weights[1] * damping_differential;
+    }
+    DRAKE_ASSERT(FemState<Element>::ode_order() == 2);
+    VectorType mass_differential = VectorType::Zero();
+    elements_[element_index].CalcMassDifferential(state, element_dz,
+                                                  &mass_differential);
+    return weights[0] * stiffness_differential +
+           weights[1] * damping_differential + weights[2] * mass_differential;
   }
 
   /* Statically cast the given FemStateBase to the FemState compatible

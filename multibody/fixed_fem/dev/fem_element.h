@@ -125,18 +125,41 @@ class FemElement {
     static_cast<const DerivedElement*>(this)->DoCalcMassMatrix(state, M);
   }
 
-  /** Extract the dofs corresponding to the nodes given by `node_indices` from
-   the given `state_dofs`. */
-  static Vector<T, Traits::kSolutionDimension * Traits::kNumNodes>
-  ExtractElementDofs(
-      const std::array<NodeIndex, Traits::kNumNodes>& node_indices,
+  void CalcStiffnessDifferential(
+      const FemState<DerivedElement>& state,
+      const Vector<T, Traits::kNumDofs>& dx,
+      EigenPtr<Vector<T, Traits::kNumDofs>> df) const {
+    DRAKE_ASSERT(df != nullptr);
+    static_cast<const DerivedElement*>(this)->DoCalcStiffnessDifferential(
+        state, dx, df);
+  }
+
+  void CalcDampingDifferential(const FemState<DerivedElement>& state,
+                               const Vector<T, Traits::kNumDofs>& dv,
+                               EigenPtr<Vector<T, Traits::kNumDofs>> df) const {
+    DRAKE_ASSERT(df != nullptr);
+    static_cast<const DerivedElement*>(this)->DoCalcDampingDifferential(state,
+                                                                        dv, df);
+  }
+
+  void CalcMassDifferential(const FemState<DerivedElement>& state,
+                            const Vector<T, Traits::kNumDofs>& da,
+                            EigenPtr<Vector<T, Traits::kNumDofs>> df) const {
+    DRAKE_ASSERT(df != nullptr);
+    static_cast<const DerivedElement*>(this)->DoCalcMassDifferential(state, da,
+                                                                     df);
+  }
+
+  /** Extract the dofs corresponding to the nodes in `this` element from the
+   given `state_dofs`. */
+  Vector<T, Traits::kSolutionDimension * Traits::kNumNodes> ExtractElementDofs(
       const VectorX<T>& state_dofs) {
     constexpr int kDim = Traits::kSolutionDimension;
     Vector<T, kDim * Traits::kNumNodes> element_dofs;
     for (int i = 0; i < Traits::kNumNodes; ++i) {
-      DRAKE_ASSERT((node_indices[i] + 1) * kDim <= state_dofs.size());
+      DRAKE_ASSERT((node_indices_[i] + 1) * kDim <= state_dofs.size());
       element_dofs.template segment<kDim>(i * kDim) =
-          state_dofs.template segment<kDim>(node_indices[i] * kDim);
+          state_dofs.template segment<kDim>(node_indices_[i] * kDim);
     }
     return element_dofs;
   }
@@ -156,23 +179,16 @@ class FemElement {
    @param[in] element_index    The index of the new element within the model.
    @param[in] node_indices    The node indices of the nodes of this element
    within the model.
-   @param[in] matrix_free    Whether the element supports matrix-free operations
-   or matrix operations.
    @pre element_index is valid.
    @pre Entries in node_indices are valid. */
   FemElement(ElementIndex element_index,
-             const std::array<NodeIndex, Traits::kNumNodes>& node_indices,
-             bool matrix_free)
-      : element_index_(element_index),
-        node_indices_(node_indices),
-        matrix_free_(matrix_free) {
+             const std::array<NodeIndex, Traits::kNumNodes>& node_indices)
+      : element_index_(element_index), node_indices_(node_indices) {
     DRAKE_ASSERT(element_index.is_valid());
     for (int i = 0; i < Traits::kNumNodes; ++i) {
       DRAKE_ASSERT(node_indices[i].is_valid());
     }
   }
-
-  bool is_matrix_free() const { return matrix_free_; }
 
   /** `DerivedElement` must provide an implementation for `DoComputeData()`.
    @throw std::exception if `DerivedElement` does not provide an implementation
@@ -234,6 +250,26 @@ class FemElement {
     ThrowIfNotImplemented(__func__);
   }
 
+  void DoCalcStiffnessDifferential(
+      const FemState<DerivedElement>& state,
+      const Vector<T, Traits::kNumDofs>& dx,
+      EigenPtr<Vector<T, Traits::kNumDofs>> df) const {
+    ThrowIfNotImplemented(__func__);
+  }
+
+  void DoCalcDampingDifferential(
+      const FemState<DerivedElement>& state,
+      const Vector<T, Traits::kNumDofs>& dv,
+      EigenPtr<Vector<T, Traits::kNumDofs>> df) const {
+    ThrowIfNotImplemented(__func__);
+  }
+
+  void DoCalcMassDifferential(const FemState<DerivedElement>& state,
+                              const Vector<T, Traits::kNumDofs>& da,
+                              EigenPtr<Vector<T, Traits::kNumDofs>> df) const {
+    ThrowIfNotImplemented(__func__);
+  }
+
  private:
   /* Helper to throw a descriptive exception when a given function is not
    implemented. */
@@ -248,9 +284,6 @@ class FemElement {
   ElementIndex element_index_;
   /* The node indices of this element within the model. */
   std::array<NodeIndex, Traits::kNumNodes> node_indices_;
-  /* Whether the element uses provides data to support matrix-free operations.
-   */
-  bool matrix_free_{false};
 };
 }  // namespace fem
 }  // namespace multibody
