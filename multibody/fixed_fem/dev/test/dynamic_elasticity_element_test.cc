@@ -193,6 +193,40 @@ TEST_F(DynamicElasticityElementTest, MassMatrixIsAccelerationDerivative) {
         mass_matrix.row(i), std::numeric_limits<double>::epsilon()));
   }
 }
+
+/* Tests that the mass matrix is the acceleration derivative of the residual. */
+TEST_F(DynamicElasticityElementTest, DifferentialIsEquivalentToDerivatives) {
+  Vector<T, kNumDofs> dx;
+  Vector<T, kNumDofs> df;
+  for (int i = 0; i < kNumDofs; ++i) {
+    dx(i) = 0.314 * i;
+  }
+  constexpr double kTolerance = 8.0 * std::numeric_limits<T>::epsilon();
+  /* Mass derivative vs. differential. */
+  Eigen::Matrix<T, kNumDofs, kNumDofs> mass_matrix;
+  mass_matrix.setZero();
+  element().CalcMassMatrix(*state_, &mass_matrix);
+  element().CalcMassDifferential(*state_, dx, &df);
+  Vector<T, kNumDofs> expected_df = mass_matrix * dx;
+  EXPECT_TRUE(CompareMatrices(df, expected_df, kTolerance));
+
+  /* Damping derivative vs. differential. */
+  Eigen::Matrix<T, kNumDofs, kNumDofs> damping_matrix;
+  damping_matrix.setZero();
+  element().CalcDampingMatrix(*state_, &damping_matrix);
+  element().CalcDampingDifferential(*state_, dx, &df);
+  expected_df = damping_matrix * dx;
+  EXPECT_TRUE(CompareMatrices(df, expected_df, kTolerance));
+
+  /* Stiffness derivative vs. differential. */
+  Eigen::Matrix<T, kNumDofs, kNumDofs> stiffness_matrix;
+  stiffness_matrix.setZero();
+  element().CalcStiffnessMatrix(*state_, &stiffness_matrix);
+  element().CalcStiffnessDifferential(*state_, dx, &df);
+  expected_df = stiffness_matrix * dx;
+  EXPECT_TRUE(CompareMatrices(df, expected_df, kTolerance));
+}
+
 }  // namespace
 }  // namespace fem
 }  // namespace multibody
