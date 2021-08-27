@@ -111,14 +111,13 @@ struct traits<drake::multibody::fem::internal::EigenMatrixProxy<T>> {
  by specializing the template Eigen::generic_product_impl. */
 template <typename Rhs, typename T>
 struct generic_product_impl<
-    drake::multibody::fem::internal::EigenMatrixProxy<T>, Rhs,
-    SparseShape, DenseShape,
+    drake::multibody::fem::internal::EigenMatrixProxy<T>, Rhs, SparseShape,
+    DenseShape,
     GemvProduct>  // GEMV stands for matrix-vector
     : generic_product_impl_base<
           drake::multibody::fem::internal::EigenMatrixProxy<T>, Rhs,
           generic_product_impl<
-              drake::multibody::fem::internal::EigenMatrixProxy<T>,
-              Rhs>> {
+              drake::multibody::fem::internal::EigenMatrixProxy<T>, Rhs>> {
   template <typename Dest>
   static void scaleAndAddTo(
       // NOLINTNEXTLINE(runtime/references) Eigen internal signature.

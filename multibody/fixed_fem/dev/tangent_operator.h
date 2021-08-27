@@ -36,6 +36,8 @@ class TangentOperator : public contact_solvers::internal::LinearOperator<T> {
     model_->CalcDifferential(*state_, x, y);
   }
 
+  void set_state(const FemStateBase<T>* state) { state_ = state; }
+
  private:
   const FemModelBase<T>* model_;
   const FemStateBase<T>* state_;

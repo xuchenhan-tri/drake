@@ -206,11 +206,13 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
     const Vector3<T>& weights = this->state_updater().weights();
     for (ElementIndex e(0); e < num_elements(); ++e) {
       element_differential = CalcElementDifferential(state, weights, e, dz);
+      if(!(element_differential == element_differential))
+        std::cout << element_differential.transpose() << std::endl;
       const std::array<NodeIndex, kNumNodes>& element_node_indices =
           elements_[e].node_indices();
       for (int a = 0; a < kNumNodes; ++a) {
         differential->template segment<kDim>(element_node_indices[a] * kDim) +=
-            element_differential.template segment<kDim>(a);
+            element_differential.template segment<kDim>(a*kDim);
       }
     }
   }

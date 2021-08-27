@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <map>
 #include <memory>
 #include <utility>
 
@@ -112,8 +113,8 @@ class FemModelBase {
 
   /** The resulting TangentOperator depends on `this` model and the input
    `state`, so they must outlive the resulting operator. */
-  std::unique_ptr<TangentOperator<T>> CalcTangentOperator(
-      const FemStateBase<T>& state) const;
+  void CalcTangentOperator(const FemStateBase<T>& state,
+                           TangentOperator<T>* tangent_operator) const;
 
   void CalcDifferential(const FemStateBase<T>& state,
                         const Eigen::Ref<const VectorX<T>>& dz,
@@ -122,32 +123,36 @@ class FemModelBase {
     DRAKE_DEMAND(dz.size() == differential->size());
     DRAKE_DEMAND(dz.size() == state.num_generalized_positions());
     ThrowIfModelStateIncompatible(__func__, state);
-    /* Suppose the tangent matrix
-           A = [A₁₁ A₁₂
-                A₂₁ A₂₂]
-     where A₁₁ is the block in the tangent matrix corresponding to the
-     Dirichlet dofs and A₂₂ is the block corresponding to the dofs not under
-     BC, then after the Dirichlet BC is applied, the tangent matrix is modified
-     to
-           Â = [I   0
-                0   A₂₂].
-     Here we want to produce Âdz by leveraging the Multiply operator built for
-     A. To do that, observe that
-           Â[x₁, x₂]ᵀ = [x₁, A₂₂x₂]ᵀ =
-                      = [x₁, 0]ᵀ + P(A[0, x₂]ᵀ)
-     where P is a projection such that
-           P([y₁, y₂]ᵀ) = [0, y₂]ᵀ. */
-    VectorX<T> dz_dirichlet = VectorX<T>::Zero(dz.size());
-    const std::map<DofIndex, VectorX<T>>& bcs = dirichlet_bc_->get_bcs();
-    for (const auto& it : bcs) {
-      const DofIndex dof_index = it.first;
-      dz_dirichlet(int{dof_index}) = dz(int{dof_index});
+    if (dirichlet_bc_ != nullptr) {
+      /* Suppose the tangent matrix
+             A = [A₁₁ A₁₂
+                  A₂₁ A₂₂]
+       where A₁₁ is the block in the tangent matrix corresponding to the
+       Dirichlet dofs and A₂₂ is the block corresponding to the dofs not under
+       BC, then after the Dirichlet BC is applied, the tangent matrix is
+       modified to
+             Â = [I   0
+                  0   A₂₂]. 
+       Here we want to produce Âdz by leveraging the "multiply" operator built
+       for A. To do that, observe that
+             Â[x₁, x₂]ᵀ = [x₁, A₂₂x₂]ᵀ =
+                        = [x₁, 0]ᵀ + P(A[0, x₂]ᵀ)
+       where P is a projection such that
+             P([y₁, y₂]ᵀ) = [0, y₂]ᵀ. */
+      VectorX<T> dz_dirichlet = VectorX<T>::Zero(dz.size());
+      const std::map<DofIndex, VectorX<T>>& bcs = dirichlet_bc_->get_bcs();
+      for (const auto& it : bcs) {
+        const DofIndex dof_index = it.first;
+        dz_dirichlet(int{dof_index}) = dz(int{dof_index});
+      }
+      VectorX<T> dz_nondirichlet = dz;
+      dirichlet_bc_->ApplyBcToResidual(&dz_nondirichlet);
+      DoCalcDifferential(state, dz_nondirichlet, differential);
+      dirichlet_bc_->ApplyBcToResidual(differential);
+      *differential += dz_dirichlet;
+    } else {
+      DoCalcDifferential(state, dz, differential);
     }
-    VectorX<T> dz_nondirichlet = dz;
-    dirichlet_bc_->ApplyBcToResidual(&dz_nondirichlet);
-    DoCalcDifferential(state, dz_nondirichlet, differential);
-    dirichlet_bc_->ApplyBcToResidual(differential);
-    *differential += dz_dirichlet;
   }
 
   /** Extracts the unknown variable from the given FEM `state`.

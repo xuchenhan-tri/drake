@@ -91,17 +91,6 @@ struct ElasticityElementTraits {
                              kSpatialDimension * kSolutionDimension>,
                kNumQuadraturePoints>
         dPdF;
-    /* The differentials of first Piola stress with respect to the deformation
-     gradient evaluated at quadrature points. The differentials are represented
-     as a function that maps the deformation gradient differentials evaluated at
-     the quadrature points to the stress differentials evaluated at the same
-     locations. */
-    std::function<
-        std::array<Eigen::Matrix<T, kSpatialDimension, kSolutionDimension>,
-                   kNumQuadraturePoints>(
-            std::array<Eigen::Matrix<T, kSpatialDimension, kSpatialDimension>,
-                       kNumQuadraturePoints>)>
-        dP;
   };
 };
 
@@ -383,7 +372,9 @@ class ElasticityElement : public FemElement<DerivedElement, DerivedTraits> {
     const typename Traits::Data& data = state.element_data(derived_element());
     const std::array<Matrix3<T>, Traits::kNumQuadraturePoints> dF =
         CalcDeformationGradient(dx);
-    const std::array<Matrix3<T>, Traits::kNumQuadraturePoints> dP = data.dP(dF);
+    const std::array<Matrix3<T>, Traits::kNumQuadraturePoints> dP =
+        constitutive_model_.CalcFirstPiolaStressDifferential(
+            data.deformation_gradient_data, dF);
     for (int q = 0; q < Traits::kNumQuadraturePoints; ++q) {
       scaled_df_matrix -=
           scale * reference_volume_[q] * dP[q] * dSdX_transpose_[q];
@@ -422,19 +413,8 @@ class ElasticityElement : public FemElement<DerivedElement, DerivedTraits> {
                                                  &data.Psi);
     constitutive_model_.CalcFirstPiolaStress(data.deformation_gradient_data,
                                              &data.P);
-    constitutive_model_.CalcFirstPiolaStressDerivative(
-        data.deformation_gradient_data, &data.dPdF);
-    data.dP =
-        [&deformation_gradient_data = data.deformation_gradient_data,
-         this](std::array<Eigen::Matrix<T, Traits::kSpatialDimension,
-                                        Traits::kSolutionDimension>,
-                          Traits::kNumQuadraturePoints>
-                   dF) -> std::array<Eigen::Matrix<T, Traits::kSpatialDimension,
-                                                   Traits::kSpatialDimension>,
-                                     Traits::kNumQuadraturePoints> {
-      return this->constitutive_model_.CalcFirstPiolaStressDifferential(
-          deformation_gradient_data, dF);
-    };
+    // constitutive_model_.CalcFirstPiolaStressDerivative(
+    //     data.deformation_gradient_data, &data.dPdF);
     return data;
   }
 

@@ -110,6 +110,29 @@ class StaticElasticityElement final
         "Static elasticity forms a zero-th order ODE and does not provide a "
         "mass matrix.");
   }
+
+  void DoCalcStiffnessDifferential(
+      const FemState<ElementType>& state, const Vector<T, Traits::kNumDofs>& dx,
+      EigenPtr<Vector<T, Traits::kNumDofs>> df) const {
+    df->setZero();
+    this->AddScaledElasticForceDifferential(state, -1.0, dx, df);
+  }
+
+  void DoCalcDampingDifferential(
+      const FemState<ElementType>& state, const Vector<T, Traits::kNumDofs>& dv,
+      EigenPtr<Vector<T, Traits::kNumDofs>> df) const {
+    throw std::logic_error(
+        "Static elasticity forms a zero-th order ODE and does not provide a "
+        "damping matrix.");
+  }
+
+  void DoCalcMassDifferential(const FemState<ElementType>&,
+                              const Vector<T, Traits::kNumDofs>& da,
+                              EigenPtr<Vector<T, Traits::kNumDofs>> df) const {
+    throw std::logic_error(
+        "Static elasticity forms a zero-th order ODE and does not provide a "
+        "mass matrix.");
+  }
 };
 }  // namespace fem
 }  // namespace multibody

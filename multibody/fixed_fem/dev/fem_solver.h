@@ -53,8 +53,12 @@ class FemSolver {
       A_op_ =
           std::make_unique<contact_solvers::internal::SparseLinearOperator<T>>(
               "Sparse tangent operator", &A_);
-      ReinitializeLinearSolver();
+    } else {
+      A_op_ = std::make_unique<TangentOperator<T>>(model, nullptr);
     }
+    linear_solver_ =
+        std::make_unique<internal::EigenConjugateGradientSolver<T>>(
+            A_op_.get());
   }
 
   /** For dynamic models, advances the given FEM state from the previous time
@@ -161,9 +165,8 @@ class FemSolver {
       if (!matrix_free_) {
         model_->CalcTangentMatrix(*state, &A_);
       } else {
-        A_op_ = model_->CalcTangentOperator(*state);
-        DRAKE_DEMAND(A_op_ != nullptr);
-        ReinitializeLinearSolver();
+        auto* tangent_operator = dynamic_cast<TangentOperator<T>*>(A_op_.get());
+        model_->CalcTangentOperator(*state, tangent_operator);
       }
       linear_solver_->Compute();
       /* Solving for A * dz = -b. */
@@ -198,26 +201,15 @@ class FemSolver {
     }
   }
 
-  // TODO(xuchenhan-tri): This is quite awkward. Perhaps let the linear solver
-  //  *own* the linear operator it's solving for?
-  //  In that case, `A_op` wouldn't be a class memeber. Instead, we create a new
-  //  A_op every time the linear operator changes, and then immediately transfer
-  //  that to a new linear solver.
-  void ReinitializeLinearSolver() const {
-    linear_solver_ =
-        std::make_unique<internal::EigenConjugateGradientSolver<T>>(
-            A_op_.get());
-  }
-
   /* The FEM model being solved by `this` solver. */
   const FemModelBase<T>* model_;
   bool matrix_free_;
   /* The linear solver used to solve the FEM model. */
-  mutable std::unique_ptr<internal::LinearSystemSolver<T>> linear_solver_;
+  std::unique_ptr<internal::LinearSystemSolver<T>> linear_solver_;
   /* A scratch sparse matrix to store the tangent matrix of the model. */
   mutable Eigen::SparseMatrix<T> A_;
   /* The operator form of A_. */
-  mutable std::unique_ptr<contact_solvers::internal::LinearOperator<T>> A_op_;
+  std::unique_ptr<contact_solvers::internal::LinearOperator<T>> A_op_;
   /* A scratch vector to store the residual of the model. */
   mutable VectorX<T> b_;
   /* A scratch vector to store the solution to A * dz = -b. */

@@ -134,6 +134,25 @@ TEST_F(DynamicElasticityModelTest, TangentMatrixIsResidualDerivative) {
   }
 }
 
+TEST_F(DynamicElasticityModelTest, DifferentialIsConsistentWithTangentMatrix) {
+  const FemState<ElementType> state = MakeDeformedState();
+
+  VectorX<T> dx(state.num_generalized_positions());
+  for (int i = 0; i < dx.size(); ++i) {
+    dx(i) = 0.27 * i;
+  }
+
+  Eigen::SparseMatrix<T> tangent_matrix;
+  model_.SetTangentMatrixSparsityPattern(&tangent_matrix);
+  model_.CalcTangentMatrix(state, &tangent_matrix);
+
+  const VectorX<T> expected_differential = tangent_matrix * dx;
+  VectorX<T> differential(state.num_generalized_positions());
+  model_.CalcDifferential(state, dx, &differential);
+  EXPECT_TRUE(CompareMatrices(differential, expected_differential,
+                              4 * std::numeric_limits<T>::epsilon()));
+}
+
 /* Adds two copies of the same set of elements and tests that the residual for
  the two copies are identical. In particular, tests that the node offsets in
  AddDynamicElasticityElementsFromTetMesh() are working as intended. */

@@ -96,13 +96,12 @@ class DynamicElasticityElement final
   void AddNegativeDampingForce(
       const FemState<ElementType>& state,
       EigenPtr<Vector<T, Traits::kNumDofs>> negative_damping_force) const {
-    Eigen::Matrix<T, Traits::kNumDofs, Traits::kNumDofs> damping_matrix;
-    this->CalcDampingMatrix(state, &damping_matrix);
+    Vector<T, Traits::kNumDofs> df;
+    this->CalcDampingDifferential(state, this->ExtractElementDofs(state.qdot()), &df);
     /* Note that the damping force fᵥ = -D * v, where D is the damping matrix.
      As we are accumulating the negative damping force here, the `+=` sign
      should be used. */
-    *negative_damping_force +=
-        damping_matrix * this->ExtractElementDofs(state.qdot());
+    *negative_damping_force += df;
   }
 
   /* Implements FemElement::CalcStiffnessMatrix().

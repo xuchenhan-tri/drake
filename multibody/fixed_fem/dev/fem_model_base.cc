@@ -43,10 +43,12 @@ void FemModelBase<T>::SetTangentMatrixSparsityPattern(
 }
 
 template <typename T>
-std::unique_ptr<TangentOperator<T>> FemModelBase<T>::CalcTangentOperator(
-    const FemStateBase<T>& state) const {
+void FemModelBase<T>::CalcTangentOperator(
+    const FemStateBase<T>& state, TangentOperator<T>* tangent_operator) const {
+  DRAKE_DEMAND(tangent_operator != nullptr);
   ThrowIfModelStateIncompatible(__func__, state);
-  return std::make_unique<TangentOperator<T>>(this, &state);
+  // DRAKE_DEMAND(&(tangent_operator->get_model()) == this);
+  tangent_operator->set_state(&state);
 }
 
 template <typename T>
