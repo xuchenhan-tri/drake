@@ -191,9 +191,9 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
   void CalcDifferentialForConcreteState(const FemState<Element>& state,
                                         const Eigen::Ref<const VectorX<T>>& dz,
                                         VectorX<T>* differential) const {
-    static const common::TimerIndex concrete_differential_timer =
-        addTimer("Concrete Differential");
-    startTimer(concrete_differential_timer);
+    static const common::TimerIndex do_calc_differential_timer =
+        addTimer("DoCalcDifferential");
+    startTimer(do_calc_differential_timer);
     DRAKE_DEMAND(state.element_cache_size() == num_elements());
     /* The values are accumulated in the output `differential`, so it is
      important to clear the old data. */
@@ -217,7 +217,7 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
             element_differential.template segment<kDim>(a * kDim);
       }
     }
-    lapTimer(concrete_differential_timer);
+    lapTimer(do_calc_differential_timer);
   }
 
   /* Implements FemModelBase::SetTangentMatrixSparsityPattern(). */
@@ -329,9 +329,6 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
       const FemState<Element>& state, const Vector3<T>& weights,
       ElementIndex element_index, const Eigen::Ref<const VectorX<T>>& dz,
       EigenPtr<Vector<T, Element::Traits::kNumDofs>> df) const {
-    static const common::TimerIndex element_differential_timer =
-        addTimer("Element Differential");
-    startTimer(element_differential_timer);
     DRAKE_ASSERT(element_index.is_valid() && element_index < num_elements());
     df->setZero();
     using VectorType = Vector<T, Element::Traits::kNumDofs>;
@@ -350,7 +347,6 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
     DRAKE_ASSERT(FemState<Element>::ode_order() == 2);
     elements_[element_index].AddScaledMassDifferential(state, weights[2],
                                                        element_dz, df);
-    lapTimer(element_differential_timer);
   }
 
   /* Statically cast the given FemStateBase to the FemState compatible
