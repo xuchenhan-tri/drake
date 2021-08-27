@@ -83,8 +83,7 @@ class DynamicElasticityElement final
     /* residual = Ma-fₑ(x)-fᵥ(x, v)-fₑₓₜ, where M is the mass matrix, fₑ(x) is
      the elastic force, fᵥ(x, v) is the damping force and fₑₓₜ is the external
      force. */
-    *residual += this->mass_matrix() *
-                 this->ExtractElementDofs(state.qddot());
+    *residual += this->mass_matrix() * this->ExtractElementDofs(state.qddot());
     this->AddNegativeElasticForce(state, residual);
     AddNegativeDampingForce(state, residual);
     this->AddScaledExternalForce(state, -1.0, residual);
@@ -96,12 +95,12 @@ class DynamicElasticityElement final
   void AddNegativeDampingForce(
       const FemState<ElementType>& state,
       EigenPtr<Vector<T, Traits::kNumDofs>> negative_damping_force) const {
-    Vector<T, Traits::kNumDofs> df;
-    this->CalcDampingDifferential(state, this->ExtractElementDofs(state.qdot()), &df);
     /* Note that the damping force fᵥ = -D * v, where D is the damping matrix.
      As we are accumulating the negative damping force here, the `+=` sign
      should be used. */
-    *negative_damping_force += df;
+    DoAddScaledDampingDifferential(state, 1.0,
+                                   this->ExtractElementDofs(state.qdot()),
+                                   negative_damping_force);
   }
 
   /* Implements FemElement::CalcStiffnessMatrix().
@@ -132,26 +131,40 @@ class DynamicElasticityElement final
     *M = ElasticityElementType::mass_matrix();
   }
 
-  void DoCalcStiffnessDifferential(
-      const FemState<ElementType>& state, const Vector<T, Traits::kNumDofs>& dx,
+  void DoAddScaledStiffnessDifferential(
+      const FemState<ElementType>& state, const T& scale,
+      const Vector<T, Traits::kNumDofs>& dx,
       EigenPtr<Vector<T, Traits::kNumDofs>> df) const {
-    df->setZero();
-    this->AddScaledElasticForceDifferential(state, -1.0, dx, df);
+    static const common::TimerIndex stiffness_differential_timer =
+        addTimer("stiffness differential");
+    startTimer(stiffness_differential_timer);
+    this->AddScaledElasticForceDifferential(state, -scale, dx, df);
+    lapTimer(stiffness_differential_timer);
   }
 
-  void DoCalcDampingDifferential(
-      const FemState<ElementType>& state, const Vector<T, Traits::kNumDofs>& dv,
+  void DoAddScaledDampingDifferential(
+      const FemState<ElementType>& state, const T& scale,
+      const Vector<T, Traits::kNumDofs>& dv,
       EigenPtr<Vector<T, Traits::kNumDofs>> df) const {
-    this->DoCalcMassDifferential(state, dv, df);
-    *df *= damping_model_.mass_coeff();
+    static const common::TimerIndex damping_differential_timer =
+        addTimer("damping differential");
+    startTimer(damping_differential_timer);
+    this->DoAddScaledMassDifferential(
+        state, scale * damping_model_.mass_coeff(), dv, df);
     this->AddScaledElasticForceDifferential(
-        state, -1.0 * damping_model_.stiffness_coeff(), dv, df);
+        state, -scale * damping_model_.stiffness_coeff(), dv, df);
+    lapTimer(damping_differential_timer);
   }
 
-  void DoCalcMassDifferential(const FemState<ElementType>&,
-                              const Vector<T, Traits::kNumDofs>& da,
-                              EigenPtr<Vector<T, Traits::kNumDofs>> df) const {
-    *df = ElasticityElementType::mass_matrix() * da;
+  void DoAddScaledMassDifferential(
+      const FemState<ElementType>&, const T& scale,
+      const Vector<T, Traits::kNumDofs>& da,
+      EigenPtr<Vector<T, Traits::kNumDofs>> df) const {
+    static const common::TimerIndex mass_differential_timer =
+        addTimer("mass differential");
+    startTimer(mass_differential_timer);
+    *df += scale * ElasticityElementType::mass_matrix() * da;
+    lapTimer(mass_differential_timer);
   }
 
   DampingModel<T> damping_model_;

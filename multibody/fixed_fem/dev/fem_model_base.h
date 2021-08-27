@@ -9,6 +9,7 @@
 
 #include "drake/common/default_scalars.h"
 #include "drake/common/eigen_types.h"
+#include "drake/common/profiler.h"
 #include "drake/multibody/contact_solvers/linear_operator.h"
 #include "drake/multibody/fixed_fem/dev/dirichlet_boundary_condition.h"
 #include "drake/multibody/fixed_fem/dev/fem_state_base.h"
@@ -132,7 +133,7 @@ class FemModelBase {
        BC, then after the Dirichlet BC is applied, the tangent matrix is
        modified to
              Â = [I   0
-                  0   A₂₂]. 
+                  0   A₂₂].
        Here we want to produce Âdz by leveraging the "multiply" operator built
        for A. To do that, observe that
              Â[x₁, x₂]ᵀ = [x₁, A₂₂x₂]ᵀ =
@@ -147,10 +148,15 @@ class FemModelBase {
       }
       VectorX<T> dz_nondirichlet = dz;
       dirichlet_bc_->ApplyBcToResidual(&dz_nondirichlet);
+      static const common::TimerIndex calc_differential_timer =
+          addTimer("CalcDifferential");
+      startTimer(calc_differential_timer);
       DoCalcDifferential(state, dz_nondirichlet, differential);
+      lapTimer(calc_differential_timer);
       dirichlet_bc_->ApplyBcToResidual(differential);
       *differential += dz_dirichlet;
     } else {
+      DRAKE_DEMAND(false);
       DoCalcDifferential(state, dz, differential);
     }
   }

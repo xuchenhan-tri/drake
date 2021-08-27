@@ -22,6 +22,7 @@ bazel-bin/multibody/fixed_fem/dev/run_cantilever_beam
 
 #include <gflags/gflags.h>
 
+#include "drake/common/profiler.h"
 #include "drake/multibody/contact_solvers/pgs_solver.h"
 #include "drake/multibody/fixed_fem/dev/deformable_body_config.h"
 #include "drake/multibody/fixed_fem/dev/deformable_model.h"
@@ -33,7 +34,7 @@ bazel-bin/multibody/fixed_fem/dev/run_cantilever_beam
 #include "drake/systems/framework/diagram.h"
 #include "drake/systems/framework/diagram_builder.h"
 
-DEFINE_double(simulation_time, 10.0,
+DEFINE_double(simulation_time, 3.0,
               "How many seconds to simulate the system.");
 DEFINE_double(dx, 0.1,
               "Distance between consecutive vertices in the tet mesh, with "
@@ -133,6 +134,7 @@ int DoMain() {
   auto simulator =
       systems::MakeSimulatorFromGflags(*diagram, std::move(context));
   simulator->AdvanceTo(FLAGS_simulation_time);
+  std::cout << TableOfAverages() << "\n";
   return 0;
 }
 }  // namespace fem

@@ -5,6 +5,7 @@
 #include <utility>
 
 #include "drake/common/eigen_types.h"
+#include "drake/common/profiler.h"
 #include "drake/multibody/contact_solvers/sparse_linear_operator.h"
 #include "drake/multibody/fixed_fem/dev/eigen_conjugate_gradient_solver.h"
 #include "drake/multibody/fixed_fem/dev/fem_model_base.h"
@@ -151,6 +152,8 @@ class FemSolver {
   int SolveWithInitialGuess(FemStateBase<T>* state) const {
     /* Make sure the scratch quantities are of the correct size and apply BC if
      one is specified. */
+    static const common::TimerIndex newton_timer = addTimer("Newton");
+    startTimer(newton_timer);
     Resize();
     model_->ApplyBoundaryCondition(state);
     model_->CalcResidual(*state, &b_);
@@ -186,6 +189,7 @@ class FemSolver {
           "The solver did not converge " + std::to_string(kMaxIterations_) +
           " iterations. Please provide a better initial guess.");
     }
+    lapTimer(newton_timer);
     return iter;
   }
 

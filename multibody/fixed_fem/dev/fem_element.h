@@ -125,29 +125,31 @@ class FemElement {
     static_cast<const DerivedElement*>(this)->DoCalcMassMatrix(state, M);
   }
 
-  void CalcStiffnessDifferential(
-      const FemState<DerivedElement>& state,
+  void AddScaledStiffnessDifferential(
+      const FemState<DerivedElement>& state, const T& scale,
       const Vector<T, Traits::kNumDofs>& dx,
       EigenPtr<Vector<T, Traits::kNumDofs>> df) const {
     DRAKE_ASSERT(df != nullptr);
-    static_cast<const DerivedElement*>(this)->DoCalcStiffnessDifferential(
-        state, dx, df);
+    static_cast<const DerivedElement*>(this)->DoAddScaledStiffnessDifferential(
+        state, scale, dx, df);
   }
 
-  void CalcDampingDifferential(const FemState<DerivedElement>& state,
-                               const Vector<T, Traits::kNumDofs>& dv,
-                               EigenPtr<Vector<T, Traits::kNumDofs>> df) const {
+  void AddScaledDampingDifferential(
+      const FemState<DerivedElement>& state, const T& scale,
+      const Vector<T, Traits::kNumDofs>& dv,
+      EigenPtr<Vector<T, Traits::kNumDofs>> df) const {
     DRAKE_ASSERT(df != nullptr);
-    static_cast<const DerivedElement*>(this)->DoCalcDampingDifferential(state,
-                                                                        dv, df);
+    static_cast<const DerivedElement*>(this)->DoAddScaledDampingDifferential(
+        state, scale, dv, df);
   }
 
-  void CalcMassDifferential(const FemState<DerivedElement>& state,
-                            const Vector<T, Traits::kNumDofs>& da,
-                            EigenPtr<Vector<T, Traits::kNumDofs>> df) const {
+  void AddScaledMassDifferential(
+      const FemState<DerivedElement>& state, const T& scale,
+      const Vector<T, Traits::kNumDofs>& da,
+      EigenPtr<Vector<T, Traits::kNumDofs>> df) const {
     DRAKE_ASSERT(df != nullptr);
-    static_cast<const DerivedElement*>(this)->DoCalcMassDifferential(state, da,
-                                                                     df);
+    static_cast<const DerivedElement*>(this)->DoAddScaledMassDifferential(
+        state, scale, da, df);
   }
 
   /** Extract the dofs corresponding to the nodes given by `node_indices` from
@@ -155,7 +157,7 @@ class FemElement {
   static Vector<T, Traits::kSolutionDimension * Traits::kNumNodes>
   ExtractElementDofs(
       const std::array<NodeIndex, Traits::kNumNodes>& node_indices,
-      const VectorX<T>& state_dofs) {
+      const Eigen::Ref<const VectorX<T>>& state_dofs) {
     constexpr int kDim = Traits::kSolutionDimension;
     Vector<T, kDim * Traits::kNumNodes> element_dofs;
     for (int i = 0; i < Traits::kNumNodes; ++i) {
@@ -167,7 +169,7 @@ class FemElement {
   }
 
   Vector<T, Traits::kSolutionDimension * Traits::kNumNodes> ExtractElementDofs(
-      const VectorX<T>& state_dofs) const {
+      const Eigen::Ref<const VectorX<T>>& state_dofs) const {
     return ExtractElementDofs(node_indices_, state_dofs);
   }
 
@@ -257,23 +259,24 @@ class FemElement {
     ThrowIfNotImplemented(__func__);
   }
 
-  void DoCalcStiffnessDifferential(
-      const FemState<DerivedElement>& state,
+  void DoAddScaledStiffnessDifferential(
+      const FemState<DerivedElement>& state, const T& scale,
       const Vector<T, Traits::kNumDofs>& dx,
       EigenPtr<Vector<T, Traits::kNumDofs>> df) const {
     ThrowIfNotImplemented(__func__);
   }
 
-  void DoCalcDampingDifferential(
-      const FemState<DerivedElement>& state,
+  void DoAddScaledDampingDifferential(
+      const FemState<DerivedElement>& state, const T& scale,
       const Vector<T, Traits::kNumDofs>& dv,
       EigenPtr<Vector<T, Traits::kNumDofs>> df) const {
     ThrowIfNotImplemented(__func__);
   }
 
-  void DoCalcMassDifferential(const FemState<DerivedElement>& state,
-                              const Vector<T, Traits::kNumDofs>& da,
-                              EigenPtr<Vector<T, Traits::kNumDofs>> df) const {
+  void DoAddScaledMassDifferential(
+      const FemState<DerivedElement>& state, const T& scale,
+      const Vector<T, Traits::kNumDofs>& da,
+      EigenPtr<Vector<T, Traits::kNumDofs>> df) const {
     ThrowIfNotImplemented(__func__);
   }
 

@@ -358,6 +358,7 @@ drake_cc_library(
         ":state_updater",
         "//common:default_scalars",
         "//common:essential",
+        "//common:profiler",
         "//multibody/contact_solvers:linear_operator",
     ],
 )
@@ -510,6 +511,7 @@ drake_cc_binary(
         ":deformable_visualizer",
         ":mesh_utilities",
         "//common:add_text_logging_gflags",
+        "//common:profiler",
         "//math:geometric_transform",
         "//multibody/contact_solvers:pgs_solver",
         "//systems/analysis:simulator_gflags",

@@ -365,6 +365,9 @@ class ElasticityElement : public FemElement<DerivedElement, DerivedTraits> {
       const FemState<DerivedElement>& state, const T& scale,
       const Vector<T, Traits::kNumDofs>& dx,
       EigenPtr<Vector<T, Traits::kNumDofs>> scaled_df) const {
+    static const common::TimerIndex elastic_differential_timer =
+        addTimer("Elastic Force df");
+    startTimer(elastic_differential_timer);
     DRAKE_ASSERT(scaled_df != nullptr);
     auto scaled_df_matrix = Eigen::Map<
         Eigen::Matrix<T, Traits::kSolutionDimension, Traits::kNumNodes>>(
@@ -379,6 +382,7 @@ class ElasticityElement : public FemElement<DerivedElement, DerivedTraits> {
       scaled_df_matrix -=
           scale * reference_volume_[q] * dP[q] * dSdX_transpose_[q];
     }
+    lapTimer(elastic_differential_timer);
   }
 
   const IsoparametricElementType& isoparametric_element() const {
@@ -413,8 +417,8 @@ class ElasticityElement : public FemElement<DerivedElement, DerivedTraits> {
                                                  &data.Psi);
     constitutive_model_.CalcFirstPiolaStress(data.deformation_gradient_data,
                                              &data.P);
-    // constitutive_model_.CalcFirstPiolaStressDerivative(
-    //     data.deformation_gradient_data, &data.dPdF);
+    constitutive_model_.CalcFirstPiolaStressDerivative(
+        data.deformation_gradient_data, &data.dPdF);
     return data;
   }
 
