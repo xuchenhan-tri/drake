@@ -37,6 +37,8 @@ extern const char* const kHcDissipation;   ///< Hunt-Crossley dissipation
                                            ///< property name.
 extern const char* const kPointStiffness;  ///< Point stiffness property
                                            ///< name.
+extern const char* const kLinearDissipation;  ///< Linear dissipation
+                                              ///< property name.
 
 //@}
 

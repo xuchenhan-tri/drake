@@ -63,14 +63,6 @@ systems::CacheEntry& DiscreteUpdateManager<T>::DeclareCacheEntry(
 }
 
 template <typename T>
-const contact_solvers::internal::ContactSolverResults<T>&
-DiscreteUpdateManager<T>::EvalContactSolverResults(
-    const systems::Context<T>& context) const {
-  return MultibodyPlantDiscreteUpdateManagerAttorney<
-      T>::EvalContactSolverResults(plant(), context);
-}
-
-template <typename T>
 const internal::ContactJacobians<T>&
 DiscreteUpdateManager<T>::EvalContactJacobians(
     const systems::Context<T>& context) const {
@@ -93,6 +85,21 @@ DiscreteUpdateManager<T>::CalcCombinedFrictionCoefficients(
     const std::vector<internal::DiscreteContactPair<T>>& contact_pairs) const {
   return MultibodyPlantDiscreteUpdateManagerAttorney<
       T>::CalcCombinedFrictionCoefficients(plant(), context, contact_pairs);
+}
+
+template <typename T>
+std::vector<internal::DiscreteContactPair<T>>
+DiscreteUpdateManager<T>::CalcDiscreteContactPairs(
+    const systems::Context<T>& context) const {
+  return MultibodyPlantDiscreteUpdateManagerAttorney<
+      T>::CalcDiscreteContactPairs(plant(), context);
+}
+
+template <typename T>
+const contact_solvers::internal::ContactSolverResults<T>& DiscreteUpdateManager<
+    T>::EvalContactSolverResults(const systems::Context<T>& context) const {
+  return MultibodyPlantDiscreteUpdateManagerAttorney<
+      T>::EvalContactSolverResults(plant(), context);
 }
 
 template <typename T>
@@ -128,6 +135,7 @@ DiscreteUpdateManager<T>::geometry_id_to_body_index() const {
   return MultibodyPlantDiscreteUpdateManagerAttorney<
       T>::geometry_id_to_body_index(*plant_);
 }
+
 }  // namespace internal
 }  // namespace multibody
 }  // namespace drake

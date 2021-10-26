@@ -109,7 +109,7 @@ drake_cc_library(
 
 drake_cc_library(
     name = "limit_malloc",
-    testonly = 1,
+    testonly = 0,
     srcs = ["limit_malloc.cc"],
     hdrs = ["limit_malloc.h"],
     copts = [

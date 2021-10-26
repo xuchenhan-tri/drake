@@ -28,6 +28,7 @@ drake_cc_package_library(
         ":choose_best_solver",
         ":clp_solver",
         ":constraint",
+        ":conex_solver",
         ":cost",
         ":create_constraint",
         ":create_cost",
@@ -108,6 +109,7 @@ drake_cc_library(
     srcs = ["choose_best_solver.cc"],
     hdrs = ["choose_best_solver.h"],
     deps = [
+        ":conex_solver",
         ":clp_solver",
         ":csdp_solver",
         ":equality_constrained_qp_solver",
@@ -286,6 +288,7 @@ drake_cc_library(
     srcs = ["solver_type_converter.cc"],
     hdrs = ["solver_type_converter.h"],
     deps = [
+        ":conex_solver",
         ":clp_solver",
         ":csdp_solver",
         ":dreal_solver",
@@ -332,6 +335,36 @@ drake_cc_library(
         "//common:symbolic",
         "//common:symbolic_decompose",
     ],
+)
+
+drake_cc_library(
+    name = "conex_solver",
+    srcs = select({
+        "//conditions:default": [
+            "conex_solver.cc",
+            "conex_solver_common.cc",
+        ],
+        "//tools:no_conex": [
+            "no_conex.cc",
+            "conex_solver_common.cc",
+        ],
+    }),
+    hdrs = ["conex_solver.h"],
+    copts = ["-Wno-error=unused-parameter", "-Wno-error=unused-variable"],
+    deps = select({
+        "//conditions:default": [
+            ":mathematical_program",
+            ":solver_base",
+            "//common:essential",
+            "//math:eigen_sparse_triplet",
+            "@scs//:scsdir",
+            "@conex//conex:conex_lib",
+        ],
+        "//tools:no_conex": [
+            ":mathematical_program",
+            ":solver_base",
+        ],
+    }),
 )
 
 drake_cc_library(
@@ -1605,6 +1638,7 @@ drake_cc_googletest(
     name = "scs_solver_test",
     deps = [
         ":exponential_cone_program_examples",
+        ":conex_solver",
         ":linear_program_examples",
         ":mathematical_program",
         ":mathematical_program_test_util",
@@ -1614,6 +1648,20 @@ drake_cc_googletest(
         ":sos_examples",
     ],
 )
+
+drake_cc_googletest(
+    name = "conex_solver_test",
+    deps = [
+        ":linear_program_examples",
+        ":mathematical_program",
+        ":mathematical_program_test_util",
+        ":quadratic_program_examples",
+        ":second_order_cone_program_examples",
+        ":semidefinite_program_examples",
+        ":sos_examples",
+    ],
+)
+
 
 drake_cc_googletest(
     name = "snopt_solver_test",
@@ -1833,6 +1881,7 @@ add_lint_tests(cpplint_extra_srcs = [
     "nlopt_solver_common.cc",
     "no_clp.cc",
     "no_csdp.cc",
+    "no_conex.cc",
     "no_dreal.cc",
     "no_gurobi.cc",
     "no_ibex.cc",

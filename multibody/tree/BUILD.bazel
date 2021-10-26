@@ -98,6 +98,7 @@ drake_cc_library(
 
 drake_cc_library(
     name = "multibody_tree_core",
+#    copts = ["-O2", "-g"],
     srcs = [
         "ball_rpy_joint.cc",
         "body.cc",
@@ -112,6 +113,7 @@ drake_cc_library(
         "multibody_forces.cc",
         "multibody_tree.cc",
         "multibody_tree_system.cc",
+        "one_dimensional_spring_damper.cc",
         "planar_joint.cc",
         "planar_mobilizer.cc",
         "prismatic_joint.cc",
@@ -146,6 +148,7 @@ drake_cc_library(
         "joint_actuator.h",
         "linear_bushing_roll_pitch_yaw.h",
         "linear_spring_damper.h",
+        "one_dimensional_spring_damper.h",
         "mobilizer.h",
         "mobilizer_impl.h",
         "model_instance.h",
@@ -188,6 +191,7 @@ drake_cc_library(
         "//common:unused",
         "//math:geometric_transform",
         "//systems/framework:leaf_system",
+        "//common/test_utilities:limit_malloc",
     ],
 )
 

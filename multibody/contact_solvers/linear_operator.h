@@ -9,6 +9,7 @@
 #include "drake/common/drake_copyable.h"
 #include "drake/common/eigen_types.h"
 #include "drake/common/nice_type_name.h"
+#include "drake/multibody/contact_solvers/block_sparse_matrix.h"
 
 namespace drake {
 namespace multibody {
@@ -107,6 +108,17 @@ class LinearOperator {
     DoAssembleMatrix(A);
   }
 
+  void AssembleMatrix(MatrixX<T>* A) const {
+    DRAKE_DEMAND(A != nullptr);
+    DRAKE_DEMAND(A->rows() == rows());
+    DRAKE_DEMAND(A->cols() == cols());
+    DoAssembleMatrix(A);
+  }
+
+  // TODO: make this a proper BlockSparseMatrix class, so that we can check
+  // sizes and stuff like that at construction.
+  void AssembleMatrix(BlockSparseMatrix<T>* A) const { DoAssembleMatrix(A); }
+
   // TODO(amcastro-tri): expand operations as needed, e.g.:
   // - MultiplyAndAdd(): z = y + A * x
   // - AXPY(): Y = Y + a * X
@@ -143,6 +155,10 @@ class LinearOperator {
   // TODO(amcastro-tri): A default implementation for this method based on
   // repeated multiplies by unit vectors could be provided.
   virtual void DoAssembleMatrix(Eigen::SparseMatrix<T>* A) const;
+
+  virtual void DoAssembleMatrix(MatrixX<T>* A) const;
+
+  virtual void DoAssembleMatrix(BlockSparseMatrix<T>* A) const;
 
  private:
   std::string name_;

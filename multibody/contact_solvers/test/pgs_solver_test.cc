@@ -49,9 +49,11 @@ class PgsTest : public ::testing::Test {
     stiffness_.resize(0);
     dissipation_.resize(0);
     penetration_depth_.resize(0);
+    vc0_.resize(0);
     mu_.resize(0);
     point_data_ = std::make_unique<PointContactData<double>>(
-        &penetration_depth_, Jc_.get(), &stiffness_, &dissipation_, &mu_);
+        &penetration_depth_, &vc0_, Jc_.get(), &stiffness_, &dissipation_,
+        &mu_);
   }
 
   // Set the point contact data with a single contact point with the given
@@ -73,11 +75,14 @@ class PgsTest : public ::testing::Test {
     stiffness_(0) = NAN;
     dissipation_.resize(1);
     dissipation_(0) = NAN;
-    penetration_depth_.resize(1);
+    penetration_depth_.resize(1);    
     penetration_depth_(0) = NAN;
+    vc0_.resize(3);
+    vc0_.setConstant(NAN);  // not used.
     mu_ = friction_coeff * VectorXd::Ones(1);
     point_data_ = std::make_unique<PointContactData<double>>(
-        &penetration_depth_, Jc_.get(), &stiffness_, &dissipation_, &mu_);
+        &penetration_depth_, &vc0_, Jc_.get(), &stiffness_, &dissipation_,
+        &mu_);
   }
 
   void SetSystemDynamicsData() {
@@ -115,6 +120,7 @@ class PgsTest : public ::testing::Test {
   std::unique_ptr<SystemDynamicsData<double>> dynamics_data_;
   std::unique_ptr<PointContactData<double>> point_data_;
   VectorXd penetration_depth_;
+  VectorXd vc0_;
   std::unique_ptr<SparseLinearOperator<double>> Jc_;
   SparseMatrixd jacobian_;
   SparseMatrixd Ainv_tmp_;

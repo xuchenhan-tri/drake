@@ -249,7 +249,8 @@ TEST_F(ParticleTest, Stiction) {
   // Apply an in plane force:
   const Vector3d fapplied_P_W(2.0, 0.0, 0.0);
   const auto& particle = driver_.plant().GetBodyByName("particle");
-  driver_.FixAppliedForce(particle, fapplied_P_W);
+  driver_.FixAppliedForce(particle,
+                          SpatialForce<double>(Vector3d::Zero(), fapplied_P_W));
 
   // In stiction we expect the contact force to exactly balance the external
   // forces.
@@ -263,7 +264,8 @@ TEST_F(ParticleTest, Stiction) {
 TEST_F(ParticleTest, Sliding) {
   const Vector3d fapplied_P_W(3.0, 0.0, 0.0);
   const auto& particle = driver_.plant().GetBodyByName("particle");
-  driver_.FixAppliedForce(particle, fapplied_P_W);
+  driver_.FixAppliedForce(particle,
+                          SpatialForce<double>(Vector3d::Zero(), fapplied_P_W));
 
   // The maximum friction force is mu * Weight = 2.5 N.
   const Vector3d weight_P_W(0.0, 0.0, -5.0);

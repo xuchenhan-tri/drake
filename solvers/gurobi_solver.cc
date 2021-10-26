@@ -1283,6 +1283,8 @@ void GurobiSolver::DoSolve(
 
   error = GRBgetdblattr(model, GRB_DBL_ATTR_RUNTIME,
                         &(solver_details.optimizer_time));
+  error = GRBgetintattr(model, GRB_INT_ATTR_BARITERCOUNT,
+                        &(solver_details.num_barrier_iterations));
   if (error && !solver_details.error_code) {
     // Only overwrite the error code if no error happened before getting the
     // runtime.

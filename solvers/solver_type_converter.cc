@@ -1,6 +1,7 @@
 #include "drake/solvers/solver_type_converter.h"
 
 #include "drake/common/drake_assert.h"
+#include "drake/solvers/conex_solver.h"
 #include "drake/solvers/clp_solver.h"
 #include "drake/solvers/csdp_solver.h"
 #include "drake/solvers/dreal_solver.h"
@@ -22,6 +23,8 @@ namespace solvers {
 
 SolverId SolverTypeConverter::TypeToId(SolverType solver_type) {
   switch (solver_type) {
+    case SolverType::kConex:
+      return ConexSolver::id();
     case SolverType::kClp:
       return ClpSolver::id();
     case SolverType::kCsdp:
@@ -57,7 +60,9 @@ SolverId SolverTypeConverter::TypeToId(SolverType solver_type) {
 }
 
 std::optional<SolverType> SolverTypeConverter::IdToType(SolverId solver_id) {
-  if (solver_id == ClpSolver::id()) {
+  if (solver_id == ConexSolver::id()) {
+    return SolverType::kConex;
+  } else if (solver_id == ClpSolver::id()) {
     return SolverType::kClp;
   } else if (solver_id == CsdpSolver::id()) {
     return SolverType::kCsdp;

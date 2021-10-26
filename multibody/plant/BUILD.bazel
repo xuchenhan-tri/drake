@@ -39,6 +39,18 @@ drake_cc_package_library(
 )
 
 drake_cc_library(
+    name = "compliant_contact_computation_manager",
+    srcs = ["compliant_contact_computation_manager.cc"],
+    hdrs = ["compliant_contact_computation_manager.h"],
+#    copts = ["-O2","-g"],
+    deps = [
+        ":plant",
+        "//common/test_utilities:limit_malloc",
+        "//multibody/contact_solvers:contact_solver",
+    ],
+)
+
+drake_cc_library(
     name = "discrete_contact_pair",
     srcs = [],
     hdrs = ["discrete_contact_pair.h"],
@@ -55,6 +67,7 @@ drake_cc_library(
     deps = [
         "//common:default_scalars",
         "//common:extract_double",
+        "//multibody/contact_solvers:contact_solver_utils",
     ],
 )
 
@@ -83,9 +96,11 @@ drake_cc_library(
         "physical_model.h",
         "scalar_convertible_component.h",
     ],
+    copts = ["-O2","-g"],
     visibility = ["//visibility:private"],
     deps = [
         ":contact_jacobians",
+        ":contact_permutation_utils",
         ":contact_results",
         ":coulomb_friction",
         ":discrete_contact_pair",
@@ -99,8 +114,10 @@ drake_cc_library(
         "//geometry:geometry_roles",
         "//geometry:scene_graph",
         "//math:geometric_transform",
+        "//multibody/contact_solvers:block_sparse_linear_operator",
         "//multibody/contact_solvers:contact_solver",
-        "//multibody/contact_solvers:sparse_linear_operator",
+        "//multibody/contact_solvers:sparse_linear_operator",        
+        "//multibody/contact_solvers:timer",
         "//multibody/hydroelastics:hydroelastic_engine",
         "//multibody/topology:multibody_graph",
         "//multibody/tree",
@@ -135,6 +152,17 @@ drake_cc_library(
     deps = [
         "//common:default_scalars",
         "//math:geometric_transform",
+    ],
+)
+
+drake_cc_library(
+    name = "contact_permutation_utils",
+    srcs = ["contact_permutation_utils.cc"],
+    hdrs = ["contact_permutation_utils.h"],
+    deps = [        
+        "//common:sorted_pair",
+        "//multibody/contact_solvers:block_sparse_matrix",
+        "//multibody/tree:multibody_tree_topology",
     ],
 )
 
@@ -368,6 +396,28 @@ drake_cc_googletest(
         "//common:find_resource",
         "//multibody/parsing",
         "//systems/controllers:inverse_dynamics_controller",
+    ],
+)
+
+drake_cc_googletest(
+    name = "contact_permutation_utils_test",
+    data = [
+        "//examples/kuka_iiwa_arm/models",
+        "//examples/simple_gripper:simple_gripper_models",
+        "//manipulation/models/iiwa_description:models",
+        "//manipulation/models/wsg_50_description:models",
+        "//multibody/parsing:test_models",
+        "//manipulation/models/allegro_hand_description:models",
+    ],
+    deps = [
+        ":contact_permutation_utils",
+        ":plant",
+        "//common:find_resource",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//geometry:drake_visualizer",
+        "//math:geometric_transform",
+        "//multibody/parsing",
+        "//systems/framework",
     ],
 )
 

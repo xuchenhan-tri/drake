@@ -36,7 +36,7 @@ class SparseLinearOperator final : public LinearOperator<T> {
   int rows() const final { return A_->rows(); }
   int cols() const final { return A_->cols(); }
 
- protected:
+ private:
   void DoMultiply(const Eigen::Ref<const VectorX<T>>& x,
                   VectorX<T>* y) const final {
     *y = *A_ * x;
@@ -57,9 +57,19 @@ class SparseLinearOperator final : public LinearOperator<T> {
     *y = A_->transpose() * x;
   }
 
+  // We want to inherit all public overrides of DoAssembleMatrix().
+  // The way to accomplish this is to use the "using" keyword.
+  // Then overriding a signature does not hide the others.
+  //using LinearOperator<T>::DoAssembleMatrix;
+  using LinearOperator<T>::DoAssembleMatrix;
+
   void DoAssembleMatrix(Eigen::SparseMatrix<T>* A) const final {
     *A = *A_;
-  }
+  }  
+
+  void DoAssembleMatrix(MatrixX<T>* A) const final {
+    *A = MatrixX<T>(*A_);
+  }  
 
  private:
   const Eigen::SparseMatrix<T>* A_{nullptr};

@@ -20,6 +20,7 @@
 #include "drake/multibody/tree/rigid_body.h"
 #include "drake/multibody/tree/spatial_inertia.h"
 #include "drake/multibody/tree/uniform_gravity_field_element.h"
+#include "drake/common/test_utilities/limit_malloc.h"
 
 namespace drake {
 namespace multibody {
@@ -2367,11 +2368,10 @@ void MultibodyTree<T>::CalcJacobianAngularVelocity(
 template <typename T>
 void MultibodyTree<T>::CalcJacobianTranslationalVelocityHelper(
     const systems::Context<T>& context,
-    const JacobianWrtVariable with_respect_to,
-    const Frame<T>& frame_B,
-    const Eigen::Ref<const Matrix3X<T>>& p_WoBi_W,
-    const Frame<T>& frame_A,
-    EigenPtr<MatrixX<T>> Js_v_ABi_W) const {
+    const JacobianWrtVariable with_respect_to, const Frame<T>& frame_B,
+    const Eigen::Ref<const Matrix3X<T>>& p_WoBi_W, const Frame<T>& frame_A,
+    EigenPtr<MatrixX<T>> Js_v_ABi_W,
+    CalcJacobianWorkspace<T>* workspace) const {
   const int num_columns = (with_respect_to == JacobianWrtVariable::kQDot) ?
                           num_positions() : num_velocities();
   const int num_points = p_WoBi_W.cols();
@@ -2393,7 +2393,7 @@ void MultibodyTree<T>::CalcJacobianTranslationalVelocityHelper(
   // Calculate each point Bi's translational velocity Jacobian in world W.
   // The result is Js_v_WBi_W, but we store into Js_v_ABi_W for performance.
   CalcJacobianAngularAndOrTranslationalVelocityInWorld(context,
-    with_respect_to, frame_B, p_WoBi_W, nullptr, Js_v_ABi_W);
+    with_respect_to, frame_B, p_WoBi_W, nullptr, Js_v_ABi_W, workspace);
 
   // For the common special case in which frame A is the world W, optimize as
   // Js_v_ABi_W = Js_v_WBi_W
@@ -2402,7 +2402,7 @@ void MultibodyTree<T>::CalcJacobianTranslationalVelocityHelper(
   // Calculate each point Ai's translational velocity Jacobian in world W.
   MatrixX<T> Js_v_WAi_W(3 * num_points, num_columns);
   CalcJacobianAngularAndOrTranslationalVelocityInWorld(context,
-    with_respect_to, frame_A, p_WoBi_W, nullptr, &Js_v_WAi_W);
+    with_respect_to, frame_A, p_WoBi_W, nullptr, &Js_v_WAi_W, workspace);
 
   // Calculate each point Bi's translational velocity Jacobian in frame A,
   // expressed in world W. Note, again, that before this line Js_v_ABi_W
@@ -2419,7 +2419,8 @@ void MultibodyTree<T>::CalcJacobianTranslationalVelocity(
     const Eigen::Ref<const Matrix3X<T>>& p_FoBi_F,
     const Frame<T>& frame_A,
     const Frame<T>& frame_E,
-    EigenPtr<MatrixX<T>> Js_v_ABi_E) const {
+    EigenPtr<MatrixX<T>> Js_v_ABi_E,
+    CalcJacobianWorkspace<T>* workspace) const {
   const int num_columns = (with_respect_to == JacobianWrtVariable::kQDot) ?
                           num_positions() : num_velocities();
   const int num_points = p_FoBi_F.cols();
@@ -2429,21 +2430,28 @@ void MultibodyTree<T>::CalcJacobianTranslationalVelocity(
   DRAKE_THROW_UNLESS(Js_v_ABi_E->rows() == 3 * num_points);
   DRAKE_THROW_UNLESS(Js_v_ABi_E->cols() == num_columns);
 
+  CalcJacobianWorkspace<T>* w(workspace);
+  CalcJacobianWorkspace<T> local_workspace;  // only allocated if needed.
+  if (workspace == nullptr) {
+    local_workspace.Resize(num_bodies(), num_velocities(), num_points);
+    w = &local_workspace;
+  }
+
   // If frame_F == frame_W (World), then just call helper method.
   // The helper method returns each point Bi's translational velocity Jacobian
   // in frame A, expressed in world W, i.e., helper method returns Js_v_ABi_W.
   const Frame<T>& frame_W = world_frame();
   if (&frame_F == &frame_W) {
     CalcJacobianTranslationalVelocityHelper(context, with_respect_to, frame_B,
-                                            p_FoBi_F, frame_A, Js_v_ABi_E);
+                                            p_FoBi_F, frame_A, Js_v_ABi_E, w);
   } else {
     // If frame_F != frame_W, then for each point Bi, determine Bi's position
     // from Wo (World origin), expressed in world W and call helper method.
     Matrix3X<T> p_WoBi_W(3, num_points);
-    CalcPointsPositions(context, frame_F, p_FoBi_F,  /* From frame F */
-                        world_frame(), &p_WoBi_W);   /* To world frame W */
+    CalcPointsPositions(context, frame_F, p_FoBi_F, /* From frame F */
+                        world_frame(), &p_WoBi_W);  /* To world frame W */
     CalcJacobianTranslationalVelocityHelper(context, with_respect_to, frame_B,
-                                            p_WoBi_W, frame_A, Js_v_ABi_E);
+                                            p_WoBi_W, frame_A, Js_v_ABi_E, w);
   }
 
   // If frame_E is not the world frame, re-express Js_v_ABi_W in frame_E as
@@ -2467,13 +2475,23 @@ void MultibodyTree<T>::CalcJacobianAngularAndOrTranslationalVelocityInWorld(
     const Frame<T>& frame_F,
     const Eigen::Ref<const Matrix3X<T>>& p_WoFpi_W,
     EigenPtr<Matrix3X<T>> Js_w_WF_W,
-    EigenPtr<MatrixX<T>> Js_v_WFpi_W) const {
+    EigenPtr<MatrixX<T>> Js_v_WFpi_W,
+    CalcJacobianWorkspace<T>* workspace) const {
   // At least one of the Jacobian output terms must be nullptr.
   DRAKE_THROW_UNLESS(Js_w_WF_W != nullptr || Js_v_WFpi_W != nullptr);
+
+  //test::LimitMalloc guard({.max_num_allocations = 0});
 
   const bool is_wrt_qdot = (with_respect_to == JacobianWrtVariable::kQDot);
   const int num_columns = is_wrt_qdot ? num_positions() : num_velocities();
   const int num_points = p_WoFpi_W.cols();
+
+  CalcJacobianWorkspace<T>* w(workspace);
+  CalcJacobianWorkspace<T> local_workspace;  // only allocated if needed.
+  if (workspace == nullptr) {
+    local_workspace.Resize(num_bodies(), num_velocities(), num_points);
+    w = &local_workspace;
+  }
 
   // If non-nullptr, check the proper size of the output Jacobian matrices and
   // initialize the contents to zero.
@@ -2496,7 +2514,7 @@ void MultibodyTree<T>::CalcJacobianAngularAndOrTranslationalVelocityInWorld(
   if (body_F.index() == world_index()) return;
 
   // Form kinematic path from body_F to the world.
-  std::vector<BodyNodeIndex> path_to_world;
+  std::vector<BodyNodeIndex>& path_to_world = w->path_to_world;
   topology_.GetKinematicPathToWorld(body_F.node_index(), &path_to_world);
   const PositionKinematicsCache<T>& pc = EvalPositionKinematics(context);
 

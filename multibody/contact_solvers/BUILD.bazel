@@ -25,20 +25,19 @@ drake_cc_package_library(
         ":linear_operator",
         ":pgs_solver",
         ":point_contact_data",
-        ":sparse_linear_operator",
+        ":sparse_linear_operator",        
         ":system_dynamics_data",
     ],
 )
 
 drake_cc_library(
-    name = "block_sparse_linear_operator",
-    srcs = ["block_sparse_linear_operator.cc"],
-    hdrs = ["block_sparse_linear_operator.h"],
+    name = "cone_ray_intersect",
+    srcs = [],
+    hdrs = ["cone_ray_intersect.h"],
+    copts = ["-Wno-error=unused-parameter", "-Wno-error=unused-variable"],
     deps = [
-        ":block_sparse_matrix",
-        ":linear_operator",
-        "//common:default_scalars",
         "//common:essential",
+        "//common:default_scalars",        
     ],
 )
 
@@ -61,6 +60,116 @@ drake_cc_library(
 )
 
 drake_cc_library(
+    name = "mp_convex_solver",
+    srcs = ["mp_convex_solver.cc"],
+    hdrs = ["mp_convex_solver.h"],
+    copts = ["-Wno-error=unused-parameter", "-Wno-error=unused-variable"],
+    deps = [
+        ":contact_solver",
+        ":contact_solver_utils",
+        ":point_contact_data",
+        ":system_dynamics_data",
+        "//common:default_scalars",
+        ":friction_cone_constraint",
+        "//common:essential",
+        "//solvers:choose_best_solver",
+        "//solvers:mathematical_program",
+        "//solvers:solve",
+    ],
+)
+
+drake_cc_library(
+    name = "mp_primal_solver",
+    srcs = ["mp_primal_solver.cc"],
+    hdrs = ["mp_primal_solver.h"],
+    copts = ["-Wno-error=unused-parameter", "-Wno-error=unused-variable", "-w",
+    "-O3",
+    "-ffast-math",
+    "-g"],
+    deps = [
+        ":block_sparse_matrix",
+        ":contact_solver",
+        ":convex_solver_base",
+        ":contact_solver_utils",
+        ":point_contact_data",
+        ":system_dynamics_data",
+        ":timer",
+        "//common:default_scalars",
+        "//common:essential",
+        "//common/test_utilities:limit_malloc",
+        "//solvers:choose_best_solver",
+        "//solvers:mathematical_program",
+        "//solvers:solve",
+    ],
+)
+
+drake_cc_library(
+    name = "unconstrained_primal_solver",
+    srcs = ["unconstrained_primal_solver.cc"],
+    hdrs = ["unconstrained_primal_solver.h"],
+    copts = ["-Wno-error=unused-parameter", "-Wno-error=unused-variable", "-w",
+    "-O3",
+    "-ffast-math",
+    "-g"],
+    deps = [
+        ":block_sparse_matrix",
+        ":cone_ray_intersect",
+        ":contact_solver",
+        ":convex_solver_base",
+        ":contact_solver_utils",
+        ":point_contact_data",
+        ":system_dynamics_data",
+        ":geodesic_interior_point_method",
+        ":rtsafe",
+        ":timer",
+        "//common:default_scalars",
+        "//common:essential",
+        "//common/test_utilities:limit_malloc",
+        ":supernodal_solver",
+        "@conex//conex:supernodal_solver",
+    ],
+)
+
+drake_cc_library(
+    name = "convex_solver_base",
+    srcs = ["convex_solver_base.cc"],
+    hdrs = ["convex_solver_base.h"],
+    copts = ["-Wno-error=unused-parameter", "-Wno-error=unused-variable", "-w",
+    "-O3",
+    "-ffast-math",
+    "-g"],
+    deps = [
+        ":block_sparse_matrix",
+        ":contact_solver",
+        ":contact_solver_utils",
+        ":point_contact_data",
+        ":system_dynamics_data",
+        ":timer",
+        "//common:default_scalars",
+        "//common:essential",
+    ],
+)
+
+drake_cc_library(
+    name = "rtsafe",
+    srcs = [],
+    hdrs = ["rtsafe.h"],
+    copts = ["-Wno-error=unused-parameter", "-Wno-error=unused-variable", "-w"],
+    deps = [
+        "//common:default_scalars",
+        "//common:essential",
+    ],
+)
+
+drake_cc_library(
+    name = "timer",
+    hdrs = ["timer.h"],
+    deps = [
+        "//common:essential",
+    ],
+)
+
+drake_cc_library(
     name = "multibody_sim_driver",
     testonly = 1,
     srcs = ["test/multibody_sim_driver.cc"],
@@ -70,10 +179,24 @@ drake_cc_library(
         "//geometry:drake_visualizer",
         "//multibody/parsing",
         "//multibody/plant",
+        "//multibody/plant:contact_results_to_lcm",
         "//systems/analysis:simulator",
         "//systems/framework:diagram",
         "//systems/framework:diagram_builder",
         "//systems/lcm",
+    ],
+)
+
+drake_cc_library(
+    name = "friction_cone_constraint",
+    srcs = ["friction_cone_constraint.cc"],
+    hdrs = ["friction_cone_constraint.h"],
+    deps = [
+        "//common:essential",
+        "//solvers:constraint",
+        "//common:autodiff",        
+        "//common:symbolic",
+        "//math:gradient",
     ],
 )
 
@@ -103,10 +226,38 @@ drake_cc_library(
     name = "linear_operator",
     srcs = ["linear_operator.cc"],
     hdrs = ["linear_operator.h"],
+    copts = ["-Wno-error=unused-parameter", "-Wno-error=unused-variable", "-w",
+    "-O3",
+    "-ffast-math",
+    "-g"],
     deps = [
+        ":block_sparse_matrix",
         "//common:default_scalars",
         "//common:essential",
         "//common:nice_type_name",
+    ],
+)
+
+drake_cc_library(
+    name = "analytical_inverse_dynamics",
+    srcs = [],
+    hdrs = ["analytical_inverse_dynamics.h"],
+    deps = [
+        "//common:essential",
+    ],
+)
+
+
+drake_cc_library(
+    name = "numerical_inverse_dynamics",
+    srcs = ["numerical_inverse_dynamics.cc"],
+    hdrs = ["numerical_inverse_dynamics.h"],
+    deps = [
+        ":friction_cone_constraint",
+        "//common:essential",
+        "//solvers:choose_best_solver",
+        "//solvers:mathematical_program",
+        "//solvers:solve",
     ],
 )
 
@@ -147,12 +298,36 @@ drake_cc_library(
 )
 
 drake_cc_library(
+    name = "block_sparse_linear_operator",
+    srcs = ["block_sparse_linear_operator.cc"],
+    hdrs = ["block_sparse_linear_operator.h"],
+    copts = ["-Wno-error=unused-parameter", "-Wno-error=unused-variable", "-w",
+    "-O3",
+    "-ffast-math",
+    "-g"],
+    deps = [
+        ":linear_operator",
+        "//common:default_scalars",
+        "//common:essential",
+    ],
+)
+
+drake_cc_library(
     name = "system_dynamics_data",
     srcs = ["system_dynamics_data.cc"],
     hdrs = ["system_dynamics_data.h"],
     deps = [
         ":linear_operator",
         "//common:default_scalars",
+    ],
+)
+
+drake_cc_googletest(
+    name = "cone_ray_intersect_test",
+    deps = [
+        ":cone_ray_intersect",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//math",
     ],
 )
 
@@ -185,9 +360,32 @@ drake_cc_googletest(
 )
 
 drake_cc_googletest(
+    name = "inverse_dynamics_test",
+    deps = [
+        ":analytical_inverse_dynamics",
+        ":numerical_inverse_dynamics",
+        "//common/test_utilities:eigen_matrix_compare",
+    ],
+)
+
+drake_cc_googletest(
     name = "linear_operator_test",
     deps = [
         ":linear_operator",
+        "//common/test_utilities:expect_throws_message",
+    ],
+)
+
+drake_cc_googletest(
+    name = "pizza_saver_test",
+    data = ["test/pizza_saver.sdf"],
+    copts = ["-Wno-error=unused-parameter", "-Wno-error=unused-variable"],
+    deps = [
+        ":contact_solver",
+        ":mp_convex_solver",
+        ":multibody_sim_driver",
+        ":pgs_solver",        
+        "//common/test_utilities:eigen_matrix_compare",
         "//common/test_utilities:expect_throws_message",
     ],
 )
@@ -205,6 +403,102 @@ drake_cc_googletest(
     name = "sparse_linear_operator_test",
     deps = [
         ":sparse_linear_operator",
+    ],
+)
+
+drake_cc_googletest(
+    name = "rtsafe_test",
+    #copts = ["--spdlog_level debug"],
+    args  = ["--spdlog_level debug"],
+    deps = [
+        ":rtsafe",
+    ],
+)
+
+
+COPTS = [
+    "-O3",
+    "-ffast-math",
+    "-g",
+    "-fno-omit-frame-pointer"
+]
+
+drake_cc_library(
+    name = "supernodal_solver",
+    srcs = ["supernodal_solver.cc"],
+    hdrs = ["supernodal_solver.h"],
+    copts = COPTS,
+    deps = [
+        "@conex//conex:supernodal_solver",
+    ],
+)
+
+drake_cc_googletest(
+    name = "supernodal_solver_test",
+    srcs = ["test/supernodal_solver_test.cc"],
+    deps = [
+        "supernodal_solver",
+        "@conex//conex:supernodal_solver",
+    ],
+)
+
+drake_cc_library(
+    name = "geodesic_interior_point_method",
+    srcs = ["geodesic_interior_point_method.cc"],
+    hdrs = [ "supernodal_solver.h", 
+             "geodesic_interior_point_method.h"],
+    copts = COPTS,
+    deps = [
+        ":supernodal_solver",
+    ],
+)
+
+drake_cc_library(
+  name = "sparse_data",
+  hdrs = [ "test/sparse_test_data.h"],
+  copts = COPTS,
+)
+
+
+drake_cc_googletest(
+    name = "geodesic_solver_test",
+    srcs = ["test/geodesic_solver_test.cc",
+            "test/sparse_test_data.h"],
+    deps = [
+        ":geodesic_interior_point_method",
+    ],
+)
+cc_binary(
+    name = "supernodal_solver_profile",
+    srcs = ["test/supernodal_solver_profile.cc"],
+    copts = COPTS,
+    deps = [
+        "supernodal_solver",
+        "@conex//conex:supernodal_solver",
+    ],
+)
+
+cc_binary(
+    name = "geodesic_solver_profile",
+    srcs = ["test/geodesic_solver_profile.cc"],
+    copts = COPTS,
+    deps = [
+        ":geodesic_interior_point_method", ":sparse_data"
+    ],
+)
+
+drake_cc_googletest(
+    name = "sparse_matrix_operations_test",
+    deps = [
+        "//common:essential",
+    ],
+)
+
+drake_cc_googletest(
+    name = "eigen_matrix_free_test",
+    deps = [
+        "//common:essential",
+        "//common:nice_type_name",
     ],
 )
 

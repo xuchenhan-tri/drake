@@ -33,6 +33,12 @@ class MultibodyPlantDiscreteUpdateManagerAttorney {
     return plant.internal_tree();
   }
 
+  static void AddInForcesFromInputPorts(
+      const MultibodyPlant<T>& plant, const drake::systems::Context<T>& context,
+      MultibodyForces<T>* forces) {
+    plant.AddInForcesFromInputPorts(context, forces);
+  }
+
   static systems::CacheEntry& DeclareCacheEntry(
       MultibodyPlant<T>* plant, std::string description,
       systems::ValueProducer value_producer,
@@ -65,10 +71,12 @@ class MultibodyPlantDiscreteUpdateManagerAttorney {
     return plant.CalcCombinedFrictionCoefficients(context, contact_pairs);
   }
 
-  static void AddInForcesFromInputPorts(const MultibodyPlant<T>& plant,
-                                        const systems::Context<T>& context,
-                                        MultibodyForces<T>* forces) {
-    plant.AddInForcesFromInputPorts(context, forces);
+  static std::vector<internal::DiscreteContactPair<T>> CalcDiscreteContactPairs(
+    const MultibodyPlant<T>& plant, 
+      const systems::Context<T>& context) {
+    std::vector<internal::DiscreteContactPair<T>> discrete_pairs;
+    plant.CalcDiscreteContactPairs(context, &discrete_pairs);
+    return discrete_pairs;
   }
 
   // TODO(xuchenhan-tri): Remove this when SceneGraph takes control of all

@@ -98,6 +98,8 @@ TEST_F(BlockSparseLinearOperatorTest, MultiplyByTransposeSparse) {
   EXPECT_EQ(VectorXd(y), y_expected);
 }
 
+// Assembly into Eigen::SparseMatrix not yet supported.
+#if 0
 TEST_F(BlockSparseLinearOperatorTest, AssembleMatrix) {
   SparseMatrixd A_sparse(A_operator_->rows(), A_operator_->cols());
   A_operator_->AssembleMatrix(&A_sparse);
@@ -105,6 +107,7 @@ TEST_F(BlockSparseLinearOperatorTest, AssembleMatrix) {
   const MatrixX<double> A_dense = A_sparse;
   EXPECT_EQ(A_dense, A_);
 }
+#endif
 
 }  // namespace
 }  // namespace internal

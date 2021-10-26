@@ -20,6 +20,11 @@ struct GurobiSolverDetails {
   /// https://www.gurobi.com/documentation/9.0/refman/runtime.html
   double optimizer_time{};
 
+  /// Number of barrier iterations performed during the most recent
+  /// optimization.
+  /// https://www.gurobi.com/documentation/9.1/refman/baritercount.html
+  int num_barrier_iterations{};
+
   /// The error message returned from Gurobi call. Please refer to
   /// https://www.gurobi.com/documentation/9.0/refman/error_codes.html
   int error_code{};

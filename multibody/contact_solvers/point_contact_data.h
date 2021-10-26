@@ -19,6 +19,9 @@ class PointContactData {
  public:
   DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(PointContactData)
 
+  /// Empty problem data with zero constact points.
+  PointContactData() = default;
+
   // Specifies the set of possible discrete contacts characterized by:
   //  1. Signed distance phi0, negative when objects interpenetrate.
   //  2. Contact Jacobian s.t. contact velocity is given by vc = Jc⋅v. Refer to
@@ -45,20 +48,23 @@ class PointContactData {
   //
   // This class will keep a reference to the input data and therefore it is
   // required that it outlives this object.
-  PointContactData(const VectorX<T>* phi0, const LinearOperator<T>* Jc,
-                   const VectorX<T>* stiffness, const VectorX<T>* dissipation,
-                   const VectorX<T>* mu)
+  PointContactData(const VectorX<T>* phi0, const VectorX<T>* vc0,
+                   const LinearOperator<T>* Jc, const VectorX<T>* stiffness,
+                   const VectorX<T>* dissipation, const VectorX<T>* mu)
       : phi0_(phi0),
+        vc0_(vc0),
         Jc_(Jc),
         stiffness_(stiffness),
         dissipation_(dissipation),
         mu_(mu) {
     DRAKE_DEMAND(phi0 != nullptr);
+    DRAKE_DEMAND(vc0 != nullptr);
     DRAKE_DEMAND(Jc != nullptr);
     DRAKE_DEMAND(stiffness != nullptr);
     DRAKE_DEMAND(dissipation != nullptr);
     DRAKE_DEMAND(mu != nullptr);
     DRAKE_DEMAND(Jc->rows() == 3 * phi0->size());
+    DRAKE_DEMAND(vc0->size() == 3 * phi0->size());
     DRAKE_DEMAND(stiffness->size() == phi0->size());
     DRAKE_DEMAND(dissipation->size() == phi0->size());
     DRAKE_DEMAND(mu->size() == phi0->size());
@@ -76,6 +82,7 @@ class PointContactData {
   // still use `foo` as a variable name.
   // @{
   const VectorX<T>& get_phi0() const { return *phi0_; }
+  const VectorX<T>& get_vc0() const { return *vc0_; }
   const LinearOperator<T>& get_Jc() const { return *Jc_; }
   const VectorX<T>& get_stiffness() const { return *stiffness_; }
   const VectorX<T>& get_dissipation() const { return *dissipation_; }
@@ -85,6 +92,7 @@ class PointContactData {
  private:
   int nc_{0};
   const VectorX<T>* phi0_{nullptr};
+  const VectorX<T>* vc0_{nullptr};
   const LinearOperator<T>* Jc_{nullptr};
   const VectorX<T>* stiffness_{nullptr};
   const VectorX<T>* dissipation_{nullptr};

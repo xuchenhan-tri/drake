@@ -1,0 +1,46 @@
+#!/bin/bash
+
+# Rigid
+stiffness=1e12
+
+# Soft
+#stiffness=1e4
+
+sink_walls=1
+
+nbodies_per_pile=10
+tau_slip=1e-5
+
+#for nbodies_per_pile in 2 5 10
+#for tau_slip in 2e-7 1e-6 1e-5 1e-4 1e-3
+for dt in 1e-4
+do
+
+nb=$((4*$nbodies_per_pile))
+echo $nb
+echo $tau_slip
+echo $dt
+
+dir="/home/amcastro/Documents/Research/UnconstrainedConvexFormulation/PaperComparisons_09-03-2021/clutter_w_walls/dt/dt_$dt"
+echo $dir
+
+mkdir -p "$dir/pri_stats"
+mkdir -p "$dir/geo_stats"
+mkdir -p "$dir/grb_stats"
+
+# Primal
+echo "Running SAP ..."
+bazel run -j 4 --config gurobi examples/multibody/mp_convex_solver:clutter -- --simulation_time=10 --visualize=0 --objects_per_pile=$nbodies_per_pile --use_geodesic_solver=0 --box_stiffness=$stiffness --sphere_stiffness=$stiffness --add_sink_walls=$sink_walls --solver=primal --tau_slip=$tau_slip --log_cond_number=1 --mbp_time_step=$dt >/dev/null 2>/dev/null
+mv ./bazel-bin/examples/multibody/mp_convex_solver/clutter.runfiles/drake/*.dat "$dir"
+
+# Geodesic
+#echo "Running Geodesic ..."
+#bazel run -j 4 --config gurobi examples/multibody/mp_convex_solver:clutter -- --simulation_time=10 --visualize=0 --objects_per_pile=$nbodies_per_pile --use_geodesic_solver=1 --box_stiffness=$stiffness --sphere_stiffness=$stiffness --add_sink_walls=$sink_walls --solver=primal >/dev/null 2>/dev/null
+#mv ./bazel-bin/examples/multibody/mp_convex_solver/clutter.runfiles/drake/*.dat "$dir/geo_stats"
+
+# Gurobi
+#echo "Running Gurobi ..."
+#bazel run -j 4 --config gurobi examples/multibody/mp_convex_solver:clutter -- --simulation_time=10 --visualize=0 --objects_per_pile=$nbodies_per_pile --use_geodesic_solver=1 --box_stiffness=$stiffness --sphere_stiffness=$stiffness --add_sink_walls=$sink_walls --solver=gurobi >/dev/null 2>/dev/null
+#mv ./bazel-bin/examples/multibody/mp_convex_solver/clutter.runfiles/drake/*.dat "$dir/grb_stats"
+
+done

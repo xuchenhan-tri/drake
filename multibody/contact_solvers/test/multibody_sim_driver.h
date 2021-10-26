@@ -39,9 +39,20 @@ class MultibodySimDriver {
   // MultibodyPlant::Finalize() will happen at `Initialize()`.
   void BuildModel(double dt, const std::string& model_file);
 
+  // Finalizes the wiring of the driver's underlying Diagram. In particular it:
+  //  - calls MultibodyPlant::Finalize(),
+  //  - wires up visualization of geometry and contact results.
+  //  - creates default Context.
+  void Finalize();
+
   // Prepares the driver for simulation. In particualar, we call
-  // MultibodyPlant::Finalize() and Simulator::Initialize().
+  // Simulator::Initialize().
+  // N.B. Simulator's Initialize() will perform the first Publish() event, which
+  // for this driver containing an MBP connected to a SG, will trigger the first
+  // contact results computation for visualization.
+  // @pre Finalize() was called before this method.
   void Initialize();
+
 
   // @pre BuildModel() must have been called.
   const MultibodyPlant<double>& plant() const {
@@ -57,13 +68,13 @@ class MultibodySimDriver {
 
   // @pre Initialize() must have been called.
   const systems::Context<double>& plant_context() const {
-    DRAKE_DEMAND(initialized_);
+    DRAKE_DEMAND(finalized_);
     return *plant_context_;
   }
 
   // @pre Initialize() must have been called.
   systems::Context<double>& mutable_plant_context() {
-    DRAKE_DEMAND(initialized_);
+    DRAKE_DEMAND(finalized_);
     return *plant_context_;
   }
 
@@ -80,13 +91,19 @@ class MultibodySimDriver {
   std::vector<double> GetDynamicFrictionCoefficients(
       const Body<double>& body) const;
 
+  std::vector<std::pair<double, double>> GetPointContactParameters(
+      const Body<double>& body) const;
+
+  void SetPointContactParameters(const Body<double>& body, double stiffness,
+                                 double damping);
+
   // Retrieves contact results by evaluating MultibodyPlant's port.
   // Unless results are already cached, this computation will trigger the
   // expensive computation required to find out contact impulses and the
   // corresponding velocity updates.
   // @pre We called Initialize().
   const ContactResults<double>& GetContactResults() const {
-    DRAKE_DEMAND(initialized_);
+    DRAKE_DEMAND(finalized_);
     const ContactResults<double>& contact_results =
         plant_->get_contact_results_output_port().Eval<ContactResults<double>>(
             *plant_context_);
@@ -97,20 +114,25 @@ class MultibodySimDriver {
   // that a constant force `f_Bo_W` is applied on `body`, at its origin Bo. The
   // force is expressed in the world frame.
   // @pre We called Initialize().
-  void FixAppliedForce(const Body<double>& body, const Vector3d& f_Bo_W) {
-    DRAKE_DEMAND(initialized_);
+  void FixAppliedForce(const Body<double>& body,
+                       const SpatialForce<double>& F_Bo_W) {
+    DRAKE_DEMAND(finalized_);
     std::vector<ExternallyAppliedSpatialForce<double>> forces(1);
     forces[0].body_index = body.index();
     forces[0].p_BoBq_B = Vector3d::Zero();
-    forces[0].F_Bq_W = SpatialForce<double>(Vector3d(0.0, 0.0, 0.0), f_Bo_W);
+    forces[0].F_Bq_W = F_Bo_W;
     plant_->get_applied_spatial_force_input_port().FixValue(plant_context_,
                                                             forces);
   }
 
- private:
-  void SetPointContactParameters(const Body<double>& body, double stiffness,
-                                 double damping);
+  void AdvanceNumSteps(int num_steps);
 
+  void Publish() const {
+    DRAKE_DEMAND(finalized_);
+    diagram_->Publish(*diagram_context_);
+  }
+
+ private:
   // Helper to get an inspector pre-initialization (no context available) or
   // post-initialization (a context is available).
   const geometry::SceneGraphInspector<double>& GetInspector() const;
@@ -123,7 +145,7 @@ class MultibodySimDriver {
   systems::Context<double>* scene_graph_context_{nullptr};
   std::unique_ptr<systems::DiscreteValues<double>> discrete_values_;
   std::unique_ptr<systems::Simulator<double>> simulator_;
-  bool initialized_{false};
+  bool finalized_{false};
   systems::DiagramBuilder<double> builder_;  // only used for building.
 };
 

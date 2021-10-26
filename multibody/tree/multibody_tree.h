@@ -68,6 +68,24 @@ template <typename T> class ModelInstance;
 template <typename T> class Mobilizer;
 template <typename T> class QuaternionFloatingMobilizer;
 
+template <typename T>
+struct CalcJacobianWorkspace {
+  CalcJacobianWorkspace() = default;
+  
+  CalcJacobianWorkspace(int num_bodies, int nv, int nc) {
+    Resize(num_bodies, nv, nc);
+  }
+
+  void Resize(int num_bodies, int nv, int nc) {
+    (void)nv;
+    (void)nc;
+    // reserve the maximum possibly path length to miticate allocations.
+    path_to_world.reserve(num_bodies);
+  }
+
+  std::vector<BodyNodeIndex> path_to_world;
+};
+
 // %MultibodyTree provides a representation for a physical system consisting of
 // a collection of interconnected rigid and deformable bodies. As such, it owns
 // and manages each of the elements that belong to this physical system.
@@ -1269,7 +1287,8 @@ class MultibodyTree {
       const Eigen::Ref<const Matrix3X<T>>& p_FoBi_F,
       const Frame<T>& frame_A,
       const Frame<T>& frame_E,
-      EigenPtr<MatrixX<T>> Js_v_ABi_E) const;
+      EigenPtr<MatrixX<T>> Js_v_ABi_E, 
+      CalcJacobianWorkspace<T>* workspace = nullptr) const;
 
   // See MultibodyPlant method.
   void CalcJacobianCenterOfMassTranslationalVelocity(
@@ -2688,12 +2707,10 @@ class MultibodyTree {
   // - `Js_w_WF_W` is not nullptr and its size differs from `3 x n`.
   // - `Js_v_WFpi_W` is not nullptr and its size differs from `3*p x n`.
   void CalcJacobianAngularAndOrTranslationalVelocityInWorld(
-      const systems::Context<T>& context,
-      JacobianWrtVariable with_respect_to,
-      const Frame<T>& frame_F,
-      const Eigen::Ref<const Matrix3X<T>>& p_WoFpi_W,
-      EigenPtr<Matrix3X<T>> Js_w_WF_W,
-      EigenPtr<MatrixX<T>> Js_v_WFpi_W) const;
+      const systems::Context<T>& context, JacobianWrtVariable with_respect_to,
+      const Frame<T>& frame_F, const Eigen::Ref<const Matrix3X<T>>& p_WoFpi_W,
+      EigenPtr<Matrix3X<T>> Js_w_WF_W, EigenPtr<MatrixX<T>> Js_v_WFpi_W,
+      CalcJacobianWorkspace<T>* workspace = nullptr) const;
 
   // Helper method for CalcJacobianTranslationalVelocity().
   // @param[in] context The state of the multibody system.
@@ -2712,12 +2729,10 @@ class MultibodyTree {
   // n is the number of elements in 𝑠.
   // @throws std::exception if `Js_v_ABi_W` is nullptr or not sized `3*p x n`.
   void CalcJacobianTranslationalVelocityHelper(
-      const systems::Context<T>& context,
-      JacobianWrtVariable with_respect_to,
-      const Frame<T>& frame_B,
-      const Eigen::Ref<const Matrix3X<T>>& p_WoBi_W,
-      const Frame<T>& frame_A,
-      EigenPtr<MatrixX<T>> Js_v_ABi_W) const;
+      const systems::Context<T>& context, JacobianWrtVariable with_respect_to,
+      const Frame<T>& frame_B, const Eigen::Ref<const Matrix3X<T>>& p_WoBi_W,
+      const Frame<T>& frame_A, EigenPtr<MatrixX<T>> Js_v_ABi_W,
+      CalcJacobianWorkspace<T>* workspace) const;
 
   // Helper method to apply forces due to damping at the joints.
   // MultibodyTree treats damping forces separately from other ForceElement

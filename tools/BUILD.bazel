@@ -133,4 +133,15 @@ config_setting(
     values = {"define": "NO_SCS=ON"},
 )
 
+# CONEX is an open-source solver, and is included in the Drake build by default.
+# The CONEX solver is irrelevant to some users of MathematicalProgram, so we
+# provide a hidden switch to shut it off for developers who don't actually need
+# it. This is not a supported configuration. Use at your own risk:
+# --define=NO_CONEX=ON
+config_setting(
+    name = "no_conex",
+    values = {"define": "NO_CONEX=ON"},
+)
+
+
 add_lint_tests()

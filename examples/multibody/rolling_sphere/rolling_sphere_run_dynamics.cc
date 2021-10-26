@@ -1,4 +1,5 @@
 #include <chrono>
+#include <fstream>
 #include <memory>
 
 #include <gflags/gflags.h>
@@ -10,7 +11,9 @@
 #include "drake/geometry/scene_graph.h"
 #include "drake/lcm/drake_lcm.h"
 #include "drake/math/random_rotation.h"
+#include "drake/multibody/contact_solvers/unconstrained_primal_solver.h"
 #include "drake/multibody/math/spatial_algebra.h"
+#include "drake/multibody/plant/compliant_contact_computation_manager.h"
 #include "drake/multibody/plant/contact_results_to_lcm.h"
 #include "drake/systems/analysis/simulator.h"
 #include "drake/systems/analysis/simulator_gflags.h"
@@ -31,6 +34,10 @@ DEFINE_double(dissipation, 5.0,
               "For hydroelastic (and hybrid) contact, Hunt & Crossley "
               "dissipation, [s/m].");
 DEFINE_double(friction_coefficient, 0.3, "friction coefficient.");
+DEFINE_double(point_stiffness, 1.0e5, "Point contact stiffness, [N/n].");
+DEFINE_double(dissipation_time_constant, 1e-2,
+              "Linear dissipation model rate (for primal solver only), [s].");
+
 DEFINE_bool(rigid_ball, false,
             "If true, the ball is given a rigid hydroelastic representation "
             "(instead of the default soft value). Make sure you have the right "
@@ -50,6 +57,7 @@ DEFINE_double(
     "The fixed time step period (in seconds) of discrete updates for the "
     "multibody plant modeled as a discrete system. Strictly positive. "
     "Set to zero for a continuous plant model.");
+DEFINE_bool(use_primal_solver, false, "If true, it uses primal solver");
 
 DEFINE_bool(visualize, true,
             "If true, the simulation will publish messages for Drake "
@@ -84,10 +92,6 @@ namespace multibody {
 namespace bouncing_ball {
 namespace {
 
-using Eigen::AngleAxisd;
-using Eigen::Matrix3d;
-using Eigen::Vector3d;
-using Eigen::Vector4d;
 using drake::geometry::SceneGraph;
 using drake::geometry::SourceId;
 using drake::lcm::DrakeLcm;
@@ -96,6 +100,13 @@ using drake::multibody::ContactModel;
 using drake::multibody::CoulombFriction;
 using drake::multibody::MultibodyPlant;
 using drake::multibody::SpatialVelocity;
+using Eigen::AngleAxisd;
+using Eigen::Matrix3d;
+using Eigen::Vector3d;
+using Eigen::Vector4d;
+
+using drake::multibody::CompliantContactComputationManager;
+using drake::multibody::contact_solvers::internal::UnconstrainedPrimalSolver;
 
 int do_main() {
   systems::DiagramBuilder<double> builder;
@@ -104,10 +115,10 @@ int do_main() {
   scene_graph.set_name("scene_graph");
 
   // Plant's parameters.
-  const double radius = 0.05;   // m
-  const double mass = 0.1;      // kg
-  const double g = 9.81;        // m/s^2
-  const double z0 = FLAGS_z0;        // Initial height.
+  const double radius = 0.05;  // m
+  const double mass = 0.1;     // kg
+  const double g = 9.81;       // m/s^2
+  const double z0 = FLAGS_z0;  // Initial height.
   const CoulombFriction<double> coulomb_friction(
       FLAGS_friction_coefficient /* static friction */,
       FLAGS_friction_coefficient /* dynamic friction */);
@@ -155,6 +166,34 @@ int do_main() {
   DRAKE_DEMAND(plant.num_velocities() == 6);
   DRAKE_DEMAND(plant.num_positions() == 7);
 
+  if (FLAGS_use_primal_solver) {
+    plant.set_discrete_update_manager(
+        std::make_unique<CompliantContactComputationManager<double>>(
+            std::make_unique<UnconstrainedPrimalSolver<double>>()));
+
+    // Set contact parameters supported by the solver.
+    const auto& inspector = scene_graph.model_inspector();
+    for (drake::multibody::BodyIndex body_index(0);
+         body_index < plant.num_bodies(); ++body_index) {
+      const auto& body = plant.get_body(body_index);
+      for (auto id : plant.GetCollisionGeometriesForBody(body)) {
+        const drake::geometry::ProximityProperties* old_props =
+            inspector.GetProximityProperties(id);
+        DRAKE_DEMAND(old_props);
+        drake::geometry::ProximityProperties new_props(*old_props);
+        new_props.AddProperty("material", "dissipation_time_constant",
+                              FLAGS_dissipation_time_constant);
+        // hunt_crossley_dissipation not supported by
+        // CompliantContactComputationManager.
+        new_props.RemoveProperty("material", "hunt_crossley_dissipation");
+        new_props.UpdateProperty("material", "point_contact_stiffness",
+                                 FLAGS_point_stiffness);
+        scene_graph.AssignRole(*plant.get_source_id(), id, new_props,
+                               drake::geometry::RoleAssign::kReplace);
+      }
+    }
+  }
+
   // Sanity check on the availability of the optional source id before using it.
   DRAKE_DEMAND(plant.get_source_id().has_value());
 
@@ -187,13 +226,12 @@ int do_main() {
   math::RotationMatrixd R_WB(math::RollPitchYawd(
       M_PI / 180.0 * Vector3<double>(FLAGS_roll, FLAGS_pitch, FLAGS_yaw)));
   math::RigidTransformd X_WB(R_WB, Vector3d(0.0, 0.0, z0));
-  plant.SetFreeBodyPose(
-      &plant_context, plant.GetBodyByName("Ball"), X_WB);
+  plant.SetFreeBodyPose(&plant_context, plant.GetBodyByName("Ball"), X_WB);
 
   const SpatialVelocity<double> V_WB(Vector3d(FLAGS_wx, FLAGS_wy, FLAGS_wz),
                                      Vector3d(FLAGS_vx, FLAGS_vy, FLAGS_vz));
-  plant.SetFreeBodySpatialVelocity(
-      &plant_context, plant.GetBodyByName("Ball"), V_WB);
+  plant.SetFreeBodySpatialVelocity(&plant_context, plant.GetBodyByName("Ball"),
+                                   V_WB);
 
   auto simulator =
       systems::MakeSimulatorFromGflags(*diagram, std::move(diagram_context));
@@ -208,7 +246,6 @@ int do_main() {
              wall_clock_time);
 
   systems::PrintSimulatorStatistics(*simulator);
-
   return 0;
 }
 

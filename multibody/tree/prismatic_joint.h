@@ -80,7 +80,8 @@ class PrismaticJoint final : public Joint<T> {
                  VectorX<double>::Constant(
                      1, -std::numeric_limits<double>::infinity()),
                  VectorX<double>::Constant(
-                     1, std::numeric_limits<double>::infinity())) {
+                     1, std::numeric_limits<double>::infinity()),
+                 VectorX<double>::Constant(1, damping)) {
     const double kEpsilon = std::sqrt(std::numeric_limits<double>::epsilon());
     DRAKE_THROW_UNLESS(!axis.isZero(kEpsilon));
     DRAKE_THROW_UNLESS(damping >= 0);
