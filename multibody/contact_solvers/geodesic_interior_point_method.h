@@ -32,15 +32,15 @@ struct SpinFactorElement {
 
 class SparseJacobian {
  public:
-  SparseJacobian(const std::vector<conex::BlockMatrixTriplet>& blocks);
+  SparseJacobian(const std::vector<drake::multibody::contact_solvers::internal::BlockMatrixTriplet>& blocks);
   Eigen::VectorXd Multiply(const Eigen::VectorXd& x) const;
   Eigen::VectorXd MultiplyByTranspose(const Eigen::VectorXd& x) const;
 
   void RescaleByFrictionCoefficient(const Eigen::VectorXd& x);
 
-  std::vector<conex::BlockMatrixTriplet> blocks() { return blocks_; }
+  std::vector<drake::multibody::contact_solvers::internal::BlockMatrixTriplet> blocks() { return blocks_; }
  private:
-  std::vector<conex::BlockMatrixTriplet> blocks_;
+  std::vector<drake::multibody::contact_solvers::internal::BlockMatrixTriplet> blocks_;
   std::vector<int> row_offset_;
   std::vector<int> col_offset_;
   std::vector<int> row_block_sizes_;
@@ -72,7 +72,7 @@ class NewtonDirection {
   using Vector3d = Eigen::Vector3d;
 
  public:
-  NewtonDirection(const std::vector<conex::BlockMatrixTriplet>& Jtriplets,
+  NewtonDirection(const std::vector<drake::multibody::contact_solvers::internal::BlockMatrixTriplet>& Jtriplets,
                   const std::vector<Eigen::MatrixXd>& blocks_of_M,
                   int num_block_rows_of_J, const VectorXd& R,
                   int num_constraints)
@@ -119,9 +119,9 @@ class NewtonDirection {
   MatrixXd e_array_;
   bool newton_system_factored_ = false;
   SpinFactorProduct w_;
-  conex::SuperNodalSolver kkt_solver_;
+  drake::multibody::contact_solvers::internal::SuperNodalSolver kkt_solver_;
   const BlockDiagonalMatrix M_;
-  std::vector<conex::BlockMatrixTriplet> Jtriplets_;
+  std::vector<drake::multibody::contact_solvers::internal::BlockMatrixTriplet> Jtriplets_;
   const SparseJacobian J_;
 };
 
@@ -144,7 +144,7 @@ struct GeodesicSolverOptions {
 
 GeodesicSolverSolution GeodesicSolver(
     const GeodesicSolverSolution& w0,
-    const std::vector<conex::BlockMatrixTriplet>& J,
+    const std::vector<drake::multibody::contact_solvers::internal::BlockMatrixTriplet>& J,
     const std::vector<Eigen::MatrixXd>& M, const Eigen::VectorXd& R,
     int num_block_rows_of_J, int num_contacts, const Eigen::VectorXd& vstar,
     const Eigen::VectorXd& v_hat, 
@@ -152,7 +152,7 @@ GeodesicSolverSolution GeodesicSolver(
 
 GeodesicSolverSolution GeodesicSolver(
     const SpinFactorProduct& w0,
-    const std::vector<conex::BlockMatrixTriplet>& J,
+    const std::vector<drake::multibody::contact_solvers::internal::BlockMatrixTriplet>& J,
     const std::vector<Eigen::MatrixXd>& M, const Eigen::VectorXd& R,
     int num_block_rows_of_J, int num_contacts, const Eigen::VectorXd& vstar,
     const Eigen::VectorXd& v_hat,
@@ -162,7 +162,7 @@ GeodesicSolverSolution GeodesicSolver(
 GeodesicSolverSolution GeodesicSolver(
     const GeodesicSolverSolution& sol,
     const Eigen::VectorXd& friction_coefficient,
-    const std::vector<conex::BlockMatrixTriplet>& J,
+    const std::vector<drake::multibody::contact_solvers::internal::BlockMatrixTriplet>& J,
     const std::vector<Eigen::MatrixXd>& M, const Eigen::VectorXd& R,
     int num_block_rows_of_J, int num_contacts, const Eigen::VectorXd& vstar,
     const Eigen::VectorXd& v_hat,

@@ -407,7 +407,7 @@ class UnconstrainedPrimalSolver final : public ConvexSolverBase<T> {
 
   // Solves for dv using supernodal algebra.
   void CallSupernodalSolver(const State& s, VectorX<T>* dv,
-                            conex::SuperNodalSolver* solver);
+                            SuperNodalSolver* solver);
 
   // Solves for dv usind dense algebra, for debugging.
   void CallDenseSolver(const State& s, VectorX<T>* dv);

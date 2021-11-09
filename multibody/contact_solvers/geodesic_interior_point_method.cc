@@ -1,5 +1,9 @@
 #include "drake/multibody/contact_solvers/geodesic_interior_point_method.h"
-using conex::BlockMatrixTriplet;
+
+#include <iostream>
+#include <iomanip>
+
+using drake::multibody::contact_solvers::internal::BlockMatrixTriplet;
 using Eigen::VectorXd;
 using std::vector;
 
@@ -587,7 +591,7 @@ double GetMinSqrtMu(double dinfmax_unscaled, const SpinFactorProduct& x,
 
 GeodesicSolverSolution GeodesicSolver(
     const GeodesicSolverSolution& sol,
-    const std::vector<conex::BlockMatrixTriplet>& J,
+    const std::vector<BlockMatrixTriplet>& J,
     const std::vector<Eigen::MatrixXd>& M, const Eigen::VectorXd& R,
     int num_block_rows_of_J, int num_contacts, const Eigen::VectorXd& vstar,
     const Eigen::VectorXd& v_hat,
@@ -621,7 +625,7 @@ GeodesicSolverSolution GeodesicSolver(
 GeodesicSolverSolution GeodesicSolver(
     const GeodesicSolverSolution& sol,
     const VectorXd& friction_coefficient,
-    const std::vector<conex::BlockMatrixTriplet>& J,
+    const std::vector<BlockMatrixTriplet>& J,
     const std::vector<Eigen::MatrixXd>& M, const Eigen::VectorXd& R,
     int num_block_rows_of_J, int num_contacts, const Eigen::VectorXd& vstar,
     const Eigen::VectorXd& v_hat,
@@ -667,7 +671,7 @@ GeodesicSolverSolution GeodesicSolver(
 
 GeodesicSolverSolution GeodesicSolver(
     const SpinFactorProduct& w0,
-    const std::vector<conex::BlockMatrixTriplet>& J,
+    const std::vector<BlockMatrixTriplet>& J,
     const std::vector<Eigen::MatrixXd>& M, const Eigen::VectorXd& R,
     int num_block_rows_of_J, int num_contacts, const Eigen::VectorXd& vstar,
     const Eigen::VectorXd& v_hat,

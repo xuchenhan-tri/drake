@@ -415,6 +415,24 @@ drake_cc_googletest(
     ],
 )
 
+drake_cc_library(
+    name = "supernodal_solver",
+    srcs = ["supernodal_solver.cc"],
+    hdrs = ["supernodal_solver.h"],
+    deps = [
+        "//common:essential",
+        "@conex//conex:supernodal_solver",
+    ],
+)
+
+drake_cc_googletest(
+    name = "supernodal_solver_test",
+    deps = [
+        ":supernodal_solver",
+        "//common/test_utilities:expect_throws_message",
+        "@conex//conex:supernodal_solver",
+    ],
+)
 
 COPTS = [
     "-O3",
@@ -422,25 +440,6 @@ COPTS = [
     "-g",
     "-fno-omit-frame-pointer"
 ]
-
-drake_cc_library(
-    name = "supernodal_solver",
-    srcs = ["supernodal_solver.cc"],
-    hdrs = ["supernodal_solver.h"],
-    copts = COPTS,
-    deps = [
-        "@conex//conex:supernodal_solver",
-    ],
-)
-
-drake_cc_googletest(
-    name = "supernodal_solver_test",
-    srcs = ["test/supernodal_solver_test.cc"],
-    deps = [
-        "supernodal_solver",
-        "@conex//conex:supernodal_solver",
-    ],
-)
 
 drake_cc_library(
     name = "geodesic_interior_point_method",

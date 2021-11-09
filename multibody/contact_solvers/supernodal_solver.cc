@@ -1,22 +1,26 @@
 #include "drake/multibody/contact_solvers/supernodal_solver.h"
-using Eigen::MatrixXd;
-using std::vector;
+
+#include <algorithm>
+#include <utility>
+
 #include "conex/clique_ordering.h"
+#include "conex/kkt_solver.h"
 #include "conex/supernodal_solver.h"
 
-namespace conex {
+using Eigen::MatrixXd;
+using std::vector;
+using MatrixBlock = std::pair<Eigen::MatrixXd, std::vector<int>>;
+using MatrixBlocks = std::vector<MatrixBlock>;
+
+namespace drake {
+namespace multibody {
+namespace contact_solvers {
+namespace internal {
 namespace {
 
-inline int NumberOfVars(const MatrixBlocks& row_data) {
-  int y = 0;
-  for (auto& r : row_data) {
-    y += r.second.size();
-  }
-  return y;
-}
-
-void MultiplyByBlockDiagonal(const std::vector<MatrixXd>& w, int s, int e,
-                             const MatrixXd& x, MatrixXd* y) {
+// For each i \in [s, e], computes y(i, :) = w(i) * x(i, :),
+void LeftMultiplyByBlockDiagonal(const std::vector<MatrixXd>& w, int s, int e,
+                                 const MatrixXd& x, MatrixXd* y) {
   int start = 0;
   for (int index = s; index <= e; index++) {
     const int num_rows = w.at(s).rows();
@@ -26,21 +30,22 @@ void MultiplyByBlockDiagonal(const std::vector<MatrixXd>& w, int s, int e,
   }
 }
 
-template <typename T>
-void SumOverWeightedMatrixBlocks(const vector<MatrixXd>& row_data,
-                                 const vector<MatrixXd>& weight_matrix,
-                                 int w_start, int w_end, T* yptr,
-                                 vector<MatrixXd>* temp) {
+template <typename MatrixType>
+void Compute_Ji_transpose_Gi_Ji(const vector<MatrixXd>& jacobian_row_data,
+                                const vector<MatrixXd>& weight_matrix,
+                                int w_start, int w_end, MatrixType* yptr,
+                                vector<MatrixXd>* temp) {
   auto& y = *yptr;
   y.setZero();
 
   int r_offset = 0;
-  for (size_t i = 0; i < row_data.size(); i++) {
+  for (size_t i = 0; i < jacobian_row_data.size(); i++) {
     int c_offset = 0;
-    const auto& r = row_data.at(i);
-    for (size_t j = 0; j < row_data.size(); j++) {
-      const auto& c = row_data.at(j);
-      MultiplyByBlockDiagonal(weight_matrix, w_start, w_end, c, &temp->at(j));
+    const auto& r = jacobian_row_data.at(i);
+    for (size_t j = 0; j < jacobian_row_data.size(); j++) {
+      const auto& c = jacobian_row_data.at(j);
+      LeftMultiplyByBlockDiagonal(weight_matrix, w_start, w_end, c,
+                                  &temp->at(j));
       y.block(r_offset, c_offset, r.cols(), c.cols()).noalias() +=
           r.transpose() * temp->at(j);
       c_offset += c.cols();
@@ -49,106 +54,19 @@ void SumOverWeightedMatrixBlocks(const vector<MatrixXd>& row_data,
   }
 }
 
-/* TODO(FrankPermenter): Remove this function */
-std::pair<MatrixXd, std::vector<int>> SumOverMatrixBlocks(
-    const MatrixBlocks& row_data) {
-  MatrixXd y(NumberOfVars(row_data), NumberOfVars(row_data));
-  int r_offset = 0;
-  y.setZero();
-  std::vector<int> variables;
-  for (size_t i = 0; i < row_data.size(); i++) {
-    int c_offset = 0;
-    auto r = row_data.at(i);
-    variables = UnionOfSorted(variables, r.second);
-    for (size_t j = 0; j < row_data.size(); j++) {
-      auto c = row_data.at(j);
-      y.block(r_offset, c_offset, r.second.size(), c.second.size()) +=
-          r.first.transpose() * c.first;
-      c_offset += c.second.size();
-    }
-    r_offset += r.second.size();
-  }
-  return std::pair<MatrixXd, std::vector<int>>(y, variables);
-}
+void SortJacobianRowDataByColumn(std::vector<int>* column,
+                                 std::vector<Eigen::MatrixXd>* jacobian) {
+  if (column->at(0) > column->at(1)) {
+    const int temp = column->at(1);
+    column->at(1) = column->at(0);
+    column->at(0) = temp;
 
-/* TODO(FrankPermenter): Remove this function */
-std::vector<std::pair<MatrixXd, std::vector<int>>> DecomposeCost(
-    const vector<MatrixBlocks>& row_data) {
-  size_t n = row_data.size();
-  std::vector<std::pair<MatrixXd, std::vector<int>>> Jcliques(n);
-  for (size_t i = 0; i < n; i++) {
-    Jcliques.at(i) = SumOverMatrixBlocks(row_data.at(i));
-  }
-  return Jcliques;
-}
-
-class Container {
- public:
-  template <typename T>
-  Container(const T& x) : obj(x), kkt(std::any_cast<T>(&obj)) {}
-  std::any obj;
-  KKT_SystemAssembler kkt;
-};
-
-/* TODO(FrankPermenter): Simplify this function */
-std::vector<std::vector<int>> GetCliques(const vector<MatrixBlocks>& row_data) {
-  ConstraintManager<Container> prog;
-  auto Jcliques = DecomposeCost(row_data);
-  vector<std::vector<int>> cliques;
-  for (size_t i = 0; i < Jcliques.size(); i++) {
-    cliques.push_back(Jcliques.at(i).second);
-  }
-  return cliques;
-}
-
-std::vector<std::vector<int>> GetAllCliques(
-    const std::vector<MatrixBlocks>& row_data) {
-  auto c = GetCliques(row_data);
-
-  return c;
-}
-
-std::vector<std::vector<int>> GetEmptySet(int n) {
-  std::vector<std::vector<int>> y(n);
-  return y;
-}
-
-// TODO(FrankPermenter): Remove this.
-inline std::vector<std::vector<MatrixXd>> GetRowData(
-    const std::vector<MatrixBlocks>& jacobian_blocks) {
-  vector<std::vector<MatrixXd>> y(jacobian_blocks.size());
-  int cnt = 0;
-  for (auto& j : jacobian_blocks) {
-    for (auto& ji : j) {
-      y.at(cnt).emplace_back(ji.first);
-    }
-    cnt++;
-  }
-  return y;
-}
-
-inline std::vector<int> ColumnToClique(int start, int clique_size) {
-  int start_position = start;
-  std::vector<int> y(clique_size);
-  for (int i = 0; i < clique_size; i++) {
-    y[i] = start_position + i;
-  }
-  return y;
-}
-
-void SortClique(std::vector<int>* c, std::vector<Eigen::MatrixXd>* m) {
-  if (c->at(0) > c->at(1)) {
-    auto temp = c->at(1);
-    c->at(1) = c->at(0);
-    c->at(0) = temp;
-
-    auto temp2 = m->at(1);
-    m->at(1) = m->at(0);
-    m->at(0) = temp2;
+    const Eigen::MatrixXd temp2 = jacobian->at(1);
+    std::swap(jacobian->at(1), jacobian->at(0));
   }
 }
 
-inline std::vector<std::vector<MatrixXd>> GetRowData(
+std::vector<std::vector<MatrixXd>> GetRowData(
     int num_row_blocks,
     const std::vector<BlockMatrixTriplet>& jacobian_blocks) {
   vector<std::vector<MatrixXd>> y(num_row_blocks);
@@ -159,7 +77,7 @@ inline std::vector<std::vector<MatrixXd>> GetRowData(
     y.at(index).emplace_back(std::get<2>(j));
     column.at(index).emplace_back(std::get<1>(j));
     if (column.at(index).size() == 2) {
-      SortClique(&column.at(index), &y.at(index));
+      SortJacobianRowDataByColumn(&column.at(index), &y.at(index));
     }
     if (column.at(index).size() > 2) {
       throw std::runtime_error(
@@ -169,65 +87,76 @@ inline std::vector<std::vector<MatrixXd>> GetRowData(
   return y;
 }
 
-inline MatrixBlocks GetMassMatrix(
+std::vector<int> GetMassMatrixStartingColumn(
     const std::vector<Eigen::MatrixXd>& mass_matrices) {
-  MatrixBlocks y;
-  int clique_start = 0;
+  vector<int> y;
+  int col_start = 0;
   for (size_t i = 0; i < mass_matrices.size(); i++) {
-    int clique_size = mass_matrices.at(i).cols();
-    y.emplace_back(mass_matrices.at(i),
-                   ColumnToClique(clique_start, clique_size));
-    clique_start += clique_size;
-  }
-  return y;
-}
-
-inline Eigen::MatrixXd BlockDiag(int s, int e,
-                                 std::vector<Eigen::MatrixXd> Gi) {
-  Eigen::MatrixXd G(100, 100);
-  G.setZero();
-  int row_start = 0;
-  for (int i = s; i < e; i++) {
-    G.block(row_start, row_start, Gi.at(i).rows(), Gi.at(i).cols()) = Gi.at(i);
-    row_start += s - e;
-  }
-  return G.topLeftCorner(row_start, row_start);
-}
-
-inline std::vector<Eigen::MatrixXd> GetWeightMatrix(
-    const std::vector<int>& patch_size, const std::vector<Eigen::MatrixXd>& G) {
-  std::vector<Eigen::MatrixXd> y(patch_size.size());
-  int s = 0;
-  int e = 0;
-  for (size_t i = 0; i < patch_size.size(); i++) {
-    e = s + patch_size.at(i);
-    y.at(i) = BlockDiag(s, e, G);
-    s = e + 1;
+    int col_size = mass_matrices.at(i).cols();
+    y.emplace_back(col_start);
+    col_start += col_size;
   }
   return y;
 }
 
 }  // namespace
 
+class SuperNodalSolver::CliqueAssembler final
+    : public ::conex::LinearKKTAssemblerBase {
+ public:
+  // Fills the matrix sub_matrix(M) + J^T_i G_i J_i.
+  void SetDenseData() override;
+
+  // Helper functions for specifying G_i
+  void SetWeightMatrixIndex(int start, int end) {
+    weight_start_ = start;
+    weight_end_ = end;
+  }
+  void SetWeightMatrixPointer(
+      const std::vector<Eigen::MatrixXd>* weight_matrix) {
+    weight_matrix_ = weight_matrix;
+  }
+
+  // Updates a vector of mass matrices m_i satisfying
+  // sub_matrix(M) = blkdiag(m_1, m_2, ..., m_n).
+  void AssignMassMatrix(int i, const Eigen::MatrixXd& A) {
+    mass_matrix_position_.push_back(i);
+    mass_matrix_.push_back(A);
+  }
+
+  int NumRows() { return jacobian_row_data_.at(0).rows(); }
+
+  // Copies in J_i and allocates memory for temporaries.
+  void Initialize(const std::vector<Eigen::MatrixXd>& jacobian_row);
+
+ private:
+  std::vector<Eigen::MatrixXd> jacobian_row_data_;
+  std::vector<int> mass_matrix_position_;
+  std::vector<Eigen::MatrixXd> mass_matrix_;
+  std::vector<Eigen::MatrixXd> temporaries_;
+  Eigen::VectorXd workspace_memory_;
+  const std::vector<Eigen::MatrixXd>* weight_matrix_;
+  int weight_start_ = 0;
+  int weight_end_ = 0;
+};
+
 void SuperNodalSolver::CliqueAssembler::SetDenseData() {
-#ifndef NDEBUG
   if (!weight_matrix_) {
     throw std::runtime_error("Weight matrix not set.");
   }
   if (mass_matrix_position_.size() != mass_matrix_.size()) {
     throw std::runtime_error("Failed to add mass matrix.");
   }
-#endif
 
-  SumOverWeightedMatrixBlocks(row_data_, *weight_matrix_, weight_start_,
-                              weight_end_, &schur_complement_data.G,
-                              &temporaries_);
+  Compute_Ji_transpose_Gi_Ji(jacobian_row_data_, *weight_matrix_, weight_start_,
+                             weight_end_, &schur_complement_data.G,
+                             &temporaries_);
   int i = 0;
-  for (auto& pos : mass_matrix_position_) {
+  for (const auto& pos : mass_matrix_position_) {
     schur_complement_data.G.block(pos, pos, mass_matrix_.at(i).rows(),
                                   mass_matrix_.at(i).cols()) +=
         mass_matrix_.at(i);
-    i++;
+    ++i;
   }
 }
 
@@ -262,22 +191,57 @@ void SortTheCliques(std::vector<std::vector<int>>* path) {
   }
 }
 
+// The constructor is defined in the source so we can use an incomplete
+// defintion when storing unique pointers of CliqueAssembler within a
+// std::vector.
+SuperNodalSolver::~SuperNodalSolver() {}
+
+// Helper struct for assembling the input to the
+// conex supernodal solver. The variable "cliques"
+// contains the nodes of a "supernodal elimination tree,"
+// also called a "clique tree" or "junction tree". The variables "supernodes"
+// and "separators" provide a partition of each node and satisfy
+// cliques.at(i) = Union(separators.at(i), supernodes.at(i)).
+// The variable "order" and "supernodes" together define
+// the elimination ordering:
+//
+//  elimination_order = [ supernodes.at(order(0)), supernodes.at(order(1)),
+//  ...., supernodes.at(order.back()) ].
+//
+// The variable "order" can also be interpreted as a concatenation
+// of paths in the supernodal elimination tree.
+//
+// See page 290 of Chordal Graphs and Semidefinite Optimization
+// by Vandenberghe and Andersen.
+struct SolverData {
+  std::vector<std::vector<int>> cliques;
+  int num_vars;
+  std::vector<int> order;
+  std::vector<std::vector<int>> supernodes;
+  std::vector<std::vector<int>> separators;
+};
+
+struct SparsityData {
+  SolverData data;
+  // Expands the "block" cliques from SolverData into
+  // actual cliques of scalar variables.
+  std::vector<std::vector<int>> variable_cliques;
+};
+
 SparsityData GetEliminationOrdering(
     int num_jacobian_row_blocks,
     const std::vector<BlockMatrixTriplet>& jacobian_blocks) {
-  using std::vector;
   SparsityData clique_data;
-  auto& data = clique_data.data;
+  SolverData& data = clique_data.data;
 
   size_t n = num_jacobian_row_blocks;
   vector<int> order(n);
   vector<vector<int>> supernodes(n);
   vector<vector<int>> separators(n);
   vector<vector<int>> cliques(n);
-  clique_data.cliques_assembler.resize(n);
+  clique_data.variable_cliques.resize(n);
 
   vector<int> column_block_sizes(jacobian_blocks.size());
-  RootedTree tree(n);
 
   int num_column_blocks = 0;
   for (const auto& b : jacobian_blocks) {
@@ -298,36 +262,57 @@ SparsityData GetEliminationOrdering(
     }
   }
 
-  GetCliqueEliminationOrder(cliques, largest_clique /*root*/, &order,
-                            &supernodes, &separators, &tree);
+  // Computes new set of cliques and clique order such that the "Running
+  // Intersection Property" holds. The new cliques are the input cliques with
+  // added variables that correspond to fill-in in the Cholesky factorization.
+  // The new cliques are stored stored implicitly as the union
+  // of separators and supernodes:
+  //
+  //   new_clique = Union(supernodes.at(i), separators.at(i))
+  //
+  // They satisfy the running intersection property:
+  //
+  //   new_clique.at(order.at(i)) \cap  new_clique.at(order.at(j))
+  //            \supseteq
+  //   new_clique.at(order.at(i)) \cap  new_clique.at(order.at(k))
+  //
+  // for all i < j < k.
+  //
+  // Reference: page 268 of Chordal Graphs and Semidefinite Optimization
+  // by Vandenberghe and Andersen.
+  conex::PickCliqueOrder(cliques, largest_clique, &order, &supernodes,
+                         &separators);
 
-  FillIn(tree, num_column_blocks, order, &supernodes, &separators);
-
+  // The cliques correspond to block columns of the Jacobian.
+  // We now expand them into scalar variables for use by the
+  // supernodal solver (which is unaware of the block-structure).
   auto offsets = CumulativeSum(column_block_sizes, num_column_blocks);
   vector<vector<int>> supernodes_full(order.size());
   vector<vector<int>> separators_full(order.size());
-  vector<vector<int>> cliques_full(order.size());
+  vector<vector<int>> cliques_full_with_fill_in(order.size());
   for (size_t i = 0; i < order.size(); i++) {
     for (auto s : supernodes.at(i)) {
       for (int cnt = 0; cnt < column_block_sizes.at(s); cnt++) {
         supernodes_full.at(i).push_back(offsets.at(s) + cnt);
-        cliques_full.at(i).push_back(offsets.at(s) + cnt);
+        cliques_full_with_fill_in.at(i).push_back(offsets.at(s) + cnt);
       }
     }
     for (auto s : separators.at(i)) {
       for (int cnt = 0; cnt < column_block_sizes.at(s); cnt++) {
         separators_full.at(i).push_back(offsets.at(s) + cnt);
-        cliques_full.at(i).push_back(offsets.at(s) + cnt);
+        cliques_full_with_fill_in.at(i).push_back(offsets.at(s) + cnt);
       }
     }
+    // Expand the original cliques (without fill-in) into
+    // scalar variables.
     for (auto s : cliques.at(i)) {
       for (int cnt = 0; cnt < column_block_sizes.at(s); cnt++) {
-        clique_data.cliques_assembler.at(i).push_back(offsets.at(s) + cnt);
+        clique_data.variable_cliques.at(i).push_back(offsets.at(s) + cnt);
       }
     }
   }
 
-  data.cliques = cliques_full;
+  data.cliques = cliques_full_with_fill_in;
   SortTheCliques(&data.cliques);
 
   data.num_vars = offsets.at(num_column_blocks);
@@ -339,132 +324,151 @@ SparsityData GetEliminationOrdering(
 
 void SuperNodalSolver::Initialize(
     const vector<vector<int>>& cliques,
-    const vector<vector<Eigen::MatrixXd>>& row_data) {
+    const vector<vector<Eigen::MatrixXd>>& jacobian_row_data,
+    const std::vector<Eigen::MatrixXd>& mass_matrices) {
   int i = 0;
-  clique_assemblers_.resize(row_data.size());
-  for (auto& c : row_data) {
-    jacobian_assemblers_.at(i).SetMatrixBlocks(c);
-    clique_assemblers_.at(i) = &jacobian_assemblers_.at(i);
+  clique_assemblers_ptrs_.resize(jacobian_row_data.size());
+  for (auto& c : jacobian_row_data) {
+    owned_clique_assemblers_.at(i) = std::make_unique<CliqueAssembler>();
+    owned_clique_assemblers_.at(i)->Initialize(c);
+    clique_assemblers_ptrs_.at(i) = owned_clique_assemblers_.at(i).get();
     i++;
   }
 
-  for (auto& c : mass_matrices_) {
-    auto position = FindPositionInClique(c.second.at(0), cliques);
-    jacobian_assemblers_.at(position.first)
-        .AssignMassMatrix(position.second, c.first);
+  auto mass_matrix_starting_columns =
+      GetMassMatrixStartingColumn(mass_matrices);
+  int cnt = 0;
+  for (const auto& c : mass_matrix_starting_columns) {
+    auto position = FindPositionInClique(c, cliques);
+    owned_clique_assemblers_.at(position.first)
+        ->AssignMassMatrix(position.second, mass_matrices.at(cnt));
+    ++cnt;
   }
 
-  solver_.Bind(clique_assemblers_);
-}
-
-std::vector<JacobianRowData> ConvertRow(
-    const std::vector<MatrixBlocks>& row_data) {
-  std::vector<JacobianRowData> y(row_data.size());
-  int i = 0;
-  for (auto& ri : row_data) {
-    for (auto& rii : ri) {
-      y.at(i).emplace_back(rii.first, rii.second.at(0));
-    }
-    i++;
-  }
-  return y;
-}
-
-SuperNodalSolver::SuperNodalSolver(const MatrixBlocks& mass_matrix,
-                                   const std::vector<MatrixBlocks>& row_data)
-    : mass_matrices_(mass_matrix),
-      cliques_(GetAllCliques(row_data)),
-      solver_(
-          cliques_,
-          GetEmptySet(cliques_.size()) /*No negative semidefinite sub-block*/),
-      jacobian_assemblers_(row_data.size()) {
-  Initialize(cliques_, GetRowData(row_data));
+  solver_->Bind(clique_assemblers_ptrs_);
 }
 
 SuperNodalSolver::SuperNodalSolver(
     int num_jacobian_row_blocks,
     const std::vector<BlockMatrixTriplet>& jacobian_blocks,
     const std::vector<Eigen::MatrixXd>& mass_matrices)
-    : mass_matrices_(GetMassMatrix(mass_matrices)),
-      clique_data_(
-          GetEliminationOrdering(num_jacobian_row_blocks, jacobian_blocks)),
-      solver_(clique_data_.cliques_assembler, clique_data_.data.num_vars,
-              clique_data_.data.order, clique_data_.data.supernodes,
-              clique_data_.data.separators),
-      jacobian_assemblers_(num_jacobian_row_blocks) {
-  Initialize(clique_data_.cliques_assembler,
-             GetRowData(num_jacobian_row_blocks, jacobian_blocks));
+    : owned_clique_assemblers_(num_jacobian_row_blocks) {
+  SparsityData clique_data_ =
+      GetEliminationOrdering(num_jacobian_row_blocks, jacobian_blocks);
+
+  solver_ = std::make_unique<::conex::Solver>(
+      clique_data_.variable_cliques, clique_data_.data.num_vars,
+      clique_data_.data.order, clique_data_.data.supernodes,
+      clique_data_.data.separators);
+
+  Initialize(clique_data_.variable_cliques,
+             GetRowData(num_jacobian_row_blocks, jacobian_blocks),
+             mass_matrices);
 }
 
 void SuperNodalSolver::SetWeightMatrix(
     const std::vector<Eigen::MatrixXd>& weight_matrix) {
-  for (auto& c : jacobian_assemblers_) {
-    c.SetWeightMatrixPointer(&weight_matrix);
+  // We copy these pointers so that SetDenseData (a virtual function override)
+  // can access the weight matrices when solver_->AssembleFromCliques is called
+  // below.  For safety, we replace these pointers with NULL when
+  // solver_->AssembleFromCliques returns.
+  for (auto& c : owned_clique_assemblers_) {
+    c->SetWeightMatrixPointer(&weight_matrix);
   }
 
-  if (!weight_matrix_ready_) {
-    int e_last = -1;
-    for (auto& c : jacobian_assemblers_) {
-      int num_rows = c.NumRows();
-      int s = e_last + 1;
-      int e = s;
-      int num_rows_found = weight_matrix.at(e).rows();
-      while (num_rows_found < num_rows) {
-        e++;
-        num_rows_found += weight_matrix.at(e).rows();
-      }
-      e_last = e;
-      c.SetWeightMatrixIndex(s, e);
-#ifndef NDEBUG
-      if (num_rows_found != num_rows) {
-        throw std::runtime_error("Weight matrix incompatible with Jacobian.");
-      }
-#endif
+  int e_last = -1;
+  bool weight_matrix_incompatible = false;
+  for (auto& c : owned_clique_assemblers_) {
+    int num_rows = c->NumRows();
+    int s = e_last + 1;
+    int e = s;
+    int num_rows_found = weight_matrix.at(e).rows();
+    while (num_rows_found < num_rows) {
+      ++e;
+      num_rows_found += weight_matrix.at(e).rows();
     }
-    weight_matrix_ready_ = true;
+    if (num_rows_found != num_rows) {
+      weight_matrix_incompatible = true;
+    }
+    e_last = e;
+    c->SetWeightMatrixIndex(s, e);
   }
 
-  solver_.AssembleFromCliques(clique_assemblers_);
+  if (!weight_matrix_incompatible) {
+    solver_->AssembleFromCliques(clique_assemblers_ptrs_);
+  }
 
-#ifndef NDEBUG
   // Destroy references to argument weight_matrix.
-  for (auto& c : jacobian_assemblers_) {
-    c.SetWeightMatrixPointer(NULL);
+  for (auto& c : owned_clique_assemblers_) {
+    c->SetWeightMatrixPointer(nullptr);
   }
-#endif
+
+  if (weight_matrix_incompatible) {
+    throw std::runtime_error("Weight matrix incompatible with Jacobian.");
+  }
 
   factorization_ready_ = false;
   matrix_ready_ = true;
 }
 
-void SuperNodalSolver::Factor() {
+bool SuperNodalSolver::Factor() {
   if (!matrix_ready_) {
-    throw std::runtime_error(
-        std::string("Call to Factor() failed: weight matrix not set."));
+    throw std::runtime_error("Call to Factor() failed: weight matrix not set.");
   }
-  solver_.Factor();
-  factorization_ready_ = true;
+  bool success = solver_->Factor();
+  factorization_ready_ = success;
   matrix_ready_ = false;
+  return success;
 }
 
-Eigen::MatrixXd SuperNodalSolver::Solve(const Eigen::VectorXd& b) {
+Eigen::VectorXd SuperNodalSolver::Solve(const Eigen::VectorXd& b) {
   if (!factorization_ready_) {
     throw std::runtime_error(
-        std::string("Call to Solve() failed: factorization not ready."));
+        "Call to Solve() failed: factorization not ready.");
   }
-  MatrixXd y = b;
+  Eigen::VectorXd y = b;
+  // The supernodal solver uses a mapped MatrixXd as input, so we create this
+  // map.
   Eigen::Map<MatrixXd, Eigen::Aligned> ymap(y.data(), b.rows(), 1);
-  solver_.SolveInPlace(&ymap);
+  solver_->SolveInPlace(&ymap);
   return y;
 }
 
 void SuperNodalSolver::SolveInPlace(Eigen::VectorXd* b) {
   if (!factorization_ready_) {
     throw std::runtime_error(
-        std::string("Call to Solve() failed: factorization not ready."));
+        "Call to Solve() failed: factorization not ready.");
   }
   Eigen::Map<MatrixXd, Eigen::Aligned> ymap(b->data(), b->rows(), 1);
-  solver_.SolveInPlace(&ymap);
+  solver_->SolveInPlace(&ymap);
 }
 
-}  // namespace conex
+Eigen::MatrixXd SuperNodalSolver::MakeFullMatrix() {
+  if (!matrix_ready_) {
+    throw std::runtime_error(
+        "Call to MakeFullMatrix() failed: weight matrix not set or matrix has "
+        "been factored in place.");
+  }
+  return solver_->KKTMatrix();
+}
+
+void SuperNodalSolver::CliqueAssembler::Initialize(
+    const std::vector<Eigen::MatrixXd>& r) {
+  jacobian_row_data_ = r;
+  temporaries_.resize(r.size());
+  int num_vars = 0;
+  for (size_t j = 0; j < jacobian_row_data_.size(); j++) {
+    num_vars += r.at(j).cols();
+    temporaries_.at(j).resize(r.at(j).rows(), r.at(j).cols());
+  }
+
+  LinearKKTAssemblerBase::SetNumberOfVariables(num_vars);
+  const int size = SizeOf(LinearKKTAssemblerBase::schur_complement_data);
+  workspace_memory_.resize(size);
+  LinearKKTAssemblerBase::schur_complement_data.InitializeWorkspace(
+      workspace_memory_.data());
+}
+}  // namespace internal
+}  // namespace contact_solvers
+}  // namespace multibody
+}  // namespace drake

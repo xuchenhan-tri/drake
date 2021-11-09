@@ -187,7 +187,7 @@ ContactSolverStatus UnconstrainedPrimalSolver<double>::DoSolveWithGuess(
   } else {
     // Super nodal solver is constructed once per time-step to reuse structure
     // of M and J.
-    std::unique_ptr<conex::SuperNodalSolver> solver;    
+    std::unique_ptr<SuperNodalSolver> solver;    
 
     double alpha = 1.0;
     int num_ls_iters = 0;  // Count line-search iterations.
@@ -232,7 +232,7 @@ ContactSolverStatus UnconstrainedPrimalSolver<double>::DoSolveWithGuess(
         // That is, if converged, avoid this work.
         if (parameters_.use_supernodal_solver && k == 0) {
           Timer timer;
-          solver = std::make_unique<conex::SuperNodalSolver>(
+          solver = std::make_unique<SuperNodalSolver>(
               data_.Jblock.block_rows(), data_.Jblock.get_blocks(), data_.Mt);
           stats_.supernodal_construction_time = timer.Elapsed();
         }
@@ -328,7 +328,7 @@ ContactSolverStatus UnconstrainedPrimalSolver<double>::DoSolveWithGuess(
 
       // Significantly faster than the SVD method, and verified it is accurate
       // enough.
-      last_metrics.cond_number = 1.0 / solver->FullMatrix().ldlt().rcond();
+      last_metrics.cond_number = 1.0 / solver->MakeFullMatrix().ldlt().rcond();
     }
 
     if (!parameters_.log_stats) stats_.iteration_metrics.push_back(metrics);
@@ -890,7 +890,7 @@ UnconstrainedPrimalSolver<T>::CalcIterationMetrics(const State& s,
 
 template <typename T>
 void UnconstrainedPrimalSolver<T>::CallSupernodalSolver(
-    const State& s, VectorX<T>* dv, conex::SuperNodalSolver* solver) {
+    const State& s, VectorX<T>* dv, SuperNodalSolver* solver) {
   Timer local_timer;
 
   auto& cache = s.mutable_cache();
@@ -907,7 +907,7 @@ void UnconstrainedPrimalSolver<T>::CallSupernodalSolver(
 
   // Build full matrix for debugging.
   if (parameters_.compare_with_dense) {
-    const MatrixXd H = solver->FullMatrix();
+    const MatrixXd H = solver->MakeFullMatrix();
     PRINT_VAR((cache.ell_hessian_v - H).norm());
     if ((cache.ell_hessian_v - H).norm() > 1.0e-2) {
       throw std::runtime_error(
