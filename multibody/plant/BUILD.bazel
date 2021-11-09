@@ -19,7 +19,6 @@ drake_cc_package_library(
     deps = [
         ":calc_distance_and_time_derivative",
         ":contact_jacobians",
-        ":contact_permutation",
         ":contact_results",
         ":contact_results_to_meshcat",
         ":contact_results_to_meshcat_params",
@@ -329,15 +328,6 @@ drake_cc_library(
     hdrs = ["propeller.h"],
     deps = [
         ":multibody_plant_core",
-    ],
-)
-
-drake_cc_library(
-    name = "contact_permutation",
-    srcs = ["contact_permutation.cc"],
-    hdrs = ["contact_permutation.h"],
-    deps = [
-        "//multibody/tree:multibody_tree_topology",
     ],
 )
 
