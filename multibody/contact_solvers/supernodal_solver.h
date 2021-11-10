@@ -12,7 +12,7 @@
 // Forward declaration to avoid the inclusion of conex's headers within a Drake
 // header.
 namespace conex {
-class Solver;
+class SupernodalKKTSolver;
 }
 
 namespace drake {
@@ -82,6 +82,8 @@ class SuperNodalSolver {
   //    num_cols(J1) = \sum^n_{i=1} num_cols (M_i),
   //    num_cols(J3) = \sum^{m}_{i=n+1} num_cols (M_i)
   //
+  //  where m = M.size().
+  //
   //  If this condition fails, an exception is thrown.
   SuperNodalSolver(int num_jacobian_row_blocks,
                    const std::vector<BlockMatrixTriplet>& jacobian_blocks,
@@ -98,7 +100,7 @@ class SuperNodalSolver {
   // Returns the M + J^T G J as a dense matrix (for debugging).
   // Throws if Factor() has been called (since factorization
   // is done in place. Throws if SetWeightMatrix has not been called.
-  Eigen::MatrixXd MakeFullMatrix();
+  Eigen::MatrixXd MakeFullMatrix() const;
 
   // Computes the supernodal LLT factorization. Returns true if factorization
   // succeeds, otherwise returns false.  Failure is triggered by an internal
@@ -111,11 +113,11 @@ class SuperNodalSolver {
 
   // Solves the system H⋅x = b and returns x.
   // Throws if Factor() has not been called.
-  Eigen::VectorXd Solve(const Eigen::VectorXd& b);
+  Eigen::VectorXd Solve(const Eigen::VectorXd& b) const;
 
   // Solves the system H⋅x = b and writes the result in b.
   // Throws if Factor() has not been called.
-  void SolveInPlace(Eigen::VectorXd* b);
+  void SolveInPlace(Eigen::VectorXd* b) const;
 
  private:
   // This class is responsible for filling a dense matrix of the form
@@ -123,16 +125,15 @@ class SuperNodalSolver {
   // sub_matrix(M) is specified by AssignMassMatrix.
   class CliqueAssembler;
 
-  using MatrixBlock = std::pair<Eigen::MatrixXd, std::vector<int>>;
-
-  void Initialize(
-      const std::vector<std::vector<int>>& cliques,
-      const std::vector<std::vector<Eigen::MatrixXd>>& jacobian_row_data,
-      const std::vector<Eigen::MatrixXd>& mass_matrices);
+  void Initialize(const std::vector<std::vector<int>>& cliques,
+                  int num_jacobian_row_blocks,
+                  const std::vector<BlockMatrixTriplet>& jacobian_blocks,
+                  const std::vector<Eigen::MatrixXd>& mass_matrices);
 
   bool factorization_ready_ = false;
   bool matrix_ready_ = false;
-  std::unique_ptr<::conex::Solver> solver_;
+
+  std::unique_ptr<::conex::SupernodalKKTSolver> solver_;
   // N.B. This array stores pointers to clique assemblers owned by
   // owned_clique_assemblers_.
   std::vector<CliqueAssembler*> clique_assemblers_ptrs_;
