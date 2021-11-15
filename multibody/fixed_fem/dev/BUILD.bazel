@@ -25,6 +25,29 @@ drake_cc_library(
     ],
 )
 
+
+COPTS = [
+    "-O3",
+    "-ffast-math",
+    "-g",
+    "-fno-omit-frame-pointer",
+]
+drake_cc_library(
+    name = "block_sparse_solver",
+    srcs = [
+        "block_sparse_solver.cc",
+    ],
+    hdrs = [
+        "block_sparse_solver.h",
+    ],
+    copts = COPTS,
+    deps = [
+        "//common:essential",
+        "//multibody/contact_solvers:supernodal_solver",
+        "@conex//conex:supernodal_solver",
+    ],
+)
+
 drake_cc_library(
     name = "collision_objects",
     srcs = [
@@ -185,6 +208,17 @@ drake_cc_library(
 )
 
 drake_cc_library(
+    name = "parse_vtk",
+    hdrs = [
+        "parse_vtk.h",
+    ],
+    deps = [
+        "//common:essential",
+        "//geometry/proximity:volume_mesh",
+    ],
+)
+
+drake_cc_library(
     name = "deformable_rigid_manager",
     srcs = [
         "deformable_rigid_manager.cc",
@@ -201,6 +235,7 @@ drake_cc_library(
         ":inverse_spd_operator",
         ":matrix_utilities",
         ":schur_complement",
+        ":symmetric_block_sparse_matrix",
         ":velocity_newmark_scheme",
         "//common:essential",
         "//multibody/contact_solvers:block_sparse_linear_operator",
@@ -464,6 +499,7 @@ drake_cc_library(
         "mesh_utilities.h",
     ],
     deps = [
+        ":parse_vtk",
         ":reference_deformable_geometry",
         "//common:default_scalars",
         "//common:essential",
@@ -522,6 +558,7 @@ drake_cc_binary(
         "run_simple_gripper.cc",
     ],
     data = [
+        "ma_cube.vtk",
         "//examples/simple_gripper:simple_gripper_models",
     ],
     deps = [
@@ -532,13 +569,35 @@ drake_cc_binary(
         "//common:add_text_logging_gflags",
         "//geometry:drake_visualizer",
         "//math:geometric_transform",
+        "//multibody/contact_solvers:mp_convex_solver",
+        "//multibody/contact_solvers:mp_primal_solver",
         "//multibody/contact_solvers:pgs_solver",
+        "//multibody/contact_solvers:unconstrained_primal_solver",
         "//multibody/parsing:parser",
         "//systems/analysis:simulator_gflags",
         "//systems/framework:diagram_builder",
         "//systems/primitives:adder",
         "//systems/primitives:constant_vector_source",
         "//systems/primitives:sine",
+    ],
+)
+
+drake_cc_binary(
+    name = "benchmark_matrix_assembly",
+    srcs = [
+        "benchmark_matrix_assembly.cc",
+    ],
+    data = [
+        "ma_cube.vtk",
+    ],
+    deps = [
+        ":block_sparse_solver",
+        ":mesh_utilities",
+        ":parse_vtk",
+        ":symmetric_block_sparse_matrix",
+        ":symmetric_block_sparse_matrix_impl",
+        "//common:add_text_logging_gflags",
+        "//common:find_resource",
     ],
 )
 
@@ -551,6 +610,35 @@ drake_cc_library(
         "schur_complement.h",
     ],
     deps = [
+        "//common:default_scalars",
+        "//common:essential",
+    ],
+)
+
+drake_cc_library(
+    name = "symmetric_block_sparse_matrix",
+    srcs = [
+        "symmetric_block_sparse_matrix.cc",
+    ],
+    hdrs = [
+        "symmetric_block_sparse_matrix.h",
+    ],
+    deps = [
+        "//common:default_scalars",
+        "//common:essential",
+    ],
+)
+
+drake_cc_library(
+    name = "symmetric_block_sparse_matrix_impl",
+    srcs = [
+        "symmetric_block_sparse_matrix_impl.cc",
+    ],
+    hdrs = [
+        "symmetric_block_sparse_matrix_impl.h",
+    ],
+    deps = [
+        ":symmetric_block_sparse_matrix",
         "//common:default_scalars",
         "//common:essential",
     ],
@@ -890,6 +978,15 @@ drake_cc_googletest(
     name = "schur_complement_test",
     deps = [
         ":schur_complement",
+        "//common/test_utilities:eigen_matrix_compare",
+    ],
+)
+
+drake_cc_googletest(
+    name = "symmetric_block_sparse_matrix_test",
+    deps = [
+        ":symmetric_block_sparse_matrix",
+        ":symmetric_block_sparse_matrix_impl",
         "//common/test_utilities:eigen_matrix_compare",
     ],
 )

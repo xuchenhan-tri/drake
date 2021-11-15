@@ -1,18 +1,8 @@
-/** @file
-
+/**
 A demo to showcase integration of deformable solver and the contact solver.
 
-In this demo, a force-controlled gripper with two prismatic joints (one that
-controls the translation of the gripper and the other that controls one of the
-fingers) grasps a deformable box with friction and squeezes it in a sinusoidal
-motion. It is expected that the contact in stiction between the gripper and the
-deformable box should render the whole system as, essentially, one body. To
-verify that expectation, we apply a force to the gripper countering the effect
-of gravity on the whole system (instead of anchoring the gripper) to provide
-additional proof that the contact solver is working properly.
-
-This demo can only be run in discrete mode. To run the demo. First ensure that
-you have the visualizer and the demo itself built:
+To run the demo. First ensure that you have the visualizer and the demo itself
+built:
 
 ```
 bazel build //tools:drake_visualizer
@@ -37,7 +27,10 @@ bazel-bin/multibody/fixed_fem/dev/run_simple_gripper
 #include "drake/geometry/drake_visualizer.h"
 #include "drake/geometry/proximity_properties.h"
 #include "drake/geometry/scene_graph.h"
+#include "drake/multibody/contact_solvers/mp_convex_solver.h"
+#include "drake/multibody/contact_solvers/mp_primal_solver.h"
 #include "drake/multibody/contact_solvers/pgs_solver.h"
+#include "drake/multibody/contact_solvers/unconstrained_primal_solver.h"
 #include "drake/multibody/fixed_fem/dev/deformable_body_config.h"
 #include "drake/multibody/fixed_fem/dev/deformable_model.h"
 #include "drake/multibody/fixed_fem/dev/deformable_rigid_manager.h"
@@ -53,32 +46,42 @@ bazel-bin/multibody/fixed_fem/dev/run_simple_gripper
 #include "drake/systems/primitives/constant_vector_source.h"
 #include "drake/systems/primitives/sine.h"
 
-DEFINE_double(simulation_time, 10.0, "Desired duration of the simulation [s].");
-DEFINE_double(dt, 5.0e-3,
-              "Discrete time step for the system [s]. Must be "
+DEFINE_double(simulation_time, 10.0,
+              "Desired duration of the simulation in seconds.");
+DEFINE_double(dt, 0.01,
+              "Discrete time step for the system, with unit s. Must be "
               "positive.");
-DEFINE_double(E, 1e4, "Young's modulus of the deformable objects [Pa].");
-DEFINE_double(nu, 0.4, "Poisson ratio of the deformable objects, unitless.");
-DEFINE_double(density, 1e3, "Mass density of the deformable objects [kg/m³].");
-DEFINE_double(
-    mass_damping, 0.001,
-    "Mass damping coefficient [1/s]. The damping ratio contributed by this "
-    "coefficient is inversely proportional to the frequency of the motion. "
-    "Note that mass damping damps out rigid body motion and thus this "
-    "coefficient should be kept small.");
-DEFINE_double(
-    stiffness_damping, 0.002,
-    "Stiffness damping coefficient [s]. The damping ratio contributed by "
-    "this coefficient is proportional to the frequency of the motion.");
+DEFINE_double(E, 1e4,
+              "Young's modulus of the deformable objects, with unit Pa");
+DEFINE_double(nu, 0.4, "Poisson ratio of the deformable objects, unitless");
+DEFINE_double(density, 1e3,
+              "Mass density of the deformable objects, with unit kg/m³");
+DEFINE_double(mass_damping, 0.001,
+              "Mass damping coefficient. The damping ratio contributed by this "
+              "coefficient is inversely proportional to the frequency of the "
+              "motion. Note that mass damping damps out rigid body "
+              "motion and thus this coefficient should be kept small. ");
+DEFINE_double(stiffness_damping, 0.002,
+              "Stiffness damping coefficient. The damping ratio contributed by "
+              "this coefficient is proportional to the frequency of the "
+              "motion.");
+DEFINE_double(contact_stiffness, 1e3, "Contact stiffness");
+DEFINE_double(contact_dissipation, 0.01, "Contact dissipation time scale");
 DEFINE_double(min_gripper_force, 2,
               "The minimum force in the harmonic oscillation carried out by "
-              "the gripper [N]. Must be positive.");
-DEFINE_double(max_gripper_force, 17,
+              "the gripper, with unit of N. Must be positive. ");
+DEFINE_double(max_gripper_force, 13,
               "The maximum force in the harmonic oscillation carried out by "
-              "the gripper [N]. Must be greater than `min_gripper_force`.");
+              "the gripper, with unit of N. Must be greater than "
+              "`min_gripper_force`. ");
 DEFINE_double(grip_frequency, 2.0,
               "The frequency of the harmonic oscillation forces carried out "
-              "by the gripper [Hz].");
+              "by the gripper. [Hz].");
+DEFINE_int32(subdivision, 3, "Number of times to subdivide the cube.");
+DEFINE_string(solver, "primal", "Underlying solver. 'pgs' or 'primal'");
+
+using drake::multibody::contact_solvers::internal::PgsSolver;
+using drake::multibody::contact_solvers::internal::UnconstrainedPrimalSolver;
 
 namespace drake {
 namespace multibody {
@@ -86,17 +89,14 @@ namespace fem {
 
 int DoMain() {
   systems::DiagramBuilder<double> builder;
-  DRAKE_DEMAND(FLAGS_dt > 0);
   auto [plant, scene_graph] =
       multibody::AddMultibodyPlantSceneGraph(&builder, FLAGS_dt);
 
   /* Side length of the deformable box. */
   constexpr double kL = 0.06;
-  const geometry::Box box(kL, kL, kL);
 
-  /* Define the deformable box's geometry, physical properties, and position.
-   The position has been pre-computed so that the box fits snugly in the
-   gripper. */
+  /* Set up the geometry and the physical properties of the deformable box.  */
+  /* Set initial position of the box so that it fits snuggly in the gripper. */
   const math::RigidTransform<double> p_WB(Vector3<double>(0.03, 0.013, 0.06));
   DeformableBodyConfig<double> box_config;
   box_config.set_youngs_modulus(FLAGS_E);
@@ -105,22 +105,24 @@ int DoMain() {
   box_config.set_stiffness_damping_coefficient(FLAGS_stiffness_damping);
   box_config.set_mass_density(FLAGS_density);
   box_config.set_material_model(MaterialModel::kCorotated);
-  constexpr int kNumSubdivision =
-      3;  // Number of blocks to divide the box into.
+
+  const geometry::Box box(kL, kL, kL);
   const internal::ReferenceDeformableGeometry<double> box_geometry =
-      MakeDiamondCubicBoxDeformableGeometry<double>(box, kL / kNumSubdivision,
+      MakeDiamondCubicBoxDeformableGeometry<double>(box, kL / FLAGS_subdivision,
                                                     p_WB);
 
   /* Set up proximity properties for the deformable box. */
   const CoulombFriction<double> surface_friction(1.0, 1.0);
   geometry::ProximityProperties proximity_props;
-  geometry::AddContactMaterial({}, {}, surface_friction, &proximity_props);
+  geometry::AddContactMaterial(FLAGS_contact_dissipation,
+                               FLAGS_contact_stiffness, surface_friction,
+                               &proximity_props);
 
   /* Register the deformable box in the DeformableModel. */
   auto deformable_model = std::make_unique<DeformableModel<double>>(&plant);
   deformable_model->RegisterDeformableBody(box_geometry, "Corotated",
                                            box_config, proximity_props);
-  const DeformableModel<double>* deformable_model_raw = deformable_model.get();
+  const DeformableModel<double>* deformable_model_ptr = deformable_model.get();
   plant.AddPhysicalModel(std::move(deformable_model));
 
   /* Set up a simple gripper. */
@@ -144,22 +146,19 @@ int DoMain() {
   /* All rigid and deformable models have been added. Finalize the plant. */
   plant.Finalize();
 
-  /* Set up an update manager to handle the discrete updates. */
+  /* Set up a update manager to handle the discrete updates. */
+
   auto deformable_rigid_manager =
       std::make_unique<DeformableRigidManager<double>>(
-          std::make_unique<contact_solvers::internal::PgsSolver<double>>());
-  DeformableRigidManager<double>* deformable_rigid_manager_raw =
+          std::make_unique<UnconstrainedPrimalSolver<double>>());
+  if (FLAGS_solver == "pgs") {
+    deformable_rigid_manager->SetContactSolver(
+        std::make_unique<PgsSolver<double>>());
+  }
+  DeformableRigidManager<double>* deformable_rigid_manager_ptr =
       deformable_rigid_manager.get();
   plant.SetDiscreteUpdateManager(std::move(deformable_rigid_manager));
-  deformable_rigid_manager_raw->RegisterCollisionObjects(scene_graph);
-
-  /* We use a force-controlled gripper to
-    1. compensate for gravity of the entire system and verify that the force
-       required to hold the system in place in the z-direction matches
-       expectation, and
-    2. "squeeze" the deformable box in the y-direction to show grasping with
-       friction as well as deformation of deformable objects under external
-       forces. */
+  deformable_rigid_manager_ptr->RegisterCollisionObjects(scene_graph);
 
   /* The total mass of the system =
      The mass of the gripper + the mass of the deformable box. */
@@ -201,12 +200,12 @@ int DoMain() {
   /* Set up visualizers. */
   std::vector<geometry::VolumeMesh<double>> reference_meshes;
   for (const internal::ReferenceDeformableGeometry<double>& geometry :
-       deformable_model_raw->reference_configuration_geometries()) {
+       deformable_model_ptr->reference_configuration_geometries()) {
     reference_meshes.emplace_back(geometry.mesh());
   }
   auto& visualizer = *builder.AddSystem<DeformableVisualizer>(
-      1.0 / 64.0, deformable_model_raw->names(), reference_meshes);
-  builder.Connect(deformable_model_raw->get_vertex_positions_output_port(),
+      1.0 / 60.0, deformable_model_ptr->names(), reference_meshes);
+  builder.Connect(deformable_model_ptr->get_vertex_positions_output_port(),
                   visualizer.get_input_port());
   geometry::DrakeVisualizerd::AddToBuilder(&builder, scene_graph);
 

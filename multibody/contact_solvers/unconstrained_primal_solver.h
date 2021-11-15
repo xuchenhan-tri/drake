@@ -78,7 +78,7 @@ struct UnconstrainedPrimalSolverParameters {
   //  1: Prints problem size and error at convergence.
   //  2: Prints sparsity structure.
   //  3: Prints stats at each iteration.
-  int verbosity_level{1};
+  int verbosity_level{0};
 
   bool log_stats{true};
 
