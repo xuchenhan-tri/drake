@@ -366,6 +366,8 @@ void DeformableRigidManager<T>::CalcTwoWayCoupledContactSolverResults(
   const int nc = contact_data.num_contacts();
 
   results->Resize(nv, nc);
+  if (nc == 0)
+    return;
   /* Alejandro's experiment shows that v0 is no worse than v_star as an initial
    guess in general and is better in steady state. */
   const VectorX<T>& v0 = EvalParticipatingVelocities(context);
