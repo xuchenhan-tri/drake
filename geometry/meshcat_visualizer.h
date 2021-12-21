@@ -119,6 +119,10 @@ class MeshcatVisualizer final : public systems::LeafSystem<T> {
     return this->get_input_port(query_object_input_port_);
   }
 
+  const systems::InputPort<T>& mesh_input_port() const {
+    return this->get_input_port(mesh_input_port_);
+  }
+
   /** Adds a MeshcatVisualizer and connects it to the given SceneGraph's
    QueryObject-valued output port. See
    MeshcatVisualizer::MeshcatVisualizer(MeshcatVisualizer*,
@@ -133,8 +137,7 @@ class MeshcatVisualizer final : public systems::LeafSystem<T> {
   static MeshcatVisualizer<T>& AddToBuilder(
       systems::DiagramBuilder<T>* builder,
       const systems::OutputPort<T>& query_object_port,
-      std::shared_ptr<Meshcat> meshcat,
-      MeshcatVisualizerParams params = {});
+      std::shared_ptr<Meshcat> meshcat, MeshcatVisualizerParams params = {});
 
  private:
   /* MeshcatVisualizer of different scalar types can all access each other's
@@ -159,6 +162,7 @@ class MeshcatVisualizer final : public systems::LeafSystem<T> {
 
   /* The index of this System's QueryObject-valued input port. */
   int query_object_input_port_{};
+  int mesh_input_port_{};
 
   /* Meshcat is mutable because we must send messages (a non-const operation)
    from a const System (e.g. during simulation).  We use shared_ptr instead of

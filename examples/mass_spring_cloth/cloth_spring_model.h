@@ -100,6 +100,9 @@ class ClothSpringModel final : public systems::LeafSystem<T> {
   /** This returns nx * ny. */
   int num_particles() const { return num_particles_; }
 
+  int nx() const { return nx_; }
+  int ny() const { return ny_; }
+
   T h() const { return h_; }
 
   /** For discrete mode only: set the max number of iterations for the Conjugate

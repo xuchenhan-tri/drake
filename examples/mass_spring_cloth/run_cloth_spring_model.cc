@@ -10,6 +10,7 @@
 
 #include "drake/examples/mass_spring_cloth/cloth_spring_model.h"
 #include "drake/examples/mass_spring_cloth/cloth_spring_model_geometry.h"
+#include "drake/examples/mass_spring_cloth/cloth_spring_model_mesh.h"
 #include "drake/geometry/meshcat_visualizer.h"
 #include "drake/geometry/scene_graph.h"
 #include "drake/systems/analysis/simulator_gflags.h"
@@ -37,10 +38,12 @@ int DoMain() {
   auto* cloth_spring_model = builder.AddSystem<ClothSpringModel<double>>(
       FLAGS_nx, FLAGS_ny, FLAGS_h, FLAGS_dt);
   auto* scene_graph = builder.AddSystem<geometry::SceneGraph>();
-  ClothSpringModelGeometry::AddToBuilder(&builder, *cloth_spring_model,
-                                         scene_graph);
-  geometry::MeshcatVisualizerd::AddToBuilder(
+  // ClothSpringModelGeometry::AddToBuilder(&builder, *cloth_spring_model,
+  //                                        scene_graph);
+  auto& meshcat_visualizer = geometry::MeshcatVisualizerd::AddToBuilder(
       &builder, *scene_graph, std::make_shared<geometry::Meshcat>());
+  ClothSpringModelMesh::AddToBuilder(&builder, &meshcat_visualizer,
+                                     *cloth_spring_model);
   auto diagram = builder.Build();
   auto context = diagram->CreateDefaultContext();
   auto simulator =

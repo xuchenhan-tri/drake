@@ -40,6 +40,10 @@ MeshcatVisualizer<T>::MeshcatVisualizer(std::shared_ptr<Meshcat> meshcat,
   query_object_input_port_ =
       this->DeclareAbstractInputPort("query_object", Value<QueryObject<T>>())
           .get_index();
+
+  mesh_input_port_ = this->DeclareAbstractInputPort(
+                             "mesh", Value<TriangleSurfaceMesh<double>>())
+                         .get_index();
 }
 
 template <typename T>
@@ -96,6 +100,13 @@ systems::EventStatus MeshcatVisualizer<T>::UpdateMeshcat(
   }
   SetTransforms(context, query_object);
 
+  if (mesh_input_port().HasValue(context)) {
+    const auto& mesh =
+        mesh_input_port().template Eval<TriangleSurfaceMesh<double>>(context);
+    const std::string path = "mesh";
+    meshcat_->SetObject(path, mesh);
+  }
+
   return systems::EventStatus::Succeeded();
 }
 
@@ -103,12 +114,12 @@ template <typename T>
 void MeshcatVisualizer<T>::SetObjects(
     const SceneGraphInspector<T>& inspector) const {
   // Frames registered previously that are not set again here should be deleted.
-  std::map <FrameId, std::string> frames_to_delete{};
+  std::map<FrameId, std::string> frames_to_delete{};
   dynamic_frames_.swap(frames_to_delete);
 
   // Geometries registered previously that are not set again here should be
   // deleted.
-  std::map <GeometryId, std::string> geometries_to_delete{};
+  std::map<GeometryId, std::string> geometries_to_delete{};
   geometries_.swap(geometries_to_delete);
 
   // TODO(SeanCurtis-TRI): Mimic the full tree structure in SceneGraph.
@@ -139,8 +150,9 @@ void MeshcatVisualizer<T>::SetObjects(
       // TODO(russt): Use the geometry names if/when they are cleaned up.
       const std::string path =
           fmt::format("{}/{}", frame_path, geom_id.get_value());
-      const Rgba rgba = inspector.GetProperties(geom_id, params_.role)
-          ->GetPropertyOrDefault("phong", "diffuse", params_.default_color);
+      const Rgba rgba =
+          inspector.GetProperties(geom_id, params_.role)
+              ->GetPropertyOrDefault("phong", "diffuse", params_.default_color);
 
       meshcat_->SetObject(path, inspector.GetShape(geom_id), rgba);
       meshcat_->SetTransform(path, inspector.GetPoseInFrame(geom_id));

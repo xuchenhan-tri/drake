@@ -172,6 +172,8 @@ class TriangleSurfaceMesh {
 
   //@}
 
+  TriangleSurfaceMesh() = default;
+
   /**
    Constructs a TriangleSurfaceMesh from triangles and vertices.
    @param triangles The triangular triangles.
