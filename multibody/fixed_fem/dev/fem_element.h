@@ -10,27 +10,29 @@
 namespace drake {
 namespace multibody {
 namespace fem {
+namespace internal {
 // TODO(xuchenhan-tri) Document the definition of quantities like "natural
-// dimension". See issue #14475.
-/** %FemElement is the base class for spatially discretized FEM elements.
- It computes quantities such as the residual and the stiffness matrix on a
- single FEM element given the state of the FEM system. These quantities are then
- assembled into their global counterparts by FemModel.
+//  dimension". See issue #14475.
+/* FemElement is the base class for spatially discretized FEM elements for
+ dynamic elasticity problems. It computes quantities such as the residual and
+ the tangent matrix on a single FEM element given the state of the FEM system.
+ These quantities are then assembled into their global counterparts by FemModel.
 
- %FemElement serves as the base class for all FEM elements. Since FEM elements
- are usually evaluated in computationally intensive inner loops of the
- simulation, the overhead caused by virtual methods and heap allocations may be
- significant. Therefore, this class uses CRTP to achieve compile-time
- polymorphism and avoids the overhead of virtual methods and facilitates
- inlining instead. The type information at compile time also helps eliminate all
- heap allocations. Derived FEM elements must inherit from this base class and
- implement the interface this class provides. The derived FEM elements must also
- be accompanied by a corresponding traits class that declares the compile time
- quantities and type declarations that this base class requires.
+ Since FEM elements are usually evaluated in computationally intensive inner
+ loops of the simulation, the overhead caused by virtual methods and heap
+ allocations may be significant. Therefore, this class uses CRTP to achieve
+ compile-time polymorphism and avoids the overhead of virtual methods and
+ facilitates inlining instead. The type information at compile time also helps
+ eliminate all heap allocations. Derived FEM elements must inherit from this
+ base class and implement the interface this class provides. The derived FEM
+ elements must also be accompanied by a corresponding traits class that declares
+ the compile time quantities and type declarations that this base class
+ requires.
 
- %FemElement also comes with per-element, state-dependent data. The data
+ FemElement also comes with per-element, state-dependent data. The data
  specific to the `DerivedElement` should be declared in `DerivedTraits`, along
  with the other responsibilities of `DerivedTraits` detailed below.
+
  @tparam DerivedElement The concrete FEM element that inherits from %FemElement
  through CRTP.
  @tparam DerivedTraits The traits class associated with the DerivedElement. It
@@ -38,38 +40,36 @@ namespace fem {
  state-dependent data used by `DerivedElement`. In particular, the `Data` class
  needs to provide a default constructor. It also needs to provide the following
  compile time constants for the `DerivedElement`: `kNaturalDimension`,
- `kSolutionDimension`, `kSpatialDimension`, the number of quadrature points in a
- single `DerivedElement`, `kNumQuadraturePoints`, the number of nodes associated
- with a single `DerivedElement`, `kNumNodes`, the number of degrees of freedom
- that a single `DerivedElement` possesses, `kNumDofs`, and the order of the ODE
- problem after FEM spatial discretization, `kOdeOrder`. */
+ `kSpatialDimension`, the number of quadrature points in a single
+ `DerivedElement`, `kNumQuadraturePoints`, the number of nodes associated with a
+ single `DerivedElement`, `kNumNodes,` and the number of degrees of
+ freedom that a single `DerivedElement` possesses, `kNumDofs`. */
 template <class DerivedElement, class DerivedTraits>
 class FemElement {
  public:
   using T = typename DerivedTraits::T;
   using Traits = DerivedTraits;
 
-  /** Indices of the nodes of this element within the model. */
+  /* Indices of the nodes of this element within the model. */
   const std::array<NodeIndex, Traits::kNumNodes>& node_indices() const {
     return node_indices_;
   }
 
-  /** The ElementIndex of this element within the model. */
+  /* The ElementIndex of this element within the model. */
   ElementIndex element_index() const { return element_index_; }
 
-  /** Computes the per-element, state-dependent data associated with this
-   `DerivedElement` given the `state`.
-   @pre data != nullptr. */
+  /* Computes the per-element, state-dependent data associated with this
+   `DerivedElement` given the `state`. */
   typename Traits::Data ComputeData(
       const FemState<DerivedElement>& state) const {
     return static_cast<const DerivedElement*>(this)->DoComputeData(state);
   }
 
-  /** Calculates the element residual of this element evaluated at the input
+  /* Calculates the element residual of this element evaluated at the input
    state.
-   @param[in] state    The FEM state at which to evaluate the residual.
-   @param[out] residual    A vector of residual of size `Traits::kNumDofs`. All
-   values in `residual` will be overwritten.
+   @param[in] state      The FEM state at which to evaluate the residual.
+   @param[out] residual  A vector of residual of size `Traits::kNumDofs`. All
+                         values in `residual` will be overwritten.
    @pre residual != nullptr */
   void CalcResidual(const FemState<DerivedElement>& state,
                     EigenPtr<Vector<T, Traits::kNumDofs>> residual) const {
@@ -78,7 +78,7 @@ class FemElement {
     static_cast<const DerivedElement*>(this)->DoCalcResidual(state, residual);
   }
 
-  /** Calculates the stiffness matrix (the derivative, or an approximation
+  /* Calculates the stiffness matrix (the derivative, or an approximation
   thereof, of the residual with respect to the generalized positions) of this
   element given the state.
   @param[in] state    The FEM state at which to evaluate the stiffness matrix.
