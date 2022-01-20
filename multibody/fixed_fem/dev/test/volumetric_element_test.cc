@@ -1,4 +1,4 @@
-#include "drake/multibody/fixed_fem/dev/elasticity_element.h"
+#include "drake/multibody/fixed_fem/dev/volumetric_element.h"
 
 #include <gtest/gtest.h>
 
@@ -13,6 +13,9 @@
 namespace drake {
 namespace multibody {
 namespace fem {
+namespace internal {
+namespace test {
+
 constexpr int kNaturalDimension = 3;
 constexpr int kSpatialDimension = 3;
 constexpr int kQuadratureOrder = 1;
@@ -26,82 +29,27 @@ using IsoparametricElementType =
 using ConstitutiveModelType =
     internal::LinearConstitutiveModel<AutoDiffXd, kNumQuads>;
 
-/* The traits for the DummyElasticityElement. `kOdeOrder` is set to zero to
- avoid states irrelevant to the tests. */
-struct DummyElasticityElementTraits
-    : ElasticityElementTraits<IsoparametricElementType, QuadratureType,
-                              ConstitutiveModelType> {
-  static constexpr int kOdeOrder = 0;
-};
-
-/* A simple ElasticityElement implementation. The calculation methods are
- implemented as returning the values calculated in ElasticityElement. */
-class DummyElasticityElement final
-    : public ElasticityElement<IsoparametricElementType, QuadratureType,
-                               ConstitutiveModelType, DummyElasticityElement,
-                               DummyElasticityElementTraits> {
- public:
-  using Traits = DummyElasticityElementTraits;
-
-  DummyElasticityElement(const DummyElasticityElement&) = delete;
-  DummyElasticityElement(DummyElasticityElement&&) = default;
-  const DummyElasticityElement& operator=(const DummyElasticityElement&) =
-      delete;
-  DummyElasticityElement&& operator=(const DummyElasticityElement&&) = delete;
-  DummyElasticityElement(
-      ElementIndex element_index,
-      const std::array<NodeIndex, Traits::kNumNodes>& node_indices,
-      const ConstitutiveModelType& constitutive_model,
-      const Eigen::Ref<const Eigen::Matrix<T, Traits::kSolutionDimension,
-                                           Traits::kNumNodes>>&
-          reference_positions,
-      const T& density, const Vector<T, Traits::kSpatialDimension>& gravity)
-      : ElasticityElement<IsoparametricElementType, QuadratureType,
-                          ConstitutiveModelType, DummyElasticityElement,
-                          Traits>(element_index, node_indices,
-                                  constitutive_model, reference_positions,
-                                  density, gravity) {}
-
-  /* Calculates the negative elastic force evaluted at `state`. */
-  Vector<T, Traits::kNumDofs> CalcNegativeElasticForce(
-      const FemState<DummyElasticityElement>& state) const {
-    Vector<T, Traits::kNumDofs> neg_force = Vector<T, Traits::kNumDofs>::Zero();
-    AddNegativeElasticForce(state, &neg_force);
-    return neg_force;
-  }
-
-  /* Calculates the negative elastic force derivatives with respect to positions
-   evaluted at `state`. */
-  Eigen::Matrix<T, Traits::kNumDofs, Traits::kNumDofs>
-  CalcNegativeElasticForceDerivative(
-      const FemState<DummyElasticityElement>& state) const {
-    Eigen::Matrix<T, Traits::kNumDofs, Traits::kNumDofs> neg_force_derivative =
-        Eigen::Matrix<T, Traits::kNumDofs, Traits::kNumDofs>::Zero();
-    AddNegativeElasticForceDerivative(state, &neg_force_derivative);
-    return neg_force_derivative;
-  }
-};
-
 class ElasticityElementTest : public ::testing::Test {
  protected:
   using T = AutoDiffXd;
-  using ElementType = DummyElasticityElement;
-  static constexpr int kNumDofs = ElementType::Traits::kNumDofs;
-  static constexpr int kNumNodes = ElementType::Traits::kNumNodes;
+  using ElementType = VolumetricElement<IsoparametricElementType,
+                                        QuadratureType, ConstitutiveModelType>;
+  static constexpr int kNumDofs = ElementType::num_dofs;
+  static constexpr int kNumNodes = ElementType::num_nodes;
   const std::array<NodeIndex, kNumNodes> dummy_node_indices = {
       {NodeIndex(0), NodeIndex(1), NodeIndex(2), NodeIndex(3)}};
   const T kYoungsModulus{1};
   const T kPoissonRatio{0.25};
   const T kDummyDensity{1.23};
-  const Vector3<T> kGravity_W{0, 0, -9.8};
 
   void SetUp() override { SetupElement(); }
 
   void SetupElement() {
     Eigen::Matrix<T, kSpatialDimension, kNumNodes> X = reference_positions();
-    ConstitutiveModelType model(kYoungsModulus, kPoissonRatio);
+    ConstitutiveModelType constitutive_model(kYoungsModulus, kPoissonRatio);
+    DampingModel<T> damping_model(0, 0);
     elements_.emplace_back(kZeroIndex, dummy_node_indices, model, X,
-                           kDummyDensity, kGravity_W);
+                           kDummyDensity);
   }
 
   /* Set up a state so that the element is deformed. */
@@ -133,8 +81,8 @@ class ElasticityElementTest : public ::testing::Test {
     return state;
   }
 
-  /* Set arbitrary reference positions such that the tetrahedron is not
-   inverted. */
+  /* Set arbitrary reference positions with the requirement that the tetrahedron
+   is not inverted. */
   Eigen::Matrix<T, kSpatialDimension, kNumNodes> reference_positions() const {
     Eigen::Matrix<T, kSpatialDimension, kNumNodes> X(kSpatialDimension,
                                                      kNumNodes);
@@ -179,6 +127,7 @@ class ElasticityElementTest : public ::testing::Test {
 };
 
 namespace {
+
 TEST_F(ElasticityElementTest, Constructor) {
   EXPECT_EQ(element().node_indices(), dummy_node_indices);
   EXPECT_EQ(element().element_index(), kZeroIndex);
@@ -326,7 +275,10 @@ TEST_F(ElasticityElementTest, Gravity) {
       mass_matrix * element_gravity_acceleration;
   EXPECT_TRUE(CompareMatrices(expected_gravity_force, gravity_force()));
 }
+
 }  // namespace
+}  // namespace test
+}  // namespace internal
 }  // namespace fem
 }  // namespace multibody
 }  // namespace drake

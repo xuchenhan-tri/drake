@@ -243,7 +243,7 @@ drake_cc_library(
     ],
     deps = [
         ":damping_model",
-        ":elasticity_element",
+        ":volumetric_element",
     ],
 )
 
@@ -272,15 +272,14 @@ drake_cc_library(
 )
 
 drake_cc_library(
-    name = "elasticity_element",
+    name = "volumetric_element",
     hdrs = [
-        "elasticity_element.h",
+        "volumetric_element.h",
     ],
     deps = [
         ":fem_element",
         "//common:essential",
         "//common:unused",
-        "//multibody/fem:constitutive_model",
         "//multibody/fem:isoparametric_element",
         "//multibody/fem:quadrature",
     ],
@@ -292,7 +291,7 @@ drake_cc_library(
         "elasticity_model.h",
     ],
     deps = [
-        ":elasticity_element",
+        ":volumetric_element",
         ":fem_model",
     ],
 )
@@ -314,7 +313,9 @@ drake_cc_library(
         "fem_element.h",
     ],
     deps = [
+        ":damping_model",
         ":fem_state",
+        "//multibody/fem:constitutive_model",
         "//common:essential",
     ],
 )
@@ -591,7 +592,7 @@ drake_cc_library(
         "static_elasticity_element.h",
     ],
     deps = [
-        ":elasticity_element",
+        ":volumetric_element",
     ],
 )
 
@@ -803,9 +804,9 @@ drake_cc_googletest(
 )
 
 drake_cc_googletest(
-    name = "elasticity_element_test",
+    name = "volumetric_element_test",
     deps = [
-        ":elasticity_element",
+        ":volumetric_element",
         ":linear_constitutive_model",
         "//common/test_utilities:eigen_matrix_compare",
         "//math:geometric_transform",

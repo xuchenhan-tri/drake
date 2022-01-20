@@ -342,11 +342,12 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
   /* Builds the element tangent matrix for the element with index
    `element_index` by combining the stiffness matrix, damping matrix, and the
    mass matrix according to the given `weights`.
-   @param[in] state    The FemState to evaluate the residual at.
-   @param[in] weights    The ordered weights to combine stiffness matrix,
-   damping matrix and mass matrix into the tangent matrix.
-   @param[in] element_index    Index of the element whose element tangent matrix
-   is being built. */
+   @param[in] state          The FemState to evaluate the residual at.
+   @param[in] weights        The ordered weights to combine stiffness matrix,
+                             damping matrix and mass matrix into the tangent
+                             matrix.
+   @param[in] element_index  Index of the element whose element tangent matrix
+                             is being built. */
   Eigen::Matrix<T, Element::Traits::kNumDofs, Element::Traits::kNumDofs>
   CalcElementTangentMatrix(const FemState<Element>& state,
                            const Vector3<T>& weights,
@@ -354,21 +355,10 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
     DRAKE_ASSERT(element_index.is_valid() && element_index < num_elements());
     using MatrixType =
         Eigen::Matrix<T, Element::Traits::kNumDofs, Element::Traits::kNumDofs>;
-    MatrixType stiffness_matrix = MatrixType::Zero();
-    elements_[element_index].CalcStiffnessMatrix(state, &stiffness_matrix);
-    if constexpr (FemState<Element>::ode_order() == 0) {
-      return weights[0] * stiffness_matrix;
-    }
-    MatrixType damping_matrix = MatrixType::Zero();
-    elements_[element_index].CalcDampingMatrix(state, &damping_matrix);
-    if constexpr (FemState<Element>::ode_order() == 1) {
-      return weights[0] * stiffness_matrix + weights[1] * damping_matrix;
-    }
-    DRAKE_ASSERT(FemState<Element>::ode_order() == 2);
-    MatrixType mass_matrix = MatrixType::Zero();
-    elements_[element_index].CalcMassMatrix(state, &mass_matrix);
-    return weights[0] * stiffness_matrix + weights[1] * damping_matrix +
-           weights[2] * mass_matrix;
+    MatrixType tangent_matrix = MatrixType::Zero();
+    elements_[element_index].CalcTangentMatrixMatrix(state, weights,
+                                                     &tangent_matrix);
+    return tangent_matrix;
   }
 
   /* Statically cast the given FemStateBase to the FemState compatible
