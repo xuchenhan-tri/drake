@@ -15,6 +15,7 @@ namespace multibody {
 namespace fem {
 namespace internal {
 namespace {
+
 /* Helper function that performs a contraction between a 4th order tensor A
  and two vectors u and v and returns a matrix B. In Einstein notation, the
  contraction is: Bᵢₖ = uⱼ Aᵢⱼₖₗ vₗ. The 4th order tensor A of dimension
@@ -47,6 +48,7 @@ void PerformDoubleTensorContraction(
     }
   }
 }
+
 }  // namespace
 
 /* The traits class for volumetric elasticity FEM element. */
@@ -55,16 +57,16 @@ template <class IsoparametricElementType, class QuadratureType,
 struct VolumetricElementTraits {
   /* Check that template parameters are of the correct types. */
   static_assert(
-      internal::is_isoparametric_element<IsoparametricElementType>::value,
+      is_isoparametric_element<IsoparametricElementType>::value,
       "The IsoparametricElementType template parameter must be a derived "
       "class of IsoparametricElement");
   static_assert(
-      internal::is_quadrature<QuadratureType>::value,
+      is_quadrature<QuadratureType>::value,
       "The QuadratureType template parameter must be a derived class of "
       "Quadrature<T, natural_dimension, num_quadrature_points>, where "
       "`natural_dimension` can be 1, 2 or 3.");
   static_assert(
-      internal::is_constitutive_model<ConstitutiveModelType>::value,
+      is_constitutive_model<ConstitutiveModelType>::value,
       "The ConstitutiveModelType template parameter must be a derived "
       "class of ConstitutiveModel");
   /* Check that the scalar types are compatible. */
@@ -108,6 +110,8 @@ struct VolumetricElementTraits {
    gives the number of degrees of freedom for a single node) times the number of
    nodes. */
   static constexpr int num_dofs = kSpatialDimension * num_nodes;
+  // TODO(xuchenhan-tri): Get rid of this.
+  static constexpr int kOdeOrder = 2;
 
   struct Data {
     typename ConstitutiveModelType::Data deformation_gradient_data;
@@ -132,15 +136,15 @@ struct VolumetricElementTraits {
  @tparam ConstitutiveModelType  The type of constitutive model used in this
                                 VolumetricElement. ConstitutiveModelType must be
                                 derived from ConstitutiveModel.
- @tparam DerivedElement  The concrete FEM element that inherits from
+ @tparam ElementType  The concrete FEM element that inherits from
                          VolumetricElement through CRTP.
- @tparam DerivedTraits   The traits class associated with the DerivedElement. */
+ @tparam DerivedTraits   The traits class associated with the ElementType. */
 template <class IsoparametricElementType, class QuadratureType,
           class ConstitutiveModelType>
 class VolumetricElement
     : public FemElement<
-          VolumeElement<IsoparametricElementType, QuadratureType,
-                        ConstitutiveModelType>,
+          VolumetricElement<IsoparametricElementType, QuadratureType,
+                            ConstitutiveModelType>,
           VolumetricElementTraits<IsoparametricElementType, QuadratureType,
                                   ConstitutiveModelType>> {
  public:
@@ -150,10 +154,11 @@ class VolumetricElement
                                          QuadratureType, ConstitutiveModelType>;
   using Data = typename Traits::Data;
   using T = typename Traits::T;
-  using natural_dimension = Traits::natural_dimension;
-  using num_quadrature_points = Traits::num_quadrature_points;
-  using num_dofs = Traits::num_dofs;
-  using num_nodes = Traits::num_nodes;
+  static constexpr int natural_dimension = Traits::natural_dimension;
+  static constexpr int kSpatialDimension = Traits::kSpatialDimension;
+  static constexpr int num_quadrature_points = Traits::num_quadrature_points;
+  static constexpr int num_dofs = Traits::num_dofs;
+  static constexpr int num_nodes = Traits::num_nodes;
 
   /* Constructs a new VolumetricElement. In that process, precomputes the mass
    matrix and the gravity force acting on the element.
@@ -165,17 +170,17 @@ class VolumetricElement
    @param[in] reference_positions  The positions (in world frame) of the nodes
                                    of this element in the reference
                                    configuration.
-   @param[in] denstiy  The mass density of the element with unit kg/m³.
-   @param[in] gravity  The gravitational acceleration (in world frame) for the
-                       new element with unit m/s².
+   @param[in] denstiy              The mass density of the element with unit
+                                   kg/m³.
+   @param[in] damping_model        The DampingModel to be used for this element.
    @pre element_index must be valid.
    @pre density > 0. */
-  VolumetricElement(
-      ElementIndex element_index,
-      const std::array<NodeIndex, num_nodes>& node_indices,
-      const ConstitutiveModelType& constitutive_model,
-      const Eigen::Ref<const Matrix<T, 3, num_nodes>>& reference_positions,
-      const T& density, const DampingModel<T>& damping_model)
+  VolumetricElement(ElementIndex element_index,
+                    const std::array<NodeIndex, num_nodes>& node_indices,
+                    const ConstitutiveModelType& constitutive_model,
+                    const Eigen::Ref<const Eigen::Matrix<T, 3, num_nodes>>&
+                        reference_positions,
+                    const T& density, const DampingModel<T>& damping_model)
       : FemElement<ElementType, Traits>(element_index, node_indices,
                                         constitutive_model, damping_model),
         density_(density) {
@@ -241,7 +246,7 @@ class VolumetricElement
 
   /* Given the current state, calculates the elastic potential energy (in
    joules) stored in this element. */
-  T CalcElasticEnergy(const FemState<DerivedElement>& state) const {
+  T CalcElasticEnergy(const FemState<ElementType>& state) const {
     T elastic_energy = 0;
     const Data& data = state.element_data(*this);
     for (int q = 0; q < num_quadrature_points; ++q) {
@@ -351,7 +356,7 @@ class VolumetricElement
      We calculate the first term:
      dF/dxᵇⱼ : d²ψ/dF² : dF/dxᵃᵢ = dFₘₙ/dxᵃᵢ dPₘₙ/dFₖₗ dFₖₗ/dxᵇⱼ.  */
     // clang-format on
-    const Data& data = state.element_data(derived_element());
+    const Data& data = state.element_data(*this);
     // The ab-th 3-by-3 block of K.
     Matrix3<T> K_ab;
     for (int q = 0; q < num_quadrature_points; ++q) {
@@ -359,7 +364,7 @@ class VolumetricElement
        Kᵃᵇᵢⱼ = dFₘₙ/dxᵃᵢ dPₘₙ/dFₖₗ dFₖₗ/dxᵇⱼ =  dSᵃ/dXₙ dPᵢₙ/dFⱼₗ dSᵇ/dXₗ. */
       for (int a = 0; a < num_nodes; ++a) {
         for (int b = 0; b < num_nodes; ++b) {
-          PerformDoubleTensorContraction(
+          PerformDoubleTensorContraction<T>(
               data.dPdF[q], dSdX_transpose_[q].col(a),
               dSdX_transpose_[q].col(b) * reference_volume_[q], &K_ab);
           AccumulateMatrixBlock(K_ab, a, b, K);
@@ -410,7 +415,7 @@ class VolumetricElement
   }
 
   /* Implements FemElement::ComputeData(). */
-  Data DoComputeData(const FemState<DerivedElement>& state) const {
+  Data DoComputeData(const FemState<ElementType>& state) const {
     Data data;
     data.deformation_gradient_data.UpdateData(CalcDeformationGradient(state));
     this->constitutive_model().CalcElasticEnergyDensity(
@@ -466,7 +471,7 @@ class VolumetricElement
      volume of the quadrature point. */
     Eigen::Matrix<T, num_nodes, num_quadrature_points> weighted_S(S_mat);
     for (int q = 0; q < num_quadrature_points; ++q) {
-      weighted_S.col(q) *= this->reference_volume()[q];
+      weighted_S.col(q) *= reference_volume_[q];
     }
     /* weighted_SST = weighted_S * Sᵀ. The ij-th entry approximates the integral
      ∫SᵢSⱼ dX */
@@ -514,6 +519,11 @@ class VolumetricElement
    reference positions evaluated at the quadrature points in this element. */
   std::array<Eigen::Matrix<T, 3, num_nodes>, num_quadrature_points>
       dSdX_transpose_;
+  /* The volume evaluated at reference configuration occupied by the
+   quadrature points in this element. To integrate a function f over the
+   reference domain, sum f(q)*reference_volume_[q] over all the quadrature
+   points q in the element. */
+  std::array<T, num_quadrature_points> reference_volume_;
   /* The uniform mass density of the element in the reference configuration with
    unit kg/m³. */
   T density_;
@@ -522,6 +532,8 @@ class VolumetricElement
   /* The diagonal of the lumped mass matrix (sum over each row). */
   Vector<T, num_dofs> lumped_mass_;
 };
+
 }  // namespace internal
 }  // namespace fem
 }  // namespace multibody
+}  // namespace drake

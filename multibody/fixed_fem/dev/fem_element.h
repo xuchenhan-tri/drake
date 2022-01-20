@@ -4,7 +4,7 @@
 #include <string>
 
 #include "drake/common/eigen_types.h"
-#include "drake/multibody/fixed_fem/dev/constitutive_model.h"
+#include "drake/multibody/fem/constitutive_model.h"
 #include "drake/multibody/fixed_fem/dev/damping_model.h"
 #include "drake/multibody/fixed_fem/dev/fem_indexes.h"
 #include "drake/multibody/fixed_fem/dev/fem_state.h"
@@ -13,6 +13,7 @@ namespace drake {
 namespace multibody {
 namespace fem {
 namespace internal {
+
 // TODO(xuchenhan-tri) Document the definition of quantities like "natural
 //  dimension". See issue #14475.
 /* FemElement is the base class for spatially discretized FEM elements for
@@ -44,16 +45,19 @@ namespace internal {
  compile time constants for the `DerivedElement`: the number of quadrature
  points in a single `DerivedElement`, `num_quadrature_points`, the number of
  nodes associated with a single `DerivedElement`, `num_nodes,` and the number of
- degrees of freedom that a single `DerivedElement` possesses, `num_dofs`. */
+ degrees of freedom that a single `DerivedElement` possesses, `num_dofs`. It
+ also needs to provide the following type definitions: the type of the
+ constitutive model the element uses, `ConstitutiveModel`.*/
 template <class DerivedElement, class DerivedTraits>
 class FemElement {
  public:
   using T = typename DerivedTraits::T;
   using Traits = DerivedTraits;
   using Data = typename Traits::Data;
-  using num_dofs = Traits::num_dofs;
-  using num_nodes = Traits::num_nodes;
-  constexpr int kSpatialDimension = 3;
+  using ConstitutiveModel = typename Traits::ConstitutiveModel;
+  static constexpr int num_dofs = Traits::num_dofs;
+  static constexpr int num_nodes = Traits::num_nodes;
+  static constexpr int num_quadrature_points = Traits::num_quadrature_points;
 
   /* Indices of the nodes of this element within the model. */
   const std::array<NodeIndex, num_nodes>& node_indices() const {
@@ -129,7 +133,7 @@ class FemElement {
    `state` scaled by `scale` into the output parameter `external_force`.
    @pre external_force != nullptr. */
   void AddScaledExternalForce(
-      const FemState<ElementType>& state, const T& scale,
+      const FemState<DerivedElement>& state, const T& scale,
       EigenPtr<Vector<T, num_dofs>> external_force) const {
     DRAKE_ASSERT(external_force != nullptr);
     // The gravity force is always accounted for in the external forces.
@@ -140,10 +144,10 @@ class FemElement {
 
   /* Extracts the dofs corresponding to the nodes given by `node_indices` from
    the given `state_dofs`. */
-  static Vector<T, kSpatialDimension * num_nodes> ExtractElementDofs(
+  static Vector<T, 3 * num_nodes> ExtractElementDofs(
       const std::array<NodeIndex, num_nodes>& node_indices,
       const VectorX<T>& state_dofs) {
-    using kDim = kSpatialDimension;
+    constexpr int kDim = 3;
     Vector<T, kDim * num_nodes> element_dofs;
     for (int i = 0; i < num_nodes; ++i) {
       DRAKE_ASSERT((node_indices[i] + 1) * kDim <= state_dofs.size());
@@ -175,8 +179,13 @@ class FemElement {
    @pre element_index is valid.
    @pre Entries in node_indices are valid. */
   FemElement(ElementIndex element_index,
-             const std::array<NodeIndex, num_nodes>& node_indices)
-      : element_index_(element_index), node_indices_(node_indices) {
+             const std::array<NodeIndex, num_nodes>& node_indices,
+             const ConstitutiveModel& constitutive_model,
+             const DampingModel<T>& damping_model)
+      : element_index_(element_index),
+        node_indices_(node_indices),
+        constitutive_model_(constitutive_model),
+        damping_model_(damping_model) {
     DRAKE_ASSERT(element_index.is_valid());
     for (int i = 0; i < num_nodes; ++i) {
       DRAKE_ASSERT(node_indices[i].is_valid());
@@ -248,7 +257,7 @@ class FemElement {
       const FemState<DerivedElement>& state, const T& scale,
       EigenPtr<Vector<T, num_dofs>> external_force) const {}
 
-  /* Adds the gravity force experienced by each node in the element scaled by
+  /* Adds the gravity force acting on each node in the element scaled by
    `scale` into `force`. Derived elements may choose to override this method
    to provide a more efficient implementation for specific elements. */
   void AddScaledGravityForce(const FemState<DerivedElement>& state,
@@ -258,13 +267,13 @@ class FemElement {
     CalcMassMatrix(state, &mass_matrix);
     constexpr int kDim = 3;
     for (int i = 0; i < num_nodes; ++i) {
-      external_force->template segment<kDim>(kDim * i) +=
+      force->template segment<kDim>(kDim * i) +=
           scale * mass_matrix.template middleRows<kDim>(kDim * i) * gravity_;
     }
   }
 
-  const std::array<T, num_quadrature_points>& reference_volume() const {
-    return reference_volume_;
+  const ConstitutiveModel& constitutive_model() const {
+    return constitutive_model_;
   }
 
  private:
@@ -283,18 +292,15 @@ class FemElement {
   std::array<NodeIndex, num_nodes> node_indices_;
   /* The constitutive model that describes the stress-strain relationship
    for this element. */
-  ConstitutiveModelType constitutive_model_;
+  ConstitutiveModel constitutive_model_;
   DampingModel<T> damping_model_;
-  /* The volume evaluated at reference configuration occupied by the
-   quadrature points in this element. To integrate a function f over the
-   reference domain, sum f(q)*reference_volume_[q] over all the quadrature
-   points q in the element. */
-  std::array<T, num_quadrature_points> reference_volume_;
   /* Gravity vector. */
   Vector3<T> gravity_{0, 0, -9.81};
   /* Gravity force on the each node. */
   Vector<T, num_dofs> gravity_force_;
 };
+
 }  // namespace internal
 }  // namespace fem
 }  // namespace multibody
+}  // namespace drake

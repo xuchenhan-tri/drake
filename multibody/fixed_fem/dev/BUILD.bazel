@@ -276,6 +276,9 @@ drake_cc_library(
     hdrs = [
         "volumetric_element.h",
     ],
+    srcs = [
+        "volumetric_element.cc",
+    ],
     deps = [
         ":fem_element",
         "//common:essential",
@@ -806,8 +809,8 @@ drake_cc_googletest(
 drake_cc_googletest(
     name = "volumetric_element_test",
     deps = [
+        ":corotated_model",
         ":volumetric_element",
-        ":linear_constitutive_model",
         "//common/test_utilities:eigen_matrix_compare",
         "//math:geometric_transform",
         "//math:gradient",
