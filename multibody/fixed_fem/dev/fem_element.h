@@ -129,19 +129,6 @@ class FemElement {
     static_cast<const DerivedElement*>(this)->DoCalcMassMatrix(state, M);
   }
 
-  /* Accumulates the total external force exerted on this element at the given
-   `state` scaled by `scale` into the output parameter `external_force`.
-   @pre external_force != nullptr. */
-  void AddScaledExternalForce(
-      const FemState<DerivedElement>& state, const T& scale,
-      EigenPtr<Vector<T, num_dofs>> external_force) const {
-    DRAKE_ASSERT(external_force != nullptr);
-    // The gravity force is always accounted for in the external forces.
-    AddScaledGravityForce(state, scale, external_force);
-    // Add element specific external forces.
-    DoAddScaledExternalForce(state, scale, external_force);
-  }
-
   /* Extracts the dofs corresponding to the nodes given by `node_indices` from
    the given `state_dofs`. */
   static Vector<T, 3 * num_nodes> ExtractElementDofs(
@@ -190,6 +177,19 @@ class FemElement {
     for (int i = 0; i < num_nodes; ++i) {
       DRAKE_ASSERT(node_indices[i].is_valid());
     }
+  }
+
+  /* Accumulates the total external force exerted on this element at the given
+   `state` scaled by `scale` into the output parameter `external_force`.
+   @pre external_force != nullptr. */
+  void AddScaledExternalForce(
+      const FemState<DerivedElement>& state, const T& scale,
+      EigenPtr<Vector<T, num_dofs>> external_force) const {
+    DRAKE_ASSERT(external_force != nullptr);
+    // The gravity force is always accounted for in the external forces.
+    AddScaledGravityForce(state, scale, external_force);
+    // Add element specific external forces.
+    DoAddScaledExternalForce(state, scale, external_force);
   }
 
   /* `DerivedElement` must provide an implementation for `DoComputeData()`.

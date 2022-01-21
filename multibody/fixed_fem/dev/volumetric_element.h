@@ -244,8 +244,8 @@ class VolumetricElement
   const VolumetricElement& operator=(const VolumetricElement&) = delete;
   VolumetricElement&& operator=(const VolumetricElement&&) = delete;
 
-  /* Given the current state, calculates the elastic potential energy (in
-   joules) stored in this element. */
+  /* Calculates the elastic potential energy (in joules) stored in this element
+   at the given `state`. */
   T CalcElasticEnergy(const FemState<ElementType>& state) const {
     T elastic_energy = 0;
     const Data& data = state.element_data(*this);
