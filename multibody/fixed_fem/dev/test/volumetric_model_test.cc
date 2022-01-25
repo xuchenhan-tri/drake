@@ -1,4 +1,4 @@
-#include "drake/multibody/fixed_fem/dev/dynamic_elasticity_model.h"
+#include "drake/multibody/fixed_fem/dev/volumetric_model.h"
 
 #include <gtest/gtest.h>
 
@@ -7,20 +7,19 @@
 #include "drake/math/autodiff_gradient.h"
 #include "drake/multibody/fem/linear_simplex_element.h"
 #include "drake/multibody/fem/simplex_gaussian_quadrature.h"
-#include "drake/multibody/fixed_fem/dev/dynamic_elasticity_element.h"
 #include "drake/multibody/fixed_fem/dev/fem_state.h"
 #include "drake/multibody/fixed_fem/dev/linear_constitutive_model.h"
 
 namespace drake {
 namespace multibody {
 namespace fem {
+namespace internal {
 namespace {
 
 using Eigen::MatrixXd;
 
 constexpr int kNaturalDimension = 3;
 constexpr int kSpatialDimension = 3;
-constexpr int kSolutionDimension = 3;
 constexpr int kQuadratureOrder = 1;
 using QuadratureType =
     internal::SimplexGaussianQuadrature<kNaturalDimension, kQuadratureOrder>;
@@ -32,8 +31,8 @@ using AutoDiffIsoparametricElement =
 using AutoDiffConstitutiveModel =
     internal::LinearConstitutiveModel<AutoDiffXd, kNumQuads>;
 using AutoDiffElement =
-    DynamicElasticityElement<AutoDiffIsoparametricElement, QuadratureType,
-                             AutoDiffConstitutiveModel>;
+    VolumetricElement<AutoDiffIsoparametricElement, QuadratureType,
+                      AutoDiffConstitutiveModel>;
 
 using DoubleIsoparametricElement =
     internal::LinearSimplexElement<double, kNaturalDimension, kSpatialDimension,
@@ -41,8 +40,8 @@ using DoubleIsoparametricElement =
 using DoubleConstitutiveModel =
     internal::LinearConstitutiveModel<double, kNumQuads>;
 using DoubleElement =
-    DynamicElasticityElement<DoubleIsoparametricElement, QuadratureType,
-                             DoubleConstitutiveModel>;
+    VolumetricElement<DoubleIsoparametricElement, QuadratureType,
+                      DoubleConstitutiveModel>;
 
 const double kYoungsModulus = 1.23;
 const double kPoissonRatio = 0.456;
@@ -50,7 +49,7 @@ const double kDensity = 0.789;
 /* The geometry of the model under test is a cube and it has 8 vertices and 6
  elements. */
 constexpr int kNumCubeVertices = 8;
-constexpr int kNumDofs = kNumCubeVertices * kSolutionDimension;
+constexpr int kNumDofs = kNumCubeVertices * kSpatialDimension;
 constexpr int kNumElements = 6;
 /* Parameters for Newmark scheme. */
 const double kDt = 1e-3;
@@ -58,9 +57,9 @@ const double kDt = 1e-3;
 const double kMassDamping = 0.01;
 const double kStiffnessDamping = 0.02;
 
-class DynamicElasticityModelTest : public ::testing::Test {
+class VolumetricModelTest : public ::testing::Test {
  protected:
-  /* Make a box and subdivide it into 6 tetrahedra. */
+  /* Makes a box and subdivides it into 6 tetrahedra. */
   template <typename T>
   geometry::VolumeMesh<T> MakeBoxTetMesh() {
     const double length = 0.1;
@@ -71,15 +70,17 @@ class DynamicElasticityModelTest : public ::testing::Test {
     return mesh;
   }
 
-  template <typename FemModel>
-  void AddBoxToModel(FemModel* fem_model) {
-    using T = typename FemModel::T;
+  /* Adds a FEM model of a box discretized into 6 tetrahedra into the given
+   `fem_model`. */
+  template <typename FemModelType>
+  void AddBoxToModel(FemModelType* fem_model) {
+    using T = typename FemModelType::T;
     geometry::VolumeMesh<T> mesh = MakeBoxTetMesh<T>();
-    const typename FemModel::ConstitutiveModel constitutive_model(
+    const typename FemModelType::ConstitutiveModel constitutive_model(
         kYoungsModulus, kPoissonRatio);
     const DampingModel<T> damping_model(kMassDamping, kStiffnessDamping);
-    fem_model->AddDynamicElasticityElementsFromTetMesh(mesh, constitutive_model,
-                                                       kDensity, damping_model);
+    fem_model->AddVolumetricElementsFromTetMesh(mesh, constitutive_model,
+                                                kDensity, damping_model);
   }
 
   void SetUp() override { AddBoxToModel(&model_); }
@@ -96,7 +97,7 @@ class DynamicElasticityModelTest : public ::testing::Test {
 
   /* Returns an arbitrary FemState whose generalized positions are different
    from reference positions and whose velocities and acclerations are nonzero.
-   In addition, set up AutoDiff derivatives for qddot if the scalar type is
+   In addition, set up autodiff derivatives for qddot if the scalar type is
    AutoDiffXd. */
   template <typename FemModelType>
   typename FemModelType::State MakeDeformedState(
@@ -106,10 +107,11 @@ class DynamicElasticityModelTest : public ::testing::Test {
 
     const State reference_state = fem_model.MakeFemState();
     State deformed_state = fem_model.MakeFemState();
-    /* Perturb qddot and set up derivatives if necessary. */
     if constexpr (std::is_same_v<T, AutoDiffXd>) {
+      /* Perturb qddot. */
       const Vector<double, kNumDofs> perturbed_qddot =
           math::ExtractValue(deformed_state.qddot()) + perturbation();
+      /* Set up AutodiffXd derivatives. */
       Vector<AutoDiffXd, kNumDofs> perturbed_qddot_autodiff;
       math::InitializeAutoDiff(perturbed_qddot, &perturbed_qddot_autodiff);
       /* It's important to set up the `deformed_state` with AdvanceOneTimeStep()
@@ -117,6 +119,7 @@ class DynamicElasticityModelTest : public ::testing::Test {
       fem_model.AdvanceOneTimeStep(reference_state, perturbed_qddot_autodiff,
                                    &deformed_state);
     } else {
+      /* Perturb qddot. */
       const Vector<double, kNumDofs> perturbed_qddot =
           deformed_state.qddot() + perturbation();
       fem_model.AdvanceOneTimeStep(reference_state, perturbed_qddot,
@@ -127,18 +130,18 @@ class DynamicElasticityModelTest : public ::testing::Test {
   }
 
   /* The model under test. */
-  DynamicElasticityModel<AutoDiffElement> model_{kDt};
+  VolumetricModel<AutoDiffElement> model_{kDt};
 };
 
 /* Tests the mesh has been successfully converted to elements. */
-TEST_F(DynamicElasticityModelTest, Geometry) {
+TEST_F(VolumetricModelTest, Geometry) {
   EXPECT_EQ(model_.num_nodes(), kNumCubeVertices);
   EXPECT_EQ(model_.num_elements(), kNumElements);
 }
 
 /* Tests that the tangent matrix of the model is the derivative of the residual
  with respect to the change in qddot. */
-TEST_F(DynamicElasticityModelTest, TangentMatrixIsResidualDerivative) {
+TEST_F(VolumetricModelTest, TangentMatrixIsResidualDerivative) {
   using T = AutoDiffXd;
 
   const FemState<AutoDiffElement> state = MakeDeformedState(model_);
@@ -168,7 +171,7 @@ TEST_F(DynamicElasticityModelTest, TangentMatrixIsResidualDerivative) {
 
 /* Verifies that the tangent matrix calculated as PETSc matrix is the same as
  that calculated as Eigen::SparseMatrix. */
-TEST_F(DynamicElasticityModelTest, TangentMatrixParity) {
+TEST_F(VolumetricModelTest, TangentMatrixParity) {
   const FemState<AutoDiffElement> state = MakeDeformedState(model_);
   Eigen::SparseMatrix<AutoDiffXd> eigen_tangent_matrix;
   model_.SetTangentMatrixSparsityPattern(&eigen_tangent_matrix);
@@ -177,7 +180,7 @@ TEST_F(DynamicElasticityModelTest, TangentMatrixParity) {
   const MatrixXd eigen_dense_matrix =
       math::ExtractValue(eigen_dense_autodiff_matrix);
 
-  DynamicElasticityModel<DoubleElement> double_model(kDt);
+  VolumetricModel<DoubleElement> double_model(kDt);
   AddBoxToModel(&double_model);
   const FemState<DoubleElement> double_state = MakeDeformedState(double_model);
   std::unique_ptr<internal::PetscSymmetricBlockSparseMatrix>
@@ -192,8 +195,8 @@ TEST_F(DynamicElasticityModelTest, TangentMatrixParity) {
 
 /* Adds two copies of the same set of elements and tests that the residual for
  the two copies are identical. In particular, tests that the node offsets in
- AddDynamicElasticityElementsFromTetMesh() are working as intended. */
-TEST_F(DynamicElasticityModelTest, MultipleMesh) {
+ AddVolumetricElementsFromTetMesh() are working as intended. */
+TEST_F(VolumetricModelTest, MultipleMesh) {
   using T = AutoDiffXd;
   /* Add a second box mesh to the model. */
   AddBoxToModel(&model_);
@@ -211,6 +214,7 @@ TEST_F(DynamicElasticityModelTest, MultipleMesh) {
 }
 
 }  // namespace
+}  // namespace internal
 }  // namespace fem
 }  // namespace multibody
 }  // namespace drake

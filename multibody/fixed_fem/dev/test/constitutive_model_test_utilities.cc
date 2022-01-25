@@ -149,11 +149,11 @@ void TestdPdFIsDerivativeOfP() {
   std::array<Eigen::Matrix<AutoDiffXd, 9, 9>, num_locations> dPdF;
   model.CalcFirstPiolaStressDerivative(data, &dPdF);
   for (int q = 0; q < num_locations; ++q) {
-    for (int i = 0; i < kSpaceDimension; ++i) {
-      for (int j = 0; j < kSpaceDimension; ++j) {
+    for (int i = 0; i < kSpatialDimension; ++i) {
+      for (int j = 0; j < kSpatialDimension; ++j) {
         Matrix3d dPijdF;
-        for (int k = 0; k < kSpaceDimension; ++k) {
-          for (int l = 0; l < kSpaceDimension; ++l) {
+        for (int k = 0; k < kSpatialDimension; ++k) {
+          for (int l = 0; l < kSpatialDimension; ++l) {
             dPijdF(k, l) = dPdF[q](3 * j + i, 3 * l + k).value();
           }
         }

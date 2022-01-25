@@ -38,7 +38,8 @@ template <class Element>
 class FemModel : public FemModelBase<typename Element::Traits::T> {
  public:
   static_assert(
-      std::is_base_of_v<FemElement<Element, typename Element::Traits>, Element>,
+      std::is_base_of_v<internal::FemElement<Element, typename Element::Traits>,
+                        Element>,
       "The template parameter Element should be derived from FemElement. ");
   using T = typename Element::Traits::T;
   using ElementType = Element;
@@ -54,7 +55,7 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
 
   /** The number of degrees of freedom in the model. */
   int num_dofs() const final {
-    return Element::Traits::kSolutionDimension * this->num_nodes();
+    return Element::Traits::kSpatialDimension * this->num_nodes();
   }
 
   /** The number of FemElements owned by `this` %FemModel. */
@@ -106,7 +107,7 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
   }
 
  private:
-  int ode_order() const final { return Element::Traits::kOdeOrder; }
+  int ode_order() const final { return 2; }
 
   /* Implements FemModelBase::MakeFemStateBase() by simply hiding the
    result from MakeFemState() behind a unique_ptr to FemStateBase. */
@@ -123,9 +124,9 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
      the old data. */
     residual->setZero();
     /* Aliases to improve readability. */
-    constexpr int kNumDofs = Element::Traits::kNumDofs;
-    constexpr int kNumNodes = Element::Traits::kNumNodes;
-    constexpr int kDim = Element::Traits::kSolutionDimension;
+    constexpr int kNumDofs = Element::Traits::num_dofs;
+    constexpr int kNumNodes = Element::Traits::num_nodes;
+    constexpr int kDim = Element::Traits::kSpatialDimension;
     /* Scratch space to store the contribution to the residual from each
      element. */
     Vector<T, kNumDofs> element_residual;
@@ -161,23 +162,22 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
       }
     }
     /* Aliases to improve readability. */
-    constexpr int kNumDofs = Element::Traits::kNumDofs;
-    constexpr int kNumNodes = Element::Traits::kNumNodes;
-    constexpr int kDim = Element::Traits::kSolutionDimension;
+    constexpr int kNumDofs = Element::Traits::num_dofs;
+    constexpr int kNumNodes = Element::Traits::num_nodes;
+    constexpr int kDim = Element::Traits::kSpatialDimension;
     /* Scratch space to store the contribution to the tangent matrix from each
      element. */
     Eigen::Matrix<T, kNumDofs, kNumDofs> element_tangent_matrix;
     const Vector3<T>& weights = this->state_updater().weights();
     for (ElementIndex e(0); e < num_elements(); ++e) {
-      element_tangent_matrix = CalcElementTangentMatrix(state, weights, e);
+      element_tangent_matrix.setZero();
+      elements_[e].CalcTangentMatrix(state, weights, &element_tangent_matrix);
       const std::array<NodeIndex, kNumNodes>& element_node_indices =
           elements_[e].node_indices();
       for (int a = 0; a < kNumNodes; ++a) {
         for (int i = 0; i < kDim; ++i) {
           for (int b = 0; b < kNumNodes; ++b) {
             for (int j = 0; j < kDim; ++j) {
-              // TODO(xuchenhan-tri): Compare the performance between coeffRef()
-              //  and setFromTriplets() for filling out the sparse matrix.
               tangent_matrix->coeffRef(element_node_indices[a] * kDim + i,
                                        element_node_indices[b] * kDim + j) +=
                   element_tangent_matrix(a * kDim + i, b * kDim + j);
@@ -208,8 +208,8 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
       tangent_matrix->SetZero();
 
       /* Aliases to improve readability. */
-      constexpr int kNumDofs = Element::Traits::kNumDofs;
-      constexpr int kNumNodes = Element::Traits::kNumNodes;
+      constexpr int kNumDofs = Element::Traits::num_dofs;
+      constexpr int kNumNodes = Element::Traits::num_nodes;
 
       /* Scratch space to store the contribution to the tangent matrix from each
        element. */
@@ -217,7 +217,7 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
       Eigen::Matrix<T, kNumDofs, kNumDofs> element_tangent_matrix;
       const Vector3<T>& weights = this->state_updater().weights();
       for (ElementIndex e(0); e < num_elements(); ++e) {
-        element_tangent_matrix = CalcElementTangentMatrix(state, weights, e);
+        elements_[e].CalcTangentMatrix(state, weights, &element_tangent_matrix);
         const std::array<NodeIndex, kNumNodes>& element_node_indices =
             elements_[e].node_indices();
         // TODO(xuchenhan-tri): Avoid this index copy.
@@ -236,9 +236,9 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
     tangent_matrix->resize(num_dofs(), num_dofs());
     std::vector<Eigen::Triplet<T>> non_zero_entries;
     /* Alias for readability. */
-    constexpr int element_num_dofs = Element::Traits::kNumDofs;
-    constexpr int element_num_nodes = Element::Traits::kNumNodes;
-    constexpr int kDim = Element::Traits::kSolutionDimension;
+    constexpr int element_num_dofs = Element::Traits::num_dofs;
+    constexpr int element_num_nodes = Element::Traits::num_nodes;
+    constexpr int kDim = Element::Traits::kSpatialDimension;
     /* Get an upper bound for the number of nonzero entries and allocate
      memories for them in the vector of triplets. */
     non_zero_entries.reserve(num_elements() * element_num_dofs *
@@ -270,9 +270,9 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
   DoMakePetscSymmetricBlockSparseTangentMatrix() const final {
     std::vector<std::unordered_set<int>> neighbor_nodes(this->num_nodes());
     /* Alias for readability. */
-    constexpr int element_num_nodes = Element::Traits::kNumNodes;
-    constexpr int element_num_dofs = Element::Traits::kNumDofs;
-    constexpr int kDim = Element::Traits::kSolutionDimension;
+    constexpr int element_num_nodes = Element::Traits::num_nodes;
+    constexpr int element_num_dofs = Element::Traits::num_dofs;
+    constexpr int kDim = Element::Traits::kSpatialDimension;
     /* Create a nonzero block for each pair of nodes that are connected by an
      edge in the mesh. */
     for (int e = 0; e < num_elements(); ++e) {
@@ -348,16 +348,15 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
                              matrix.
    @param[in] element_index  Index of the element whose element tangent matrix
                              is being built. */
-  Eigen::Matrix<T, Element::Traits::kNumDofs, Element::Traits::kNumDofs>
+  Eigen::Matrix<T, Element::Traits::num_dofs, Element::Traits::num_dofs>
   CalcElementTangentMatrix(const FemState<Element>& state,
                            const Vector3<T>& weights,
                            ElementIndex element_index) const {
     DRAKE_ASSERT(element_index.is_valid() && element_index < num_elements());
     using MatrixType =
-        Eigen::Matrix<T, Element::Traits::kNumDofs, Element::Traits::kNumDofs>;
+        Eigen::Matrix<T, Element::Traits::num_dofs, Element::Traits::num_dofs>;
     MatrixType tangent_matrix = MatrixType::Zero();
-    elements_[element_index].CalcTangentMatrixMatrix(state, weights,
-                                                     &tangent_matrix);
+    elements_[element_index].CalcTangentMatrix(state, weights, &tangent_matrix);
     return tangent_matrix;
   }
 

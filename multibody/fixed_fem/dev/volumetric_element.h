@@ -299,8 +299,9 @@ class VolumetricElement
   void AddNegativeDampingForce(const FemState<ElementType>& state,
                                EigenPtr<Vector<T, num_dofs>> neg_force) const {
     DRAKE_ASSERT(neg_force != nullptr);
-    Eigen::Matrix<T, num_dofs, num_dofs> damping_matrix;
-    this->CalcDampingMatrix(state, &damping_matrix);
+    Eigen::Matrix<T, num_dofs, num_dofs> damping_matrix =
+        Eigen::Matrix<T, num_dofs, num_dofs>::Zero();
+    this->AddScaledDampingMatrix(state, 1, &damping_matrix);
     /* Note that the damping force fᵥ = -D * v, where D is the damping matrix.
      As we are accumulating the negative damping force here, the `+=` sign
      should be used. */
@@ -336,16 +337,15 @@ class VolumetricElement
    two stress-strain pairs need to be carefully profiled against each other as
    this operation might be (one of) the bottleneck(s). */
 
-  /* Adds the derivative of the negative elastic force on the nodes of this
+  /* Adds a scaled derivative of the elastic force on the nodes of this
    element into the given matrix.
-   @param[in] state The FEM state at which to evaluate the negative elastic
-                     force derivatives.
-   @param[out] K    The negative force derivative matrix.
-   @pre K != nullptr.
-   @warning It is the responsibility of the caller to initialize K to
-   zero appropriately. */
-  void AddNegativeElasticForceDerivative(
-      const FemState<ElementType>& state,
+   @param[in] state   The FEM state at which to evaluate the elastic force
+                      derivatives.
+   @param[out] scale  The scaling factor applied to the derivative.
+   @param[out] K      The scaled force derivative matrix.
+   @pre K != nullptr. */
+  void AddScaledElasticForceDerivative(
+      const FemState<ElementType>& state, const T& scale,
       EigenPtr<Eigen::Matrix<T, num_dofs, num_dofs>> K) const {
     DRAKE_ASSERT(K != nullptr);
     // clang-format off
@@ -364,9 +364,12 @@ class VolumetricElement
        Kᵃᵇᵢⱼ = dFₘₙ/dxᵃᵢ dPₘₙ/dFₖₗ dFₖₗ/dxᵇⱼ =  dSᵃ/dXₙ dPᵢₙ/dFⱼₗ dSᵇ/dXₗ. */
       for (int a = 0; a < num_nodes; ++a) {
         for (int b = 0; b < num_nodes; ++b) {
+          /* Note that the scale is negated here because the tensor contraction
+           gives the second derivative of energy, which is the opposite of the
+           force derivative. */
           PerformDoubleTensorContraction<T>(
               data.dPdF[q], dSdX_transpose_[q].col(a),
-              dSdX_transpose_[q].col(b) * reference_volume_[q], &K_ab);
+              dSdX_transpose_[q].col(b) * reference_volume_[q] * -scale, &K_ab);
           AccumulateMatrixBlock(K_ab, a, b, K);
         }
       }
@@ -379,39 +382,42 @@ class VolumetricElement
     /* residual = Ma-fₑ(x)-fᵥ(x, v)-fₑₓₜ, where M is the mass matrix, fₑ(x) is
      the elastic force, fᵥ(x, v) is the damping force and fₑₓₜ is the external
      force. */
-    *residual += this->mass_matrix() *
+    *residual += mass_matrix_ *
                  this->ExtractElementDofs(this->node_indices(), state.qddot());
     this->AddNegativeElasticForce(state, residual);
     AddNegativeDampingForce(state, residual);
     this->AddScaledExternalForce(state, -1.0, residual);
   }
 
-  /* Implements FemElement::CalcStiffnessMatrix().
+  /* Implements FemElement::DoAddScaledStiffnessMatrix().
    @warning This method calculates a first-order approximation of the stiffness
    matrix. In other words, the contribution of the term ∂fᵥ(x, v)/∂x is ignored
    as it involves complex second derivatives of the elastic force. */
-  void DoCalcStiffnessMatrix(
-      const FemState<ElementType>& state,
+  void DoAddScaledStiffnessMatrix(
+      const FemState<ElementType>& state, const T& scale,
       EigenPtr<Eigen::Matrix<T, num_dofs, num_dofs>> K) const {
-    this->AddNegativeElasticForceDerivative(state, K);
+    /* Negate `scale` since stiffness matrix is the negative force derivative.
+     */
+    this->AddScaledElasticForceDerivative(state, -scale, K);
   }
 
-  /* Implements FemElement::CalcDampingMatrix(). */
-  void DoCalcDampingMatrix(
-      const FemState<ElementType>& state,
+  /* Implements FemElement::DoAddScaledDampingMatrix(). */
+  void DoAddScaledDampingMatrix(
+      const FemState<ElementType>& state, const T& scale,
       EigenPtr<Eigen::Matrix<T, num_dofs, num_dofs>> D) const {
     /* D = αM + βK, where α is the mass damping coefficient and β is the
      stiffness damping coefficient. */
-    this->CalcStiffnessMatrix(state, D);
-    *D *= this->damping_model().stiffness_coeff();
-    *D += this->damping_model().mass_coeff() * mass_matrix_;
+    const T& alpha = this->damping_model().mass_coeff();
+    const T& beta = this->damping_model().stiffness_coeff();
+    this->AddScaledMassMatrix(state, scale * alpha, D);
+    this->AddScaledStiffnessMatrix(state, scale * beta, D);
   }
 
-  /* Implements FemElement::CalcMassMatrix(). */
-  void DoCalcMassMatrix(
-      const FemState<ElementType>&,
+  /* Implements FemElement::DoAddScaledMassMatrix(). */
+  void DoAddScaledMassMatrix(
+      const FemState<ElementType>&, const T& scale,
       EigenPtr<Eigen::Matrix<T, num_dofs, num_dofs>> M) const {
-    *M = mass_matrix_;
+    *M += scale * mass_matrix_;
   }
 
   /* Implements FemElement::ComputeData(). */

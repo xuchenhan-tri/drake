@@ -123,7 +123,7 @@ class VolumetricElementTest : public ::testing::Test {
       const FemState<ElementType>& state) const {
     Eigen::Matrix<T, kNumDofs, kNumDofs> neg_force_derivative =
         Eigen::Matrix<T, kNumDofs, kNumDofs>::Zero();
-    element().AddNegativeElasticForceDerivative(state, &neg_force_derivative);
+    element().AddScaledElasticForceDerivative(state, -1, &neg_force_derivative);
     return neg_force_derivative;
   }
 
@@ -307,7 +307,7 @@ TEST_F(VolumetricElementTest, Gravity) {
   Vector<T, kNumDofs> element_gravity_acceleration;
   for (int i = 0; i < kNumNodes; ++i) {
     element_gravity_acceleration.template segment<kSpatialDimension>(
-        i * kSpaceDimension) = element().gravity_vector();
+        i * kSpatialDimension) = element().gravity_vector();
   }
   const Vector<T, kNumDofs> expected_gravity_force =
       mass_matrix * element_gravity_acceleration;

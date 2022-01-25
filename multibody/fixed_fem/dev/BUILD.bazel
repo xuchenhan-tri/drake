@@ -161,7 +161,7 @@ drake_cc_library(
         ":deformable_body_config",
         ":dirichlet_boundary_condition",
         ":dynamic_elasticity_element",
-        ":dynamic_elasticity_model",
+        ":volumetric_model",
         ":fem_model_base",
         ":linear_constitutive_model",
         ":mesh_utilities",
@@ -248,19 +248,6 @@ drake_cc_library(
 )
 
 drake_cc_library(
-    name = "dynamic_elasticity_model",
-    hdrs = [
-        "dynamic_elasticity_model.h",
-    ],
-    deps = [
-        ":acceleration_newmark_scheme",
-        ":damping_model",
-        ":elasticity_model",
-        "//geometry/proximity:volume_mesh",
-    ],
-)
-
-drake_cc_library(
     name = "eigen_conjugate_gradient_solver",
     hdrs = [
         "eigen_conjugate_gradient_solver.h",
@@ -289,13 +276,16 @@ drake_cc_library(
 )
 
 drake_cc_library(
-    name = "elasticity_model",
+    name = "volumetric_model",
     hdrs = [
-        "elasticity_model.h",
+        "volumetric_model.h",
     ],
     deps = [
         ":volumetric_element",
         ":fem_model",
+        ":acceleration_newmark_scheme",
+        ":damping_model",
+        "//geometry/proximity:volume_mesh",
     ],
 )
 
@@ -783,10 +773,10 @@ drake_cc_googletest(
 )
 
 drake_cc_googletest(
-    name = "dynamic_elasticity_model_test",
+    name = "volumetric_model_test",
     deps = [
-        ":dynamic_elasticity_element",
-        ":dynamic_elasticity_model",
+        ":volumetric_element",
+        ":volumetric_model",
         ":linear_constitutive_model",
         "//common/test_utilities:eigen_matrix_compare",
         "//geometry/proximity:make_box_mesh",

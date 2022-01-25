@@ -3,7 +3,7 @@
 #include <array>
 
 #include "drake/common/eigen_types.h"
-#include "drake/multibody/fixed_fem/dev/damping_model.h"
+#include "drake/geometry/proximity/volume_mesh.h"
 #include "drake/multibody/fixed_fem/dev/elasticity_element.h"
 
 namespace drake {
