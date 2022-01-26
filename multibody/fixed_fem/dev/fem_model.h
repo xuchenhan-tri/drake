@@ -21,6 +21,7 @@
 namespace drake {
 namespace multibody {
 namespace fem {
+namespace internal {
 
 /** %FemModel provides a fixed size implementaion of FemModelBase by
  templatizing on the type of FemElement. See FemModelBase for more information
@@ -38,34 +39,30 @@ template <class Element>
 class FemModel : public FemModelBase<typename Element::Traits::T> {
  public:
   static_assert(
-      std::is_base_of_v<internal::FemElement<Element, typename Element::Traits>,
-                        Element>,
+      std::is_base_of_v<FemElement<Element, typename Element::Traits>, Element>,
       "The template parameter Element should be derived from FemElement. ");
   using T = typename Element::Traits::T;
   using ElementType = Element;
 
-  /** Creates a new FemState. The new state's number of generalized positions is
-   equal to `num_dofs()`. The new state's element data is constructed using the
-   FemElements owned by this %FemModel. */
+  /** Creates a default FEM state for this model. The new state's number of
+   generalized positions is equal to `num_dofs()`. The new state's element data
+   is constructed using the FemElements owned by this %FemModel. */
   FemState<Element> MakeFemState() const {
     FemState<Element> state = DoMakeFemState();
     state.MakeElementData(elements_);
     return state;
   }
 
-  /** The number of degrees of freedom in the model. */
   int num_dofs() const final {
     return Element::Traits::kSpatialDimension * this->num_nodes();
   }
 
-  /** The number of FemElements owned by `this` %FemModel. */
   int num_elements() const final { return elements_.size(); }
 
  protected:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(FemModel);
 
-  explicit FemModel(std::unique_ptr<internal::StateUpdater<T>> state_updater)
-      : FemModelBase<T>(std::move(state_updater)) {}
+  explicit FemModel() = default;
 
   virtual ~FemModel() = default;
 
@@ -98,17 +95,7 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
     elements_.emplace_back(std::forward<Args>(args)...);
   }
 
-  /** Adds per-vertex residuals that are explicitly specified at each vertex
-   instead of accumulated from elements. The default implementation is a
-   no-op. Derived classes must override this method if their residuals have
-   per-vertex contribution. */
-  virtual void AddExplicitResidual(EigenPtr<VectorX<T>> residual) const {
-    unused(residual);
-  }
-
  private:
-  int ode_order() const final { return 2; }
-
   /* Implements FemModelBase::MakeFemStateBase() by simply hiding the
    result from MakeFemState() behind a unique_ptr to FemStateBase. */
   std::unique_ptr<FemStateBase<T>> DoMakeFemStateBase() const final {
@@ -140,9 +127,6 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
             element_residual.template segment<kDim>(i * kDim);
       }
     }
-    /* Add per-vertex residuals that are explicitly specified at each vertex
-     instead of accumulated from elements. */
-    AddExplicitResidual(residual);
   }
 
   /* Helper for DoCalcTangentMatrix(). */
@@ -191,7 +175,7 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
   /* Helper for DoCalcTangentMatrix(). */
   void CalcTangentMatrixForConcreteState(
       const FemState<Element>& state,
-      internal::PetscSymmetricBlockSparseMatrix* tangent_matrix) const {
+      PetscSymmetricBlockSparseMatrix* tangent_matrix) const {
     if constexpr (!std::is_same_v<typename Element::T, double>) {
       throw std::logic_error(
           "The PetscSymmetricBlockSparseMatrix overload of "
@@ -266,7 +250,7 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
   }
 
   /* Implements FemModelBase::MakePetscSymmetricBlockSparseTangentMatrix(). */
-  std::unique_ptr<internal::PetscSymmetricBlockSparseMatrix>
+  std::unique_ptr<PetscSymmetricBlockSparseMatrix>
   DoMakePetscSymmetricBlockSparseTangentMatrix() const final {
     std::vector<std::unordered_set<int>> neighbor_nodes(this->num_nodes());
     /* Alias for readability. */
@@ -292,9 +276,8 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
     for (int i = 0; i < this->num_nodes(); ++i) {
       nonzero_blocks[i] = neighbor_nodes[i].size();
     }
-    auto tangent_matrix =
-        std::make_unique<internal::PetscSymmetricBlockSparseMatrix>(
-            num_dofs(), kDim, nonzero_blocks);
+    auto tangent_matrix = std::make_unique<PetscSymmetricBlockSparseMatrix>(
+        num_dofs(), kDim, nonzero_blocks);
 
     /* Populate the tangent matrix with zeros at appropriate places to allocate
      memory. */
@@ -334,7 +317,7 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
    FemStateBase to its concrete type. */
   void DoCalcTangentMatrix(
       const FemStateBase<T>& state,
-      internal::PetscSymmetricBlockSparseMatrix* tangent_matrix) const final {
+      PetscSymmetricBlockSparseMatrix* tangent_matrix) const final {
     const FemState<Element>& concrete_state = cast_to_concrete_state(state);
     CalcTangentMatrixForConcreteState(concrete_state, tangent_matrix);
   }
@@ -370,15 +353,6 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
     return concrete_state;
   }
 
-  /* Mutable version of cast_to_concrete_state() that takes a pointer to the
-   abstract state.
-   @pre The given `abstract_state` is compatible with the `this` FemModel. */
-  FemState<Element>& cast_to_mutable_concrete_state(
-      FemStateBase<T>* abstract_state) const {
-    auto* concrete_state_ptr = static_cast<FemState<Element>*>(abstract_state);
-    return *concrete_state_ptr;
-  }
-
   /* Implements FemModelBase::ThrowIfModelStateIncompatible(). */
   void ThrowIfModelStateIncompatible(
       const char* func, const FemStateBase<T>& abstract_state) const final {
@@ -401,6 +375,7 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
   /* FemElements owned by this model. */
   std::vector<Element> elements_{};
 };
+}  // namespace internal
 }  // namespace fem
 }  // namespace multibody
 }  // namespace drake

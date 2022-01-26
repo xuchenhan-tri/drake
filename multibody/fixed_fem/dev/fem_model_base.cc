@@ -14,6 +14,7 @@ void FemModelBase<T>::CalcResidual(const FemStateBase<T>& state,
   DRAKE_DEMAND(residual != nullptr);
   ThrowIfModelStateIncompatible(__func__, state);
   DoCalcResidual(state, residual);
+  // TODO(xuchenhan-tri): remove me.
   if (dirichlet_bc_ != nullptr) {
     dirichlet_bc_->ApplyBoundaryConditionToResidual(residual);
   }
@@ -28,6 +29,7 @@ void FemModelBase<T>::CalcTangentMatrix(
   DRAKE_DEMAND(tangent_matrix->cols() == num_dofs());
   ThrowIfModelStateIncompatible(__func__, state);
   DoCalcTangentMatrix(state, tangent_matrix);
+  // TODO(xuchenhan-tri): remove me.
   if (dirichlet_bc_ != nullptr) {
     dirichlet_bc_->ApplyBoundaryConditionToTangentMatrix(tangent_matrix);
   }
@@ -42,6 +44,7 @@ void FemModelBase<T>::CalcTangentMatrix(
   DRAKE_DEMAND(tangent_matrix->cols() == num_dofs());
   ThrowIfModelStateIncompatible(__func__, state);
   DoCalcTangentMatrix(state, tangent_matrix);
+  // TODO(xuchenhan-tri): remove me.
   if (dirichlet_bc_ != nullptr) {
     dirichlet_bc_->ApplyBoundaryConditionToTangentMatrix(tangent_matrix);
   }
@@ -60,6 +63,7 @@ FemModelBase<T>::MakePetscSymmetricBlockSparseTangentMatrix() const {
   return DoMakePetscSymmetricBlockSparseTangentMatrix();
 }
 
+// TODO(xuchenhan-tri): remove me.
 template <typename T>
 const VectorX<T>& FemModelBase<T>::GetUnknowns(
     const FemStateBase<T>& state) const {
@@ -67,6 +71,7 @@ const VectorX<T>& FemModelBase<T>::GetUnknowns(
   return state_updater_->GetUnknowns(state);
 }
 
+// TODO(xuchenhan-tri): remove me.
 template <typename T>
 void FemModelBase<T>::UpdateStateFromChangeInUnknowns(
     const VectorX<T>& dz, FemStateBase<T>* state) const {
@@ -76,6 +81,7 @@ void FemModelBase<T>::UpdateStateFromChangeInUnknowns(
   state_updater_->UpdateStateFromChangeInUnknowns(dz, state);
 }
 
+// TODO(xuchenhan-tri): remove me.
 template <typename T>
 void FemModelBase<T>::AdvanceOneTimeStep(const FemStateBase<T>& prev_state,
                                          const VectorX<T>& unknown_variable,
@@ -89,6 +95,7 @@ void FemModelBase<T>::AdvanceOneTimeStep(const FemStateBase<T>& prev_state,
   state_updater_->AdvanceOneTimeStep(prev_state, unknown_variable, next_state);
 }
 
+// TODO(xuchenhan-tri): remove me.
 template <typename T>
 void FemModelBase<T>::ApplyBoundaryCondition(FemStateBase<T>* state) const {
   DRAKE_DEMAND(state != nullptr);

@@ -17,102 +17,112 @@ namespace drake {
 namespace multibody {
 namespace fem {
 
-/** %FemModelBase calculates the components of the discretized FEM equations.
- Suppose the PDE at hand is of the form
+/** %FemModelBase calculates the components of the discretized FEM equations for
+ dynamic elasticity problems. Typically, in dynamic elasticity problems, we are
+ interested in the mapping that describes the motion of a material
 
-     F(z, ∇z, ...) = 0.
+    ϕ(⋅,t) : Ω⁰ → Ωᵗ,
 
- where ... indicates possible higher derivatives that we aren't concerned with
- here. In this PDE, z: Ω ⊂ Rᴰ → Rᵈ, is the unknown function being solved for
- (see also UpdateStateFromChangeInUnknowns()). Here, Ω is the domain, D is the
- dimension of the domain, and d is the solution dimension. For instance, if you
- are solving for the temperature of a 3D object, then the domain is
- three-dimensional (D = 3), while the solution, which is the temperature at a
- point within the object, is one-dimensional (d = 1). After spatial and time
- discretization, the PDE is reduced to a system of linear or nonlinear equations
- of the form:
+ where Ω⁰ and Ωᵗ are subsets of R³, along with it's first and second derivatives
+ (velocity and acceleration respectively):
 
-     G(z₁, z₂, ..., zₙ) = 0,
+    V(X,t) = ∂ϕ(X,t)/∂t,
+    A(X,t) = ∂²ϕ(X,t)/∂t².
 
- where n is the number of nodes in the discretization and G is a function from
- Rⁿᵈ to Rⁿᵈ. The linear or nonlinear equation in the system associated with
- the node `a` has the form
+ The governing equations of interest are conservation of mass and conservation
+ of momentum:
 
-     Gₐ(z₁, z₂, ..., zₙ) = 0,
+    R(X,t)J(X,t) = R(X,0),
+    R(X,0)A(X,t) = fᵢₙₜ(X,t) + fₑₓₜ(X,t),
 
- where Gₐ is a function from Rⁿᵈ → Rᵈ and a = 1, ..., n. The nodal values z₁,
- z₂, ..., zₙ are solved for with a linear or nonlinear solver, and the solution
- z is interpolated from these nodal values.
+ where R is mass density and fᵢₙₜ and fₑₓₜ are internal and external force
+ densities respectively. Using finite element method to discretize space, one
+ gets
 
- %FemModelBase calculates various components of the system of linear or
- nonlinear equations that supports solving the system. For example,
- CalcResidual() calculates the value of G evaluated at the given state and
- CalcTangentMatrix() calculates ∇G at the given state.
- @tparam_nonsymbolic_scalar. */
+    ϕ(X,t) = ∑ᵢ xᵢ(t)Nᵢ(X)
+    V(X,t) = ∑ᵢ vᵢ(t)Nᵢ(X)
+    A(X,t) = ∑ᵢ aᵢ(t)Nᵢ(X)
+
+where xᵢ, vᵢ, aᵢ ∈ R³ are nodal values of the spatially discretized position,
+velocity and acceleration, and Nᵢ(X):Ω⁰ → R are the the basis functions. With
+this spatial discretization, the PDE is turned in an ODE of the form
+
+    G(x, v, a) = 0,            (1)
+
+where x, v, a are the stacked xᵢ, vᵢ, aᵢ. %FemModelBase provides methods to
+query various information about equation (1) given an FEM state (x, v, a) such
+as the residual, G(x, v, a) (see CalcResidual()); the stiffness matrix, ∂G/∂x
+(see CalcStiffnessMatrix()); the damping matrix, ∂G/∂v (see
+CalcDampingMatrix()); the mass matrix, ∂G/∂a (see CalcMassMatrix()).
+@tparam_nonsymbolic_scalar */
 template <typename T>
 class FemModelBase {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(FemModelBase);
   virtual ~FemModelBase() = default;
 
-  /** The order of the ODE problem associated with `this` %FemModel. */
-  virtual int ode_order() const = 0;
-
-  /** The number of nodes that are associated with `this` %FemModel. */
+  /** The number of nodes that are associated with this model. */
   int num_nodes() const { return num_nodes_; }
 
-  /** The number of degrees of freedom in the model. */
+  /** The number of degrees of freedom in this model. */
   virtual int num_dofs() const = 0;
 
-  /** The number of FemElements owned by `this` %FemModel. */
+  /** The number of FEM elements in this model. */
   virtual int num_elements() const = 0;
 
-  /** Creates a new FemStateBase whose concrete FemState type is compatible
-   with the concrete FemModel type of `this` %FemModelBase. The new state's
-   number of generalized positions is equal to `num_dofs()`. The new state's
-   element data is constructed using the FemElements owned by this %FemModel. */
+  /** Creates a default FEM state for this model, where the positions are set to
+   the reference positions and the velocity and the accelerations are set to
+   zero. */
   std::unique_ptr<FemStateBase<T>> MakeFemStateBase() const;
 
-  /** Calculates the residual at the given FemStateBase. Suppose the linear
-  or nonlinear system generated from the FEM discretization is G(z) = 0, then
-  the output `residual` is equal to the function G evaluated at the input
-  `state`.
+  /** Calculates the residual at the given FEM state.
   @pre residual != nullptr.
-  @throw std::exception if the type of concrete FemState in `state` is not
-  compatible with the concrete FemModel in `this` model. */
+  @throw std::exception if the FEM state is incompatible with this model.
+  @note Use MakeFemStateBase() to create an FEM state compatible with this
+  model. */
   void CalcResidual(const FemStateBase<T>& state,
                     EigenPtr<VectorX<T>> residual) const;
 
-  /** Calculates the tangent matrix at the given FemStateBase. The ij-th
-   entry of the tangent matrix is the derivative of the i-th entry of the
-   residual (calculated by CalcResidual()) with respect to the j-th generalized
-   unknown zⱼ.
-   @param[in] state    The FemStateBase at which the residual is evaluated.
-   @param[out] tangent_matrix    The output tangent_matrix. Suppose the linear
-   or nonlinear system generated from the FEM discretization is G(z) = 0, then
-   `tangent_matrix` is equal to ∇G evaluated at the input `state`.
+  /** Calculates the tangent matrix at the given FEM state. The tangent matrix
+   is given by a weight sum of stiffness matrix, damping matrix, and mass
+   matrix.
+   @param[in] state            The FemStateBase at which the tangent matrix is
+                               evaluated.
+   @param[in] weights          The weight used to combine stiffness, damping,
+                               and tangent matrices (in that order) into the
+                               tangent matrix.
+   @param[out] tangent_matrix  The output tangent_matrix.
    @pre tangent_matrix != nullptr.
-   @pre The size of the matrix behind `tangent_matrix` is `num_dofs()` *
-   `num_dofs()`.
-   @throw std::exception if the type of concrete FemState in `state` is not
-   compatible with the concrete FemModel in `this` model. */
+   @pre The size of `tangent_matrix` is `num_dofs()` * `num_dofs()`.
+   @throw std::exception if the FEM state is incompatible with this model.
+   @note Use MakeFemStateBase() to create an FEM state compatible with this
+   model. */
   void CalcTangentMatrix(const FemStateBase<T>& state,
+                         const Vector3<T>& weights,
                          Eigen::SparseMatrix<T>* tangent_matrix) const;
 
   /* Alternative signature for calculating tangent matrix that writes to an
    PETSc matrix.
+   @param[in] state            The FemStateBase at which the tangent matrix is
+                               evaluated.
+   @param[in] weights          The weight used to combine stiffness, damping,
+                               and tangent matrices (in that order) into the
+                               tangent matrix.
+   @param[out] tangent_matrix  The output tangent_matrix.
    @pre tangent_matrix != nullptr.
-   @pre tangent_matrix points to a PetscSymmetricBlockSparseMatrix created by
-        this->MakePetscSymmetricBlockSparseTangentMatrix(). */
+   @pre The size of `tangent_matrix` is `num_dofs()` * `num_dofs()`.
+   @throw std::exception if the FEM state is incompatible with this model.
+   @note Use MakeFemStateBase() to create an FEM state compatible with this
+   model. */
   void CalcTangentMatrix(
-      const FemStateBase<T>& state,
+      const FemStateBase<T>& state, const Vector3<T>& weights,
       internal::PetscSymmetricBlockSparseMatrix* tangent_matrix) const;
 
-  /** Sets the sparsity pattern for the tangent matrix of this %FemModelBase.
-   @param[out] tangent_matrix    The tangent matrix of this %FemModelBase. Its
+  /** Sets the sparsity pattern for the tangent matrix of this model.
+   @param[out] tangent_matrix    The tangent matrix of this model. Its
    size and sparsity pattern will be set so that it will be ready to be passed
    into CalcTangentMatrix().
-   @pre `tangent_matrix` must not be the null pointer. */
+   @pre tangent_matrix != nullptr. */
   void SetTangentMatrixSparsityPattern(
       Eigen::SparseMatrix<T>* tangent_matrix) const;
 
@@ -123,15 +133,17 @@ class FemModelBase {
 
   /** Creates a PetscSymmetricBlockSparseMatrix that has the sparsity pattern of
    the tangent matrix of this FEM model. In particular, the size of the tangent
-   matrix is `num_dofs()`-by`num_dofs()`. */
+   matrix is `num_dofs()` by `num_dofs()`. */
   std::unique_ptr<internal::PetscSymmetricBlockSparseMatrix>
   MakePetscSymmetricBlockSparseTangentMatrix() const;
 
+  // TODO(xuchenhan-tri): Remove me.
   /** Extracts the unknown variable from the given FEM `state`.
    @throw std::exception if the type of concrete FemState for `state` is not
    compatible with the concrete FemModel for `this` model. */
   const VectorX<T>& GetUnknowns(const FemStateBase<T>& state) const;
 
+  // TODO(xuchenhan-tri): Remove me.
   /** Updates the FemStateBase `state` given the change in the unknown variable
    `dz`.
    @pre state != nullptr.
@@ -141,6 +153,7 @@ class FemModelBase {
   void UpdateStateFromChangeInUnknowns(const VectorX<T>& dz,
                                        FemStateBase<T>* state) const;
 
+  // TODO(xuchenhan-tri): Remove me.
   /** For a dynamic FEM model, calculates the state at the next time step
    given the state at the previous time step and the unknown variable. If
    `this` %FemModelBase is static (ode_order() == 0), throw an exception.
@@ -159,11 +172,13 @@ class FemModelBase {
                           const VectorX<T>& unknown_variable,
                           FemStateBase<T>* next_state) const;
 
+  // TODO(xuchenhan-tri): Remove me.
   /* Apply boundary condition set for this %FemModelBase to the input `state`.
    No-op if no boundary condition is set.
    @pre state != nullptr. */
   void ApplyBoundaryCondition(FemStateBase<T>* state) const;
 
+  // TODO(xuchenhan-tri): Remove me.
   /** Takes ownership of the given Dirichlet boundary condition and apply it
    when the model is evaluated. */
   void SetDirichletBoundaryCondition(
@@ -171,6 +186,7 @@ class FemModelBase {
     dirichlet_bc_ = std::move(dirichlet_bc);
   }
 
+  // TODO(xuchenhan-tri): Remove me.
   /** Returns a pointer to the registered Dirichlet boundary condition if one
    exists and a nullptr otherwise. */
   const DirichletBoundaryCondition<T>* dirichlet_boundary_condition() const {
@@ -184,9 +200,7 @@ class FemModelBase {
       const char* func, const FemStateBase<T>& state_base) const = 0;
 
  protected:
-  explicit FemModelBase(
-      std::unique_ptr<internal::StateUpdater<T>> state_updater)
-      : state_updater_(std::move(state_updater)) {}
+  FemModelBase() = defualt;
 
   /** Derived classes must override this method to provide an implementation for
     the NVI MakeFemStateBase(). */
@@ -226,17 +240,9 @@ class FemModelBase {
    the model when they add more nodes to the FEM model. */
   void increment_num_nodes(int num_new_nodes) { num_nodes_ += num_new_nodes; }
 
-  const internal::StateUpdater<T>& state_updater() const {
-    return *state_updater_;
-  }
-
  private:
   /* The total number of nodes in the system. */
   int num_nodes_{0};
-  /* The Dirichlet boundary condition imposed on the model. */
-  std::unique_ptr<DirichletBoundaryCondition<T>> dirichlet_bc_;
-  /* The StateUpdater that updates the states for this model. */
-  std::unique_ptr<internal::StateUpdater<T>> state_updater_;
 };
 }  // namespace fem
 }  // namespace multibody
