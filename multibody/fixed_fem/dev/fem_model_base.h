@@ -65,11 +65,12 @@ class FemModelBase {
   int num_nodes() const { return num_nodes_; }
 
   /** The number of degrees of freedom in this model. */
-  virtual int num_dofs() const = 0;
+  int num_dofs() const { return 3 * num_nodes_; }
 
   /** The number of FEM elements in this model. */
   virtual int num_elements() const = 0;
 
+  // TODO(xuchenhan-tri): Name change to get rid of all the "Base".
   /** Creates a default FEM state for this model, where the positions are set to
    the reference positions and the velocity and the accelerations are set to
    zero. */
@@ -101,7 +102,7 @@ class FemModelBase {
                          const Vector3<T>& weights,
                          Eigen::SparseMatrix<T>* tangent_matrix) const;
 
-  /* Alternative signature for calculating tangent matrix that writes to an
+  /* Alternative signature for calculating tangent matrix that writes to a
    PETSc matrix.
    @param[in] state            The FemStateBase at which the tangent matrix is
                                evaluated.
@@ -110,7 +111,7 @@ class FemModelBase {
                                tangent matrix.
    @param[out] tangent_matrix  The output tangent_matrix.
    @pre tangent_matrix != nullptr.
-   @pre The size of `tangent_matrix` is `num_dofs()` * `num_dofs()`.
+   @pre The size of `tangent_matrix` is `num_dofs()` by `num_dofs()`.
    @throw std::exception if the FEM state is incompatible with this model.
    @note Use MakeFemStateBase() to create an FEM state compatible with this
    model. */
