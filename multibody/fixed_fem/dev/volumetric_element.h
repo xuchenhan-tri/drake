@@ -110,8 +110,6 @@ struct VolumetricElementTraits {
    gives the number of degrees of freedom for a single node) times the number of
    nodes. */
   static constexpr int num_dofs = kSpatialDimension * num_nodes;
-  // TODO(xuchenhan-tri): Get rid of this.
-  static constexpr int kOdeOrder = 2;
 
   struct Data {
     typename ConstitutiveModelType::Data deformation_gradient_data;

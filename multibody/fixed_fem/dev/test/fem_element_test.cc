@@ -7,29 +7,34 @@
 namespace drake {
 namespace multibody {
 namespace fem {
+namespace internal {
 namespace test {
 namespace {
+
+using T = DummyElementTraits::T;
 const ElementIndex kZeroIndex = ElementIndex(0);
-const std::array<NodeIndex, DummyElementTraits<1>::kNumNodes> kNodeIndices = {
+const std::array<NodeIndex, DummyElementTraits::num_nodes> kNodeIndices = {
     {NodeIndex(0), NodeIndex(1)}};
-constexpr double dummy_value = 3.14;
+static const DummyElementTraits::ConstitutiveModel kConstitutiveModel(5e4, 0.4);
+static const DampingModel<T> kDampingModel(0.01, 0.02);
 
 /* An minimal FemElement to test FemElement::CalcFoo() methods. */
+/*
 class CalcFooElement final
-    : public FemElement<CalcFooElement, DummyElementTraits<1>> {
+    : public FemElement<CalcFooElement, DummyElementTraits> {
  public:
-  using Base = FemElement<CalcFooElement, DummyElementTraits<1>>;
+  using Base = FemElement<CalcFooElement, DummyElementTraits>;
   CalcFooElement(ElementIndex element_index,
-                 const std::array<NodeIndex, Traits::kNumNodes>& node_indices,
+                 const std::array<NodeIndex, Traits::num_nodes>& node_indices,
                  double value)
       : Base(element_index, node_indices), value_(value) {}
 
-  Vector<T, Traits::kNumDofs> expected_residual() const {
-    return Vector<T, Traits::kNumDofs>::Constant(value_);
+  Vector<T, Traits::num_dofs> expected_residual() const {
+    return Vector<T, Traits::num_dofs>::Constant(value_);
   }
 
-  Eigen::Matrix<T, Traits::kNumDofs, Traits::kNumDofs> expected_matrix() const {
-    return Eigen::Matrix<T, Traits::kNumDofs, Traits::kNumDofs>::Constant(
+  Eigen::Matrix<T, Traits::num_dofs, Traits::num_dofs> expected_matrix() const {
+    return Eigen::Matrix<T, Traits::num_dofs, Traits::num_dofs>::Constant(
         value_);
   }
 
@@ -37,8 +42,8 @@ class CalcFooElement final
   friend Base;
 
   void DoCalcResidual(const FemState<CalcFooElement>& state,
-                      EigenPtr<Vector<T, Traits::kNumDofs>> residual) const {
-    for (int i = 0; i < Traits::kNumDofs; ++i) {
+                      EigenPtr<Vector<T, Traits::num_dofs>> residual) const {
+    for (int i = 0; i < Traits::num_dofs; ++i) {
       if ((*residual)(i) != 0) {
         throw std::runtime_error("Input vector non-zero!");
       }
@@ -48,27 +53,27 @@ class CalcFooElement final
 
   void DoCalcStiffnessMatrix(
       const FemState<CalcFooElement>& state,
-      EigenPtr<Eigen::Matrix<T, Traits::kNumDofs, Traits::kNumDofs>> K) const {
+      EigenPtr<Eigen::Matrix<T, Traits::num_dofs, Traits::num_dofs>> K) const {
     VerifyInputIsZeroAndOverwriteWithConstant(K);
   }
 
   void DoCalcDampingMatrix(
       const FemState<CalcFooElement>& state,
-      EigenPtr<Eigen::Matrix<T, Traits::kNumDofs, Traits::kNumDofs>> D) const {
+      EigenPtr<Eigen::Matrix<T, Traits::num_dofs, Traits::num_dofs>> D) const {
     VerifyInputIsZeroAndOverwriteWithConstant(D);
   }
 
   void DoCalcMassMatrix(
       const FemState<CalcFooElement>& state,
-      EigenPtr<Eigen::Matrix<T, Traits::kNumDofs, Traits::kNumDofs>> M) const {
+      EigenPtr<Eigen::Matrix<T, Traits::num_dofs, Traits::num_dofs>> M) const {
     *M = expected_matrix();
   }
 
   void VerifyInputIsZeroAndOverwriteWithConstant(
-      EigenPtr<Eigen::Matrix<T, Traits::kNumDofs, Traits::kNumDofs>> matrix)
+      EigenPtr<Eigen::Matrix<T, Traits::num_dofs, Traits::num_dofs>> matrix)
       const {
-    for (int i = 0; i < Traits::kNumDofs; ++i) {
-      for (int j = 0; j < Traits::kNumDofs; ++j) {
+    for (int i = 0; i < Traits::num_dofs; ++i) {
+      for (int j = 0; j < Traits::num_dofs; ++j) {
         if ((*matrix)(i, j) != 0) {
           throw std::runtime_error("Input vector non-zero!");
         }
@@ -79,18 +84,19 @@ class CalcFooElement final
 
   double value_;
 };
+*/
 
 class FemElementTest : public ::testing::Test {
  protected:
-  using T = DummyElementTraits<1>::T;
-
   /* Default values for the state. */
   static VectorX<double> q() { return Vector3<double>(0.1, 0.2, 0.3); }
-  static VectorX<double> qdot() { return Vector3<double>(0.3, 0.4, 0.5); }
+  static VectorX<double> v() { return Vector3<double>(0.3, 0.4, 0.5); }
+  static VectorX<double> a() { return Vector3<double>(0.6, 0.7, 0.8); }
 
   /* FemElement under test. */
-  CalcFooElement element_{kZeroIndex, kNodeIndices, dummy_value};
-  FemState<CalcFooElement> state_{q(), qdot()};
+  DummyElement element_{kZeroIndex, kNodeIndices, kConstitutiveModel,
+                        kDampingModel};
+  FemState<DummyElement> state_{q(), v(), a()};
 };
 
 TEST_F(FemElementTest, Constructor) {
@@ -98,43 +104,47 @@ TEST_F(FemElementTest, Constructor) {
   EXPECT_EQ(element_.element_index(), kZeroIndex);
 }
 
-/* The following tests confirm that CalcResidual(), CalcStiffnessMatrix,
- CalcDampingMatrix(), correctly invoke their DoCalc counterparts with a
- zeroed-out vector/matrix. We confirm this with a custom subclass of
- FemElement that tests the input vector in DoCalc methods and returns a
- specific value. */
+/* The following tests confirm that CalcResidual(), AddScaledStiffnessMatrix,
+ AddScaledDampingMatrix(), DoAddScaledMassMatrix(), correctly invoke their
+ DoCalc and DoAdd counterparts. We confirm this with a custom subclass of
+ FemElement whose implementation returns/adds a specific value. */
 TEST_F(FemElementTest, Residual) {
-  Vector<T, DummyElementTraits<0>::kNumDofs> residual;
+  Vector<T, DummyElementTraits::num_dofs> residual;
   element_.CalcResidual(state_, &residual);
-  EXPECT_EQ(residual, element_.expected_residual());
+  EXPECT_EQ(residual, element_.dummy_residual());
 }
 
 TEST_F(FemElementTest, StiffnessMatrix) {
-  Eigen::Matrix<T, DummyElementTraits<0>::kNumDofs,
-                DummyElementTraits<0>::kNumDofs>
+  Eigen::Matrix<T, DummyElementTraits::num_dofs, DummyElementTraits::num_dofs>
       K;
-  element_.CalcStiffnessMatrix(state_, &K);
-  EXPECT_EQ(K, element_.expected_matrix());
+  K.setZero();
+  const T scale = 3.14;
+  element_.AddScaledStiffnessMatrix(state_, scale, &K);
+  EXPECT_EQ(K, scale * element_.dummy_stiffness_matrix());
 }
 
 TEST_F(FemElementTest, DampingMatrix) {
-  Eigen::Matrix<T, DummyElementTraits<0>::kNumDofs,
-                DummyElementTraits<0>::kNumDofs>
+  Eigen::Matrix<T, DummyElementTraits::num_dofs, DummyElementTraits::num_dofs>
       D;
-  element_.CalcDampingMatrix(state_, &D);
-  EXPECT_EQ(D, element_.expected_matrix());
+  D.setZero();
+  const T scale = 3.14;
+  element_.AddScaledDampingMatrix(state_, scale, &D);
+  EXPECT_EQ(D, scale * element_.dummy_damping_matrix());
 }
 
 /* Test that CalcMassMatrix() is calling the expected DoCalcMassMatrix(). */
 TEST_F(FemElementTest, MassMatrix) {
-  Eigen::Matrix<T, DummyElementTraits<0>::kNumDofs,
-                DummyElementTraits<0>::kNumDofs>
+  Eigen::Matrix<T, DummyElementTraits::num_dofs, DummyElementTraits::num_dofs>
       M;
-  element_.CalcMassMatrix(state_, &M);
-  EXPECT_EQ(M, element_.expected_matrix());
+  M.setZero();
+  const T scale = 3.14;
+  element_.AddScaledMassMatrix(state_, scale, &M);
+  EXPECT_EQ(M, scale * element_.dummy_mass_matrix());
 }
+
 }  // namespace
 }  // namespace test
+}  // namespace internal
 }  // namespace fem
 }  // namespace multibody
 }  // namespace drake

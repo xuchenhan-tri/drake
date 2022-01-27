@@ -3,27 +3,26 @@
 namespace drake {
 namespace multibody {
 namespace fem {
+
 template <typename T>
-void FemStateBase<T>::SetQ(const Eigen::Ref<const VectorX<T>>& value) {
-  DRAKE_THROW_UNLESS(value.size() == q_.size());
+void FemStateBase<T>::SetPositions(const Eigen::Ref<const VectorX<T>>& q) {
+  DRAKE_THROW_UNLESS(q.size() == q_.size());
   InvalidateAllCacheEntries();
-  q_ = value;
+  q_ = q;
 }
 
 template <typename T>
-void FemStateBase<T>::SetQdot(const Eigen::Ref<const VectorX<T>>& value) {
-  DRAKE_THROW_UNLESS(ode_order() >= 1);
-  DRAKE_THROW_UNLESS(value.size() == qdot_.size());
+void FemStateBase<T>::SetVelocities(const Eigen::Ref<const VectorX<T>>& v) {
+  DRAKE_THROW_UNLESS(v.size() == v_.size());
   InvalidateAllCacheEntries();
-  qdot_ = value;
+  v_ = v;
 }
 
 template <typename T>
-void FemStateBase<T>::SetQddot(const Eigen::Ref<const VectorX<T>>& value) {
-  DRAKE_THROW_UNLESS(ode_order() == 2);
-  DRAKE_THROW_UNLESS(value.size() == qddot_.size());
+void FemStateBase<T>::SetAccelerations(const Eigen::Ref<const VectorX<T>>& a) {
+  DRAKE_THROW_UNLESS(a.size() == a_.size());
   InvalidateAllCacheEntries();
-  qddot_ = value;
+  a_ = a;
 }
 
 template <typename T>
@@ -33,18 +32,15 @@ void FemStateBase<T>::ApplyBoundaryCondition(
   if (bcs.size() == 0) {
     return;
   }
-  bc.VerifyBcIndexes(this->num_generalized_positions());
+  bc.VerifyBcIndexes(this->num_dofs());
   /* Write the BC to the mutable state. */
   for (const auto& [dof_index, boundary_state] : bcs) {
     q_(int{dof_index}) = boundary_state(0);
-    if (ode_order() >= 1) {
-      qdot_(int{dof_index}) = boundary_state(1);
-    }
-    if (ode_order() == 2) {
-      qddot_(int{dof_index}) = boundary_state(2);
-    }
+    v_(int{dof_index}) = boundary_state(1);
+    a_(int{dof_index}) = boundary_state(2);
   }
 }
+
 }  // namespace fem
 }  // namespace multibody
 }  // namespace drake

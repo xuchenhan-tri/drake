@@ -217,14 +217,14 @@ class FemModelBase {
    the NVI CalcTangentMatrix(). The input `state` is guaranteed to be compatible
    with `this` FEM model. */
   virtual void DoCalcTangentMatrix(
-      const FemStateBase<T>& state,
+      const FemStateBase<T>& state, const Vector3<T>& weights,
       Eigen::SparseMatrix<T>* tangent_matrix) const = 0;
 
   /** Derived classes must override this method to provide an implementation for
    the NVI CalcTangentMatrix(). The input `state` is guaranteed to be compatible
    with `this` FEM model. */
   virtual void DoCalcTangentMatrix(
-      const FemStateBase<T>& state,
+      const FemStateBase<T>& state, const Vector3<T>& weights,
       internal::PetscSymmetricBlockSparseMatrix* tangent_matrix) const = 0;
 
   /** Derived classes must override this method to provide an implementation for

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "drake/common/drake_copyable.h"
+
 namespace drake {
 namespace multibody {
 namespace fem {
@@ -13,7 +15,7 @@ proportional to the frequency. Furthermore, one should note that the mass
 proportional damping damps rigid body motions and should therefore be kept small
 in general.
 @tparam_nonsymbolic_scalar T */
-template<typename T>
+template <typename T>
 class DampingModel {
  public:
   DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(DampingModel);

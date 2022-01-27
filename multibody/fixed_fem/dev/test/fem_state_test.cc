@@ -9,6 +9,8 @@
 namespace drake {
 namespace multibody {
 namespace fem {
+namespace internal {
+
 using test::DummyElement;
 using test::DummyElementTraits;
 static constexpr int kNumDofs = 3;
@@ -118,7 +120,9 @@ TEST_F(FemStateTest, ElementCache) {
   state_.SetQdot(2 * qdot());
   VerifyCacheEntries();
 }
+
 }  // namespace
+}  // namespace internal
 }  // namespace fem
 }  // namespace multibody
 }  // namespace drake

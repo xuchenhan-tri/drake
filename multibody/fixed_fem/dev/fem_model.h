@@ -12,7 +12,6 @@
 #include <Eigen/Sparse>
 
 #include "drake/common/eigen_types.h"
-#include "drake/common/unused.h"
 #include "drake/multibody/fixed_fem/dev/fem_element.h"
 #include "drake/multibody/fixed_fem/dev/fem_indexes.h"
 #include "drake/multibody/fixed_fem/dev/fem_model_base.h"
@@ -23,18 +22,19 @@ namespace multibody {
 namespace fem {
 namespace internal {
 
-/** %FemModel provides a fixed size implementaion of FemModelBase by
+/* FemModel provides a fixed size implementaion of FemModelBase by
  templatizing on the type of FemElement. See FemModelBase for more information
- on the functionalities of this class. Many methods provided by FemModelBase
- (e.g. FemModelBase::CalcTangentMatrix()) involve evaluating computationally
+ on the user-facing APIs of this class. Many methods provided by FemModelBase
+ (e.g. FemModelBase::CalcTangentMatrix) involve evaluating computationally
  intensive loops over FemElement, and the overhead caused by virtual methods may
  be significant. Therefore, this class is templated on the FemElement to avoid
  the overhead of virtual methods. The type information at compile time also
  helps eliminate heap allocations.
- @tparam Element    The type of FemElement that makes up this %FemModel.
- This template parameter provides the scalar type and the compile time constants
- such as the natural, spatial and solution dimensions and the number of
- nodes/quadrature points in each element. */
+ @tparam Element    The type of FEM elements that makes up this FemModel.
+ This template parameter must be an instantiation of FemElement, which provides
+ the scalar type and the compile time constants such as the natural dimension
+ and the number of nodes/quadrature points in each
+ element. See FemElements for more details. */
 template <class Element>
 class FemModel : public FemModelBase<typename Element::Traits::T> {
  public:
@@ -44,29 +44,19 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
   using T = typename Element::Traits::T;
   using ElementType = Element;
 
-  /** Creates a default FEM state for this model. The new state's number of
-   generalized positions is equal to `num_dofs()`. The new state's element data
-   is constructed using the FemElements owned by this %FemModel. */
-  FemState<Element> MakeFemState() const {
-    FemState<Element> state = DoMakeFemState();
-    state.MakeElementData(elements_);
-    return state;
-  }
-
-  int num_dofs() const final {
-    return Element::Traits::kSpatialDimension * this->num_nodes();
-  }
-
   int num_elements() const final { return elements_.size(); }
 
  protected:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(FemModel);
 
-  explicit FemModel() = default;
+  /* Creates an empty FemModel with no elements. */
+  FemModel() = default;
 
   virtual ~FemModel() = default;
 
-  /** Derived classes must implement this method to create a new FemState. */
+  /* Derived classes must override this method to create a default FemState for
+   this model, which initializes the positions, velocities, and accelerations of
+   all nodes in the model. */
   virtual FemState<Element> DoMakeFemState() const = 0;
 
   const Element& element(ElementIndex i) const {
@@ -81,13 +71,13 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
     return elements_[i];
   }
 
-  /** Moves the input `element` into the vector of elements held by `this`
-   %FemModel. */
+  /* Moves the input `element` into the vector of elements held by this
+   FemModel. */
   void AddElement(Element&& element) {
     elements_.emplace_back(std::move(element));
   }
 
-  /** Alternative signature for adding a new element to `this` %FemModel.
+  /* Alternative signature for adding a new element to this FemModel.
    Forwards the arguments `args` to the constructor of the Element and
    potentially creates the new element in place. */
   template <typename... Args>
@@ -96,10 +86,13 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
   }
 
  private:
-  /* Implements FemModelBase::MakeFemStateBase() by simply hiding the
-   result from MakeFemState() behind a unique_ptr to FemStateBase. */
+  /* Implements FemModelBase::MakeFemStateBase(). */
   std::unique_ptr<FemStateBase<T>> DoMakeFemStateBase() const final {
-    return std::make_unique<FemState<Element>>(MakeFemState());
+    /* Hide the concrete state behind a pointer to abstract state. */
+    std::unique_ptr<FemStateBase<T>> state =
+        std::make_unique<FemState<Element>>(DoMakeFemState());
+    /* Initialize per-element state-dependent data. */
+    state->MakeElementData(elements_);
   }
 
   /* Helper for DoCalcResidual(). */
@@ -131,7 +124,7 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
 
   /* Helper for DoCalcTangentMatrix(). */
   void CalcTangentMatrixForConcreteState(
-      const FemState<Element>& state,
+      const FemState<Element>& state, const Vector3<T>& weights,
       Eigen::SparseMatrix<T>* tangent_matrix) const {
     DRAKE_DEMAND(tangent_matrix != nullptr &&
                  tangent_matrix->rows() == num_dofs() &&
@@ -152,7 +145,6 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
     /* Scratch space to store the contribution to the tangent matrix from each
      element. */
     Eigen::Matrix<T, kNumDofs, kNumDofs> element_tangent_matrix;
-    const Vector3<T>& weights = this->state_updater().weights();
     for (ElementIndex e(0); e < num_elements(); ++e) {
       element_tangent_matrix.setZero();
       elements_[e].CalcTangentMatrix(state, weights, &element_tangent_matrix);
@@ -174,7 +166,7 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
 
   /* Helper for DoCalcTangentMatrix(). */
   void CalcTangentMatrixForConcreteState(
-      const FemState<Element>& state,
+      const FemState<Element>& state, const Vector3<T>& weights,
       PetscSymmetricBlockSparseMatrix* tangent_matrix) const {
     if constexpr (!std::is_same_v<typename Element::T, double>) {
       throw std::logic_error(
@@ -199,7 +191,6 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
        element. */
       Vector<int, kNumNodes> block_indices;
       Eigen::Matrix<T, kNumDofs, kNumDofs> element_tangent_matrix;
-      const Vector3<T>& weights = this->state_updater().weights();
       for (ElementIndex e(0); e < num_elements(); ++e) {
         elements_[e].CalcTangentMatrix(state, weights, &element_tangent_matrix);
         const std::array<NodeIndex, kNumNodes>& element_node_indices =
@@ -308,39 +299,19 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
   /* Implements FemModelBase::CalcTangentMatrix() by casting the
    FemStateBase to its concrete type. */
   void DoCalcTangentMatrix(const FemStateBase<T>& state,
+                           const Vector3<T>& weights,
                            Eigen::SparseMatrix<T>* tangent_matrix) const final {
     const FemState<Element>& concrete_state = cast_to_concrete_state(state);
-    CalcTangentMatrixForConcreteState(concrete_state, tangent_matrix);
+    CalcTangentMatrixForConcreteState(concrete_state, weights, tangent_matrix);
   }
 
   /* Implements FemModelBase::CalcTangentMatrix() by casting the
    FemStateBase to its concrete type. */
   void DoCalcTangentMatrix(
-      const FemStateBase<T>& state,
+      const FemStateBase<T>& state, const Vector3<T>& weights,
       PetscSymmetricBlockSparseMatrix* tangent_matrix) const final {
     const FemState<Element>& concrete_state = cast_to_concrete_state(state);
-    CalcTangentMatrixForConcreteState(concrete_state, tangent_matrix);
-  }
-
-  /* Builds the element tangent matrix for the element with index
-   `element_index` by combining the stiffness matrix, damping matrix, and the
-   mass matrix according to the given `weights`.
-   @param[in] state          The FemState to evaluate the residual at.
-   @param[in] weights        The ordered weights to combine stiffness matrix,
-                             damping matrix and mass matrix into the tangent
-                             matrix.
-   @param[in] element_index  Index of the element whose element tangent matrix
-                             is being built. */
-  Eigen::Matrix<T, Element::Traits::num_dofs, Element::Traits::num_dofs>
-  CalcElementTangentMatrix(const FemState<Element>& state,
-                           const Vector3<T>& weights,
-                           ElementIndex element_index) const {
-    DRAKE_ASSERT(element_index.is_valid() && element_index < num_elements());
-    using MatrixType =
-        Eigen::Matrix<T, Element::Traits::num_dofs, Element::Traits::num_dofs>;
-    MatrixType tangent_matrix = MatrixType::Zero();
-    elements_[element_index].CalcTangentMatrix(state, weights, &tangent_matrix);
-    return tangent_matrix;
+    CalcTangentMatrixForConcreteState(concrete_state, weights, tangent_matrix);
   }
 
   /* Statically cast the given FemStateBase to the FemState compatible
@@ -375,6 +346,7 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
   /* FemElements owned by this model. */
   std::vector<Element> elements_{};
 };
+
 }  // namespace internal
 }  // namespace fem
 }  // namespace multibody

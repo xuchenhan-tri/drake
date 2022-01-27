@@ -752,11 +752,14 @@ drake_cc_googletest(
 drake_cc_library(
     name = "dummy_element",
     testonly = 1,
+    srcs = ["test/dummy_element.cc"],
     hdrs = ["test/dummy_element.h"],
     deps = [
+        ":damping_model",
         ":element_cache_entry",
         ":fem_element",
         ":fem_state",
+        ":linear_constitutive_model",
     ],
 )
 

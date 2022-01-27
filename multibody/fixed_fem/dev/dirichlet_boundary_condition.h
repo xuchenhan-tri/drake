@@ -14,6 +14,7 @@
 namespace drake {
 namespace multibody {
 namespace fem {
+
 /** %DirichletBoundaryCondition provides functionalities related to Dirichlet
  boundary conditions (BC) to the FEM solver. In particular, it provides the
  following functionalities:
@@ -22,45 +23,30 @@ namespace fem {
  3. modifying a given tangent matrix/residual that arises from the FEM system
  without BC and transform it into the tangent matrix/residual for the same
  system under the stored BC.
- @tparam_nonsymbolic_scalar T. */
+ @tparam_nonsymbolic_scalar */
 template <class T>
 class DirichletBoundaryCondition {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(DirichletBoundaryCondition);
 
-  /* Constructs a new %DirichletBoundaryCondition that applies to an FEM model
-   that has the given `ode_order`. */
-  explicit DirichletBoundaryCondition(int ode_order) : ode_order_(ode_order) {}
-
-  /* Returns the ODE order of the FEM model that is compatible with `this`
-   %DirichletBoundaryCondition. */
-  int ode_order() const { return ode_order_; }
+  /** Constructs an empty boundary condition. */
+  DirichletBoundaryCondition() {}
 
   /** Sets the dof with index `dof_index` to be subject to the prescribed
    `boundary_state`.
-   @param[in] dof_index Index into the generalized positions (and their
-   derivatives) of the state.
-   @param[in] boundary_state The tuple of prescibed state at `dof_index`. For a
-   2nd-order ODE, it takes the form [q(dof_index), qdot(dof_index),
-   qddot(dof_index)]. The `qdot` and `qddot` terms do not show up for lower
-   order ODEs.
-   @throw std::exception if boundary_state.size() != ode_order. */
+   @param[in] dof_index      The index of the degree of freedom to which the
+                             boundary condition is applied.
+   @param[in] boundary_state The prescibed position, velocity, and acceleration
+                             at `dof_index`. */
   void AddBoundaryCondition(
-      DofIndex dof_index, const Eigen::Ref<const VectorX<T>>& boundary_state) {
-    if (boundary_state.size() != ode_order_ + 1) {
-      throw std::runtime_error(
-          std::to_string(ode_order_ + 1) +
-          " boundary states need to be specified. However, " +
-          std::to_string(boundary_state.size()) +
-          " boundary states were specified.");
-    }
+      DofIndex dof_index, const Eigen::Ref<const Vector3<T>>& boundary_state) {
     bcs_[dof_index] = boundary_state;
   }
 
   /** Returns all boundary conditions stored in `this`
-   %DirichletBoundaryCondition as a `std::map` with the index of the dof as
+   %DirichletBoundaryCondition as an `std::map` with the index of the dof as
    key and the prescribed boundary values as value. */
-  const std::map<DofIndex, VectorX<T>>& get_bcs() const { return bcs_; }
+  const std::map<DofIndex, Vector3<T>>& get_bcs() const { return bcs_; }
 
   /** Modifies the given tangent matrix that arises from an FEM system without
    BC into the tangent matrix for the same system subject to `this` BC. More
@@ -150,11 +136,7 @@ class DirichletBoundaryCondition {
    cache consistency when applying the BC. The value of the map stores the
    value of q, qdot and qddot (in that order and when applicable) of the dof
    with index of the key. */
-  std::map<DofIndex, VectorX<T>> bcs_{};
-
-  /* The ODE order of the FemModel that `this` DirichletBoundaryCondition
-   applies to. */
-  const int ode_order_;
+  std::map<DofIndex, Vector3<T>> bcs_{};
 };
 }  // namespace fem
 }  // namespace multibody

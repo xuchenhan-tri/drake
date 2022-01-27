@@ -28,8 +28,8 @@ static constexpr int kNumQuads = QuadratureType::num_quadrature_points;
 using IsoparametricElementType =
     internal::LinearSimplexElement<T, kNaturalDimension, kSpatialDimension,
                                    kNumQuads>;
-using ConstitutiveModelType = internal::CorotatedModel<T, kNumQuads>;
-using DeformationGradientDataType = internal::CorotatedModelData<T, kNumQuads>;
+using ConstitutiveModelType = CorotatedModel<T, kNumQuads>;
+using DeformationGradientDataType = CorotatedModelData<T, kNumQuads>;
 
 class VolumetricElementTest : public ::testing::Test {
  protected:
