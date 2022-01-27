@@ -351,7 +351,7 @@ drake_cc_library(
         ":dirichlet_boundary_condition",
         ":fem_state_base",
         ":petsc_symmetric_block_sparse_matrix",
-        ":state_updater",
+        ":discrete_time_integrator",
         "//common:default_scalars",
         "//common:essential",
     ],
@@ -366,7 +366,7 @@ drake_cc_library(
         ":eigen_conjugate_gradient_solver",
         ":fem_model",
         ":linear_system_solver",
-        ":state_updater",
+        ":discrete_time_integrator",
         "//common:essential",
         "//multibody/contact_solvers:sparse_linear_operator",
     ],
@@ -476,7 +476,7 @@ drake_cc_library(
         "newmark_scheme.h",
     ],
     deps = [
-        ":state_updater",
+        ":discrete_time_integrator",
     ],
 )
 
@@ -569,9 +569,12 @@ drake_cc_library(
 )
 
 drake_cc_library(
-    name = "state_updater",
+    name = "discrete_time_integrator",
+    srcs = [
+        "discrete_time_integrator.cc",
+    ],
     hdrs = [
-        "state_updater.h",
+        "discrete_time_integrator.h",
     ],
     deps = [
         ":fem_state",
@@ -596,7 +599,7 @@ drake_cc_library(
     ],
     deps = [
         ":elasticity_model",
-        ":zeroth_order_state_updater",
+        ":zeroth_order_discrete_time_integrator",
         "//geometry/proximity:volume_mesh",
     ],
 )
@@ -616,12 +619,12 @@ drake_cc_library(
 )
 
 drake_cc_library(
-    name = "zeroth_order_state_updater",
+    name = "zeroth_order_discrete_time_integrator",
     hdrs = [
-        "zeroth_order_state_updater.h",
+        "zeroth_order_discrete_time_integrator.h",
     ],
     deps = [
-        ":state_updater",
+        ":discrete_time_integrator",
     ],
 )
 
@@ -828,7 +831,7 @@ drake_cc_googletest(
         ":linear_constitutive_model",
         ":static_elasticity_element",
         ":static_elasticity_model",
-        ":zeroth_order_state_updater",
+        ":zeroth_order_discrete_time_integrator",
         "//common/test_utilities:eigen_matrix_compare",
         "//common/test_utilities:expect_throws_message",
         "//geometry/proximity:make_box_mesh",
@@ -975,10 +978,10 @@ drake_cc_googletest(
 )
 
 drake_cc_googletest(
-    name = "zeroth_order_state_updater_test",
+    name = "zeroth_order_discrete_time_integrator_test",
     deps = [
         ":dummy_element",
-        ":zeroth_order_state_updater",
+        ":zeroth_order_discrete_time_integrator",
         "//common/test_utilities:eigen_matrix_compare",
         "//common/test_utilities:expect_throws_message",
     ],
