@@ -15,8 +15,8 @@ using T = DummyElementTraits::T;
 const ElementIndex kZeroIndex = ElementIndex(0);
 const std::array<NodeIndex, DummyElementTraits::num_nodes> kNodeIndices = {
     {NodeIndex(0), NodeIndex(1)}};
-static const DummyElementTraits::ConstitutiveModel kConstitutiveModel(5e4, 0.4);
-static const DampingModel<T> kDampingModel(0.01, 0.02);
+const DummyElementTraits::ConstitutiveModel kConstitutiveModel(5e4, 0.4);
+const DampingModel<T> kDampingModel(0.01, 0.02);
 
 /* An minimal FemElement to test FemElement::CalcFoo() methods. */
 /*
