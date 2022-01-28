@@ -85,9 +85,8 @@ class FemState : public FemStateBase<typename Element::T> {
   friend class FemStateTest;
 
   // TODO(xuchenhan-tri): Currently, all cache entries are thrashed when *any*
-  //  state (q, qdot, or qddot) is changed. For most FEM models, there exist
-  //  more fine-grained caching mechanisms which may improve the cache
-  //  efficiency.
+  //  state (q, v, or a) is changed. For most FEM models, there exist more
+  //  fine-grained caching mechanisms which may improve the cache efficiency.
   /* Mark all cache entries associated with `this` FemState as stale. */
   void InvalidateAllCacheEntries() final {
     for (auto& element_cache_entry : element_cache_) {

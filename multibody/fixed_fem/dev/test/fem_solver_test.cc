@@ -131,6 +131,11 @@ class FemSolverTest : public ::testing::Test {
 using ScalarTypes = ::testing::Types<double, AutoDiffXd>;
 TYPED_TEST_SUITE(FemSolverTest, ScalarTypes);
 
+// TODO(xuchenhan-tri): Replace this test with a dummy model test.
+// Build a dummy model with single dummy element. So we know exactly what the
+// stiffness/damping/mass matrix and residuals are. We can then test that the
+// newton solver converges in one iteration and the dz is as expected.
+
 /* We move the vertices of the mesh to arbitrary locations q and record the net
 force f exerted on the vertices. Then if we apply f on the vertices in the
 reference state, we should recover the positions q for static equilibrium. */
