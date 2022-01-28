@@ -9,9 +9,9 @@ namespace fem {
 namespace internal {
 
 /* Implements NewmarkScheme with acceleration as the unknown variable.
- Given the value for the current time step acceleration `a`, the current state
- can be calculated from the state from the previous time step according to the
- following equations:
+ Given the value for the current time step acceleration `a`, the state at the
+ next time step can be calculated from that of the previous time step according
+ to the following equations:
 
       v = vₙ + dt ⋅ (γ ⋅ a + (1−γ) ⋅ aₙ)
       x = xₙ + dt ⋅ vₙ + dt² ⋅ [β ⋅ a + (0.5−β) ⋅ aₙ].

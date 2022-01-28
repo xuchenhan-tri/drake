@@ -1,5 +1,7 @@
 #include "drake/multibody/fixed_fem/dev/discrete_time_integrator.h"
 
+// TODO(xuchenhan-tri): Add unit tests for this class.
+
 namespace drake {
 namespace multibody {
 namespace fem {

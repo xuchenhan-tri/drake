@@ -8,10 +8,10 @@ namespace multibody {
 namespace fem {
 namespace internal {
 
-/* Implements the interface StateUpdater with Newmark-beta time integration
- scheme with velocity being the unknown variable. Given the value for the
- current time step velocity `v`, the states are calculated from states from the
- previous time step according to the following equations:
+/* Implements the interface DiscreteTimeIntegrator with Newmark-beta time
+ integration scheme with velocity being the unknown variable. Given the value
+ for the next time step velocity `v`, the states are calculated from that of
+ the previous time step according to the following equations:
 
       a = (v - vₙ) / (dt ⋅ γ) - (1 − γ) / γ ⋅ aₙ
       x = xₙ + dt ⋅ (β/γ ⋅ v +  (1 - β/γ) ⋅ vₙ) + dt² ⋅ (0.5 − β/γ) ⋅ aₙ.
@@ -55,8 +55,8 @@ class VelocityNewmarkScheme final : public NewmarkScheme<T> {
                             const VectorX<T>& unknown_variable,
                             FemStateBase<T>* state) const final;
 
-  double beta_over_gamma_;
-  double one_over_dt_gamma_;
+  double beta_over_gamma_{};
+  double one_over_dt_gamma_{};
 };
 
 }  // namespace internal

@@ -9,7 +9,9 @@ namespace internal {
 
 /* DiscreteTimeIntegrator is an abstract class that encapsulates discrete time
  integrations schemes for second order ODEs. When a second order ODE
+
      f(q, v = q̇, a = q̈) = 0
+
  is discretized in time, the quantities of interest evaluated at the next time
  step can often be expressed as an affine mapping on a single variable z, i.e.
 
@@ -30,16 +32,18 @@ namespace internal {
         aₙ₊₁ = (z - vₙ) / (dt ⋅ γ) - (1 − γ) / γ ⋅ aₙ
 
  DiscreteTimeIntegrator provides the interface to query the relationship between
- the states `q`, `v`, and `a` and the unknown variable `z`.
+ the states (`q`, `v`, and `a`) and the unknown variable `z`.
  @tparam_non_symbolic. */
 template <typename T>
 class DiscreteTimeIntegrator {
  public:
+  DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(DiscreteTimeIntegrator);
+
   virtual ~DiscreteTimeIntegrator() = default;
 
   /* Returns (αₚ, αᵥ, αₐ), the derivative of (q, v, a) with respect to the
    unknown variable z (See class documentation). These weights can be used to
-   combine stiffness, damping and mass matrices to form the tangent
+   combine stiffness, damping, and mass matrices to form the tangent
    matrix (see FemModelBase::CalcTangentMatrix). */
   Vector3<T> weights() const;
 
@@ -48,9 +52,11 @@ class DiscreteTimeIntegrator {
 
   /* Updates the FemStateBase `state` given the change in the unknown variables.
    More specifically, it sets the given `state` to the following values.
+
         q = αₚ (z + dz) + bₚ
         v = αᵥ (z + dz) + bᵥ
         a = αₐ (z + dz) + bₐ
+
    @pre state != nullptr.
    @pre dz.size() == state->num_dofs(). */
   void UpdateStateFromChangeInUnknowns(const VectorX<T>& dz,
@@ -69,7 +75,6 @@ class DiscreteTimeIntegrator {
                           FemStateBase<T>* next_state) const;
 
  protected:
-  DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(DiscreteTimeIntegrator);
   DiscreteTimeIntegrator() = default;
 
   /* Derived classes must override this method to implement the NVI
