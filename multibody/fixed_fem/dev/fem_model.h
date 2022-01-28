@@ -204,11 +204,9 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
     }
   }
 
-  /* Implements FemModelBase::SetTangentMatrixSparsityPattern(). */
-  void DoSetTangentMatrixSparsityPattern(
-      Eigen::SparseMatrix<T>* tangent_matrix) const final {
-    DRAKE_DEMAND(tangent_matrix != nullptr);
-    tangent_matrix->resize(num_dofs(), num_dofs());
+  /* Implements FemModelBase::DoMakeEigenSparseTangentMatrix(). */
+  void DoMakeEigenSparseTangentMatrix() const final {
+    Eigen::SparseMatrix<T> tangent_matrix(num_dofs(), num_dofs());
     std::vector<Eigen::Triplet<T>> non_zero_entries;
     /* Alias for readability. */
     constexpr int element_num_dofs = Element::Traits::num_dofs;
@@ -235,9 +233,10 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
         }
       }
     }
-    tangent_matrix->setFromTriplets(non_zero_entries.begin(),
-                                    non_zero_entries.end());
-    tangent_matrix->makeCompressed();
+    tangent_matrix.setFromTriplets(non_zero_entries.begin(),
+                                   non_zero_entries.end());
+    tangent_matrix.makeCompressed();
+    return tangent_matrix;
   }
 
   /* Implements FemModelBase::MakePetscSymmetricBlockSparseTangentMatrix(). */

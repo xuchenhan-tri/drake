@@ -118,13 +118,10 @@ class FemModelBase {
       const FemStateBase<T>& state, const Vector3<T>& weights,
       internal::PetscSymmetricBlockSparseMatrix* tangent_matrix) const;
 
-  /** Sets the sparsity pattern for the tangent matrix of this model.
-   @param[out] tangent_matrix    The tangent matrix of this model. Its
-   size and sparsity pattern will be set so that it will be ready to be passed
-   into CalcTangentMatrix().
-   @pre tangent_matrix != nullptr. */
-  void SetTangentMatrixSparsityPattern(
-      Eigen::SparseMatrix<T>* tangent_matrix) const;
+  /** Creates an Eigen::SparseMatrix that has the sparsity pattern of the
+   tangent matrix of this FEM model. In particular, the size of the tangent
+   matrix is `num_dofs()` by `num_dofs()`. */
+  Eigen::SparseMatrix<T> MakeEigenSparseTangentMatrix() const;
 
   // TODO(xuchenhan-tri): We are returning a pointer to internal objects in a
   //  public method in a non-internal class.
@@ -158,14 +155,7 @@ class FemModelBase {
 
   /** Sets the gravity vector of all existing and future elements in this model.
    */
-  void SetGravityVector(const Vector3<T>& gravity) {
-    /* Store gravity so that all elements added after the call to this method
-     get the "new" gravity constant. */
-    gravity_ = gravity;
-    /* Update the gravity vector in elements added before the call to
-     this method. */
-    DoSetGravityVector(gravity);
-  }
+  void SetGravityVector(const Vector3<T>& gravity);
 
   /** (Internal use only) Throws std::exception to report a mismatch between
   the concrete types of `this` FemModelBase and the FemStateBase that was
@@ -206,13 +196,17 @@ class FemModelBase {
       Eigen::SparseMatrix<T>* tangent_matrix) const = 0;
 
   /** Derived classes must override this method to provide an implementation for
+   the NVI MakeEigenSparseTangentMatrix(). */
+  virtual Eigen::SparseMatrix<T> DoMakeEigenSparseTangentMatrix() const = 0;
+
+  /** Derived classes must override this method to provide an implementation for
    the NVI MakePetscSymmetricBlockSparseTangentMatrix(). */
   virtual std::unique_ptr<internal::PetscSymmetricBlockSparseMatrix>
   DoMakePetscSymmetricBlockSparseTangentMatrix() const = 0;
 
   /** Derived classes must override this method to set the gravity vector for
    all existing elements in the model. */
-  void DoSetGravityVector(const Vector3<T>& gravity) = 0;
+  virtual void DoSetGravityVector(const Vector3<T>& gravity) = 0;
 
   /** Derived classes must invoke this method to update the number of nodes in
    the model when they add more nodes to the FEM model. */

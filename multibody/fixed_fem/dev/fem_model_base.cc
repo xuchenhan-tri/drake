@@ -43,10 +43,8 @@ void FemModelBase<T>::CalcTangentMatrix(
 }
 
 template <typename T>
-void FemModelBase<T>::SetTangentMatrixSparsityPattern(
-    Eigen::SparseMatrix<T>* tangent_matrix) const {
-  DRAKE_DEMAND(tangent_matrix != nullptr);
-  DoSetTangentMatrixSparsityPattern(tangent_matrix);
+Eigen::SparseMatrix<T> FemModelBase<T>::MakeEigenSparseTangentMatrix() const {
+  return DoMakeEigenSparseTangentMatrix();
 }
 
 template <typename T>
