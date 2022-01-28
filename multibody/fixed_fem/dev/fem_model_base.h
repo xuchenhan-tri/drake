@@ -153,6 +153,20 @@ class FemModelBase {
     return dirichlet_bc_;
   }
 
+  /** Returns the gravity vector for all elements in this model. */
+  const Vector3<T>& gravity() const { return gravity_; }
+
+  /** Sets the gravity vector of all existing and future elements in this model.
+   */
+  void SetGravityVector(const Vector3<T>& gravity) {
+    /* Store gravity so that all elements added after the call to this method
+     get the "new" gravity constant. */
+    gravity_ = gravity;
+    /* Update the gravity vector in elements added before the call to
+     this method. */
+    DoSetGravityVector(gravity);
+  }
+
   /** (Internal use only) Throws std::exception to report a mismatch between
   the concrete types of `this` FemModelBase and the FemStateBase that was
   passed to API method `func`. */
@@ -196,6 +210,10 @@ class FemModelBase {
   virtual std::unique_ptr<internal::PetscSymmetricBlockSparseMatrix>
   DoMakePetscSymmetricBlockSparseTangentMatrix() const = 0;
 
+  /** Derived classes must override this method to set the gravity vector for
+   all existing elements in the model. */
+  void DoSetGravityVector(const Vector3<T>& gravity) = 0;
+
   /** Derived classes must invoke this method to update the number of nodes in
    the model when they add more nodes to the FEM model. */
   void increment_num_nodes(int num_new_nodes) { num_nodes_ += num_new_nodes; }
@@ -205,6 +223,9 @@ class FemModelBase {
   int num_nodes_{0};
   /* The Dirichlet boundary condition that the model is subject to. */
   internal::DirichletBoundaryCondition<T> dirichlet_bc_;
+
+  /* Returns the gravity vector for all elements in the model. */
+  Vector3<T> gravity_{0, 0, -9.81};
 };
 }  // namespace fem
 }  // namespace multibody

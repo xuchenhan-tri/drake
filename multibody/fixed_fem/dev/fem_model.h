@@ -314,6 +314,14 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
     CalcTangentMatrixForConcreteState(concrete_state, weights, tangent_matrix);
   }
 
+  /* Implements FemModelBase::SetGravityVector(). */
+  void DoSetGravityVector(const Vector<T, kSpatialDimension>& gravity) {
+    /* Update the gravity vector of all existing elements. */
+    for (ElementIndex e(0); e < num_elements(); ++e) {
+      elements_[e].set_gravity_vector(gravity);
+    }
+  }
+
   /* Statically cast the given FemStateBase to the FemState compatible
    with `this` FemModel.
    @pre The given `abstract_state` is compatible with the `this` FemModel. */

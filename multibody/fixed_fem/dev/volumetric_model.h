@@ -36,13 +36,8 @@ class VolumetricModel : public FemModel<Element> {
           Element>,
       "The template parameter `Element` must be of type VolumetricElement.");
 
-  // TODO(xuchenhan-tri): Remove state updater from FemModel and move it to
-  //  FemSolver.
-  /* Creates a new VolumetricModel with the given discrete time step. */
-  explicit VolumetricModel(double dt)
-      : FemModel<Element>(
-            std::make_unique<internal::AccelerationNewmarkScheme<T>>(dt, 1.0,
-                                                                     0.5)) {}
+  /* Creates a new VolumetricModel with no elements. */
+  VolumetricModel() = default;
 
   ~VolumetricModel() = default;
 
@@ -92,7 +87,8 @@ class VolumetricModel : public FemModel<Element> {
         this->AddElement(
             next_element_index, element_node_indices, constitutive_model,
             element_reference_positions_reshaped, density, damping_model);
-        this->mutable_element(next_element_index).set_gravity_vector(gravity_);
+        this->mutable_element(next_element_index)
+            .set_gravity_vector(this->gravity());
       }
     }
   }
@@ -107,22 +103,6 @@ class VolumetricModel : public FemModel<Element> {
     }
     return energy;
   }
-
-  /* Sets the gravity vector for all elements (existing and future) in the
-   model. */
-  void SetGravityVector(const Vector<T, kSpatialDimension>& gravity) {
-    /* Store gravity so that all elements added after the call to this method
-     get the "new" gravity constant. */
-    gravity_ = gravity;
-    /* Update the gravity vector in elements added before the call to
-     this method. */
-    for (ElementIndex e(0); e < this->num_elements(); ++e) {
-      this->mutable_element(e).set_gravity_vector(gravity);
-    }
-  }
-
-  /* Returns the gravity vector for all elements in the model. */
-  const Vector<T, kSpatialDimension> gravity() const { return gravity_; }
 
  protected:
   /* Parse a tetrahedral volume mesh, store the positions of the vertices in

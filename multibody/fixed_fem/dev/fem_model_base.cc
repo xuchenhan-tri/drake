@@ -62,8 +62,19 @@ void FemModelBase<T>::ApplyBoundaryCondition(FemStateBase<T>* state) const {
   dirichlet_bc_.ApplyBoundaryConditionToState(state);
 }
 
+template <typename T>
+void FemModelBase<T>::SetGravityVector(const Vector3<T>& gravity) {
+  /* Store gravity so that all elements added after the call to this method
+   get the "new" gravity constant. */
+  gravity_ = gravity;
+  /* Update the gravity vector in elements added before the call to
+   this method. */
+  DoSetGravityVector(gravity);
+}
+
 }  // namespace fem
 }  // namespace multibody
 }  // namespace drake
+
 DRAKE_DEFINE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_NONSYMBOLIC_SCALARS(
     class ::drake::multibody::fem::FemModelBase);
