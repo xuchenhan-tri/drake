@@ -25,22 +25,6 @@ void FemStateBase<T>::SetAccelerations(const Eigen::Ref<const VectorX<T>>& a) {
   a_ = a;
 }
 
-template <typename T>
-void FemStateBase<T>::ApplyBoundaryCondition(
-    const DirichletBoundaryCondition<T>& bc) {
-  const auto& bcs = bc.get_bcs();
-  if (bcs.size() == 0) {
-    return;
-  }
-  bc.VerifyBcIndexes(this->num_dofs());
-  /* Write the BC to the mutable state. */
-  for (const auto& [dof_index, boundary_state] : bcs) {
-    q_(int{dof_index}) = boundary_state(0);
-    v_(int{dof_index}) = boundary_state(1);
-    a_(int{dof_index}) = boundary_state(2);
-  }
-}
-
 }  // namespace fem
 }  // namespace multibody
 }  // namespace drake

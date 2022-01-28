@@ -11,7 +11,6 @@
 #include "drake/multibody/fixed_fem/dev/dirichlet_boundary_condition.h"
 #include "drake/multibody/fixed_fem/dev/fem_state_base.h"
 #include "drake/multibody/fixed_fem/dev/petsc_symmetric_block_sparse_matrix.h"
-#include "drake/multibody/fixed_fem/dev/state_updater.h"
 
 namespace drake {
 namespace multibody {
@@ -128,70 +127,30 @@ class FemModelBase {
       Eigen::SparseMatrix<T>* tangent_matrix) const;
 
   // TODO(xuchenhan-tri): We are returning a pointer to internal objects in a
-  //  public method in a non-internal class. Moving
-  //  PetscSymmetricBlockSparseMatrix out of internal namespace seems to be the
-  //  easiest fix to this issue.
-
+  //  public method in a non-internal class.
   /** Creates a PetscSymmetricBlockSparseMatrix that has the sparsity pattern of
    the tangent matrix of this FEM model. In particular, the size of the tangent
    matrix is `num_dofs()` by `num_dofs()`. */
   std::unique_ptr<internal::PetscSymmetricBlockSparseMatrix>
   MakePetscSymmetricBlockSparseTangentMatrix() const;
 
-  // TODO(xuchenhan-tri): Remove me.
-  /** Extracts the unknown variable from the given FEM `state`.
-   @throw std::exception if the type of concrete FemState for `state` is not
-   compatible with the concrete FemModel for `this` model. */
-  const VectorX<T>& GetUnknowns(const FemStateBase<T>& state) const;
-
-  // TODO(xuchenhan-tri): Remove me.
-  /** Updates the FemStateBase `state` given the change in the unknown variable
-   `dz`.
-   @pre state != nullptr.
-   @pre dz.size() == state->num_generalized_positions().
-   @throw std::exception if the type of concrete FemState for `state` is not
-   compatible with the concrete FemModel for `this` model. */
-  void UpdateStateFromChangeInUnknowns(const VectorX<T>& dz,
-                                       FemStateBase<T>* state) const;
-
-  // TODO(xuchenhan-tri): Remove me.
-  /** For a dynamic FEM model, calculates the state at the next time step
-   given the state at the previous time step and the unknown variable. If
-   `this` %FemModelBase is static (ode_order() == 0), throw an exception.
-   @param[in] prev_state The state at the previous time step.
-   @param[in] unknown_variable The unknown variable of the FEM model.
-   @param[out] next_state The state at the next time step.
-   @pre next_state != nullptr.
-   @pre next_state->num_generalized_positions() ==
-   prev_state.num_generalized_positions().
-   @pre next_state->num_generalized_positions() == unknown_variable.size().
-   @throw std::exception if the type of concrete FemState in `prev_state` or
-   `next_state` is not compatible with the concrete FemModel in `this`
-   model.
-   @throw std::exception if ode_order() == 0. */
-  void AdvanceOneTimeStep(const FemStateBase<T>& prev_state,
-                          const VectorX<T>& unknown_variable,
-                          FemStateBase<T>* next_state) const;
-
-  // TODO(xuchenhan-tri): Remove me.
-  /* Apply boundary condition set for this %FemModelBase to the input `state`.
-   No-op if no boundary condition is set.
+  /** Applies boundary condition set for this %FemModelBase to the input
+   `state`. No-op if no boundary condition is set.
    @pre state != nullptr. */
   void ApplyBoundaryCondition(FemStateBase<T>* state) const;
 
-  // TODO(xuchenhan-tri): Remove me.
-  /** Takes ownership of the given Dirichlet boundary condition and apply it
-   when the model is evaluated. */
+  // TODO(xuchenhan-tri): Internal object in public method in non-internal
+  //  class.
+  /** Sets the Dirichlet boundary condition that this model is subject to. */
   void SetDirichletBoundaryCondition(
-      std::unique_ptr<DirichletBoundaryCondition<T>> dirichlet_bc) {
+      internal::DirichletBoundaryCondition<T> dirichlet_bc) {
     dirichlet_bc_ = std::move(dirichlet_bc);
   }
 
-  // TODO(xuchenhan-tri): Remove me.
-  /** Returns a pointer to the registered Dirichlet boundary condition if one
-   exists and a nullptr otherwise. */
-  const DirichletBoundaryCondition<T>* dirichlet_boundary_condition() const {
-    return dirichlet_bc_.get();
+  /** Returns the dirichlet boundary condition that this model is subject to. */
+  const internal::DirichletBoundaryCondition<T>& dirichlet_boundary_condition()
+      const {
+    return dirichlet_bc_;
   }
 
   /** (Internal use only) Throws std::exception to report a mismatch between
@@ -201,7 +160,7 @@ class FemModelBase {
       const char* func, const FemStateBase<T>& state_base) const = 0;
 
  protected:
-  FemModelBase() = defualt;
+  FemModelBase() = default;
 
   /** Derived classes must override this method to provide an implementation for
     the NVI MakeFemStateBase(). */
@@ -244,6 +203,8 @@ class FemModelBase {
  private:
   /* The total number of nodes in the system. */
   int num_nodes_{0};
+  /* The Dirichlet boundary condition that the model is subject to. */
+  internal::DirichletBoundaryCondition<T> dirichlet_bc_;
 };
 }  // namespace fem
 }  // namespace multibody

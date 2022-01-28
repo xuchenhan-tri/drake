@@ -226,11 +226,15 @@ drake_cc_library(
 
 drake_cc_library(
     name = "dirichlet_boundary_condition",
+    srcs = [
+        "dirichlet_boundary_condition.cc",
+    ],
     hdrs = [
         "dirichlet_boundary_condition.h",
     ],
     deps = [
         ":fem_indexes",
+        ":fem_state_base",
         ":petsc_symmetric_block_sparse_matrix",
         "//common:essential",
     ],
@@ -393,7 +397,6 @@ drake_cc_library(
         "fem_state_base.h",
     ],
     deps = [
-        ":dirichlet_boundary_condition",
         "//common:default_scalars",
     ],
 )

@@ -3,16 +3,12 @@
 #include <memory>
 
 #include "drake/common/default_scalars.h"
-#include "drake/multibody/fixed_fem/dev/dirichlet_boundary_condition.h"
 
 namespace drake {
 namespace multibody {
 namespace fem {
 
-template <typename T>
-class DirichletBoundaryCondition;
-
-/** An abstract state class that stores the fem states. The states include the
+/** An abstract class that stores the FEM states. The states include the
  generalized positions, velocities, and accelerations associated with each node.
  @tparam_nonsymbolic_scalar */
 template <typename T>
@@ -44,14 +40,6 @@ class FemStateBase {
 
   /* Returns the number of generalized positions in the state. */
   int num_dofs() const { return q_.size(); }
-
-  // TODO(xuchenhan-tri): Move this method to DirichletBoundaryCondition
-  /** Modifies `this` FEM state so that it complies with the given boundary
-   conditions.
-   @throw std::exception if the any of the indexes of the dofs under the
-   boundary condition specified by the given DirichletBoundaryCondition does
-   not exist in `this` FEM state`. */
-  void ApplyBoundaryCondition(const DirichletBoundaryCondition<T>& bc);
 
  protected:
   /** Constructs an %FemStateBase with prescribed generalized positions,
@@ -85,5 +73,6 @@ class FemStateBase {
 }  // namespace fem
 }  // namespace multibody
 }  // namespace drake
+
 DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_NONSYMBOLIC_SCALARS(
     class ::drake::multibody::fem::FemStateBase);

@@ -10,6 +10,7 @@
 namespace drake {
 namespace multibody {
 namespace fem {
+namespace internal {
 namespace test {
 namespace {
 
@@ -18,10 +19,8 @@ static constexpr int kNumDofs = 4;
 using DenseMatrix = Eigen::Matrix<double, kNumDofs, kNumDofs>;
 using Eigen::VectorXd;
 using SparseMatrix = Eigen::SparseMatrix<double>;
-using Element = DummyElement<1>;
-constexpr int kOdeOrder = Element::Traits::kOdeOrder;
+using Element = DummyElement;
 using State = FemState<Element>;
-using internal::PetscSymmetricBlockSparseMatrix;
 using std::make_unique;
 using std::unique_ptr;
 using std::vector;
@@ -29,8 +28,8 @@ using std::vector;
 class DirichletBoundaryConditionTest : public ::testing::Test {
  protected:
   void SetUp() {
-    bc_.AddBoundaryCondition(DofIndex(0), Vector2<double>(3, 2));
-    bc_.AddBoundaryCondition(DofIndex(2), Vector2<double>(1, 0));
+    bc_.AddBoundaryCondition(0, Vector3<double>(3, 2, 1));
+    bc_.AddBoundaryCondition(2, Vector3<double>(-3, -2, 0));
   }
 
   /* Makes an arbitrary residual vector with appropriate size. */
@@ -52,7 +51,7 @@ class DirichletBoundaryConditionTest : public ::testing::Test {
   }
 
   /* Returns the same matrix as in MakeEigenTangentMatrix(), but in PETSc
-   format. */
+   format. The PETSc matrix contains a single block matrix of size 4-by-4.*/
   static unique_ptr<PetscSymmetricBlockSparseMatrix> MakePetscTangentMatrix() {
     const vector<int> num_upper_triangular_blocks_per_row = {1};
     auto A = make_unique<PetscSymmetricBlockSparseMatrix>(
@@ -66,22 +65,26 @@ class DirichletBoundaryConditionTest : public ::testing::Test {
   /* Makes an arbitrary compatible FemState with appropriate size. */
   static State MakeState() {
     State state{Vector<double, kNumDofs>(0.1, 0.2, 0.3, 0.4),
-                Vector<double, kNumDofs>(0.5, 0.6, 0.7, 0.8)};
+                Vector<double, kNumDofs>(0.5, 0.6, 0.7, 0.8),
+                Vector<double, kNumDofs>(0.9, 1.0, 1.1, 1.2)};
     return state;
   }
 
   /* The DirichletBoundaryCondition under test. */
-  DirichletBoundaryCondition<double> bc_{kOdeOrder};
+  DirichletBoundaryCondition<double> bc_;
 };
 
 /* Tests that the DirichletBoundaryCondition under test successfully modifies
  a given state. */
 TEST_F(DirichletBoundaryConditionTest, ApplyBoundaryConditionToState) {
   State s = MakeState();
-  s.ApplyBoundaryCondition(bc_);
-  EXPECT_TRUE(CompareMatrices(s.q(), Vector<double, kNumDofs>{3, 0.2, 1, 0.4}));
-  EXPECT_TRUE(
-      CompareMatrices(s.qdot(), Vector<double, kNumDofs>{2, 0.6, 0, 0.8}));
+  bc_.ApplyBoundaryConditionToState(&s);
+  EXPECT_TRUE(CompareMatrices(s.GetPositions(),
+                              Vector<double, kNumDofs>{3, 0.2, -3, 0.4}));
+  EXPECT_TRUE(CompareMatrices(s.GetVelocities(),
+                              Vector<double, kNumDofs>{2, 0.6, -2, 0.8}));
+  EXPECT_TRUE(CompareMatrices(s.GetAccelerations(),
+                              Vector<double, kNumDofs>{1, 1.0, 0, 1.2}));
 }
 
 /* Tests that the DirichletBoundaryCondition under test successfully modifies
@@ -122,27 +125,28 @@ TEST_F(DirichletBoundaryConditionTest,
 /* Tests out-of-bound boundary conditions throw an exception. */
 TEST_F(DirichletBoundaryConditionTest, OutOfBound) {
   /* Put a dof that is out-of-bound under boundary condition. */
-  bc_.AddBoundaryCondition(DofIndex(4), Vector<double, kOdeOrder + 1>(3, 4));
+  bc_.AddBoundaryCondition(4, Vector3<double>(9, 1, 1));
   State state = MakeState();
   DRAKE_EXPECT_THROWS_MESSAGE(
-      state.ApplyBoundaryCondition(bc_),
-      "An index of the dirichlet boundary condition is out of the range.");
+      bc_.ApplyBoundaryConditionToState(&state),
+      "An index of the Dirichlet boundary condition is out of the range.");
   VectorXd b = MakeResidual();
   DRAKE_EXPECT_THROWS_MESSAGE(
       bc_.ApplyBoundaryConditionToResidual(&b),
-      "An index of the dirichlet boundary condition is out of the range.");
+      "An index of the Dirichlet boundary condition is out of the range.");
   SparseMatrix A_eigen_sparse = MakeEigenTangentMatrix();
   DRAKE_EXPECT_THROWS_MESSAGE(
       bc_.ApplyBoundaryConditionToTangentMatrix(&A_eigen_sparse),
-      "An index of the dirichlet boundary condition is out of the range.");
+      "An index of the Dirichlet boundary condition is out of the range.");
   auto A_petsc = MakePetscTangentMatrix();
   DRAKE_EXPECT_THROWS_MESSAGE(
       bc_.ApplyBoundaryConditionToTangentMatrix(A_petsc.get()),
-      "An index of the dirichlet boundary condition is out of the range.");
+      "An index of the Dirichlet boundary condition is out of the range.");
 }
 
 }  // namespace
 }  // namespace test
+}  // namespace internal
 }  // namespace fem
 }  // namespace multibody
 }  // namespace drake

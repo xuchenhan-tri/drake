@@ -13,8 +13,9 @@
 namespace drake {
 namespace multibody {
 namespace fem {
-// TODO(xuchenhan-tri): Move the implementation of this class to a .cc file.
-/** %FemSolver solves for the state of a given FemModel at which the residual of
+namespace internal {
+
+/* FemSolver solves for the state of a given FemModel at which the residual of
  the model is sufficiently close to zero. %FemSolver uses a simple
  Newton-Raphson solver to solve for the zero residual state. A common workflow
  for solving a static FEM model looks like:
@@ -36,102 +37,68 @@ class FemSolver {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(FemSolver);
 
-  // TODO(xuchenhan-tri): Consider allowing users to configure the linear
-  //  solver or at the very least, note that solver will not converge if the
-  //  tangent matrices that show up in the Newton iterations are not SPD.
-  /** Constructs a new %FemSolver with the given FemModelBase and an Eigen
-   Conjugate Gradient solver as the linear solver. The `model` pointer persists
-   in `this` %FemSolver and thus the FemModelBase object must outlive `this`
-   %FemSolver.
-   @pre model != nullptr. */
-  explicit FemSolver(const FemModelBase<T>* model) : model_(model) {
+  /* Constructs a new FemSolver that solves the given `model` with the
+   `integrator` provided to advance time.
+   @note The `model` and `integrator` pointers persist in `this` FemSolver and
+   thus the model and the integrator must outlive this solver.
+   @pre model != nullptr.
+   @pre integrator != nullptr.*/
+  FemSolver(const FemModelBase<T>* model,
+            const DiscreteTimeIntegrator<T>* integrator)
+      : model_(model), integrator_(integrator) {
     DRAKE_DEMAND(model_ != nullptr);
-    Resize();
-    /* Use PETSc matrix (created in call to `Resize()`) when scalar type is
-     double. Otherwise, use Eigen matrix and create a custom solver. */
-    if constexpr (!std::is_same_v<T, double>) {
-      linear_solver_ =
-          std::make_unique<internal::EigenConjugateGradientSolver<T>>(
-              &tangent_operator_);
-    }
+    DRAKE_DEMAND(integrator_ != nullptr);
+    ResetScratchDataIfNecessary();
   }
 
-  /** For dynamic models, advances the given FEM state from the previous time
-   step to the next time step. If the FEM model associated with `this` solver is
-   static, throw an exception.
-   @param[in] prev_state The state of the FEM model evaluated at the previous
-   time step.
-   @param[in, out] next_state As input, `next_state` provides an initial guess
-   for the state of the FEM model at the next time step. As output, `state`
-   stores the state of the FEM model evaluated at the next time step.
+  /* Advances the state of the FEM model by one time step with the integrator
+   prescribed at construction.
+   @param[in] prev_state   The state of the FEM model evaluated at the previous
+                           time step.
+   @param[out] next_state  The state of the FEM model evaluated at the next time
+                           step.
    @pre next_state != nullptr.
-   @pre prev_state.num_generalized_positions() ==
-   next_state->num_generalized_positions().
+   @pre prev_state.num_dofs() == next_state->dofs().
    @throw std::exception if the input `prev_state` or `next_state` is
-   incompatible with the FEM model associated with `this` %FemSolver, or if the
-   model is not dynamic (see is_model_dynamic()). */
+   incompatible with the FEM model solved by this solver. */
   void AdvanceOneTimeStep(const FemStateBase<T>& prev_state,
                           FemStateBase<T>* next_state) const {
     DRAKE_DEMAND(next_state != nullptr);
-    if (!is_model_dynamic()) {
-      throw std::logic_error(
-          fmt::format("{}() can only be called on a dynamic model!", __func__));
-    }
     model_->ThrowIfModelStateIncompatible(__func__, prev_state);
     model_->ThrowIfModelStateIncompatible(__func__, *next_state);
-    /* Grab the initial guess for the unknown variable. */
-    const VectorX<T>& unknown_variable = model_->GetUnknowns(*next_state);
-    model_->AdvanceOneTimeStep(prev_state, unknown_variable, next_state);
+    /* Make initial guess of the unknown variable that it stays the same. */
+    const VectorX<T>& unknown_variable = model_->GetUnknowns(prev_state);
+    integrator_->AdvanceOneTimeStep(prev_state, unknown_variable, next_state);
+    /* Run Newton-Raphson iterations. */
     SolveWithInitialGuess(next_state);
   }
 
-  // TODO(xuchenhan-tri): Consider making FemSolver only a Newton-Raphson
-  //  solver. In other words, make it ignorant of what kind of model it is
-  //  solving for and provide a single method that takes an initial guess and
-  //  returns the zero-residual state.
-  /** For static models, solves for the state at equilibrium given the initial
-   guess. If the FEM model associated with `this` solver is dynamic, throw an
-   exception.
-   @pre next_state != nullptr.
-   @throw std::exception if the input `state` is incompatible with the FEM model
-   associated with `this` %FemSolver, or if the model is dynamic (see
-   is_model_dynamic()). */
-  void SolveStaticModelWithInitialGuess(FemStateBase<T>* state) const {
-    DRAKE_DEMAND(state != nullptr);
-    if (is_model_dynamic()) {
-      throw std::logic_error(
-          fmt::format("{}() can only be called on a static model!", __func__));
-    }
-    model_->ThrowIfModelStateIncompatible(__func__, *state);
-    SolveWithInitialGuess(state);
-  }
-
-  /** Returns true if the FEM model owned by `this` solver has ODE order greater
-   than 0. Returns false otherwise. */
-  bool is_model_dynamic() const { return model_->ode_order() > 0; }
-
-  /** Returns the FemModel that this solver is solving. */
+  /* Returns the FEM model that this solver solves for. */
   const FemModelBase<T>& model() const { return *model_; }
 
-  /** Sets the relative tolerance, unitless. The Newton-Raphson iterations are
+  /* Returns the discrete time integrator that this solver uses. */
+  const DiscreteTimeIntegrator<T>& integrator() const { return *integrator_; }
+
+  /* Sets the relative tolerance, unitless. The Newton-Raphson iterations are
    considered as converged if ‖dz‖ < `tolerance`⋅‖z‖ where z is the unknown
-   variable defined in FemModelBase. The default value is 1e-6. */
+   variable _or_ if the absolute tolerance criterion is satisfied (See
+   set_absolute_tolerance()). The default value is 1e-6. */
   void set_relative_tolerance(const T& tolerance) {
     relative_tolerance_ = tolerance;
   }
 
-  /** Sets the absolute tolerance which has the same unit as the unknown
-   variable z defined in FemModelBase. For example, for dynamic elasticity, it
-   has the unit of m/s², and for static elasticity, it has the unit of m. The
-   Newton-Raphson iterations are considered as converged if the change in the
-   state is smaller than the absolute tolerance. The default value is 1e-6. */
+  /* Sets the absolute tolerance which has the same unit as the unknown
+   variable z. The Newton-Raphson iterations are considered as converged if the
+   change in the state is smaller than the absolute tolerance _or_ if the
+   relative tolerance criterion is satisfied (See set_relative_tolerance()). The
+   default value is 1e-3. */
   void set_absolute_tolerance(const T& tolerance) {
     absolute_tolerance_ = tolerance;
   }
 
-  /** Sets the relative tolerance for the linear solver used in `this` FemSolver
-   if the linear solver is iterative. The default (unitless) tolerance
-   is 1e-4. */
+  /* Sets the relative tolerance for the linear solver used in the
+   Newton-Raphson iterations if the linear solver is iterative. The default
+   (unitless) tolerance is 1e-4. No-op if the linear solver is direct. */
   void set_linear_solve_tolerance(const T& tolerance) {
     linear_solve_tolerance_ = tolerance;
     if constexpr (std::is_same_v<T, double>) {
@@ -139,21 +106,20 @@ class FemSolver {
         tangent_matrix_petsc_->set_relative_tolerance(tolerance);
       }
     } else {
-      linear_solver_->set_tolerance(tolerance);
+      eigen_tangent_marix_solver_.set_tolerance(tolerance);
     }
   }
 
  private:
   /* Uses a Newton-Raphson solver to solve for the equilibrium state that
    satisfies the tolerances. See set_relative_tolerance() and
-   set_absolute_tolerance(). The input `state` is non-null and is guaranteed to
-   be compatible with the model owned by `this` solver.
+   set_absolute_tolerance() for convergence criteria. The input FEM state is
+   non-null and is guaranteed to be compatible with the FEM model.
    @param[in, out] state  As input, `state` provides an initial guess of
    the solution. As output, `state` reports the equilibrium state. */
   int SolveWithInitialGuess(FemStateBase<T>* state) const {
-    /* Make sure the scratch quantities are of the correct size and apply BC if
-     one is specified. */
-    Resize();
+    /* Make sure the scratch quantities are of the correct sizes. */
+    ResetScratchDataIfNecessary();
     model_->ApplyBoundaryCondition(state);
     model_->CalcResidual(*state, &b_);
     int iter = 0;
@@ -167,67 +133,70 @@ class FemSolver {
       /* Use PETSc matrix when scalar type is double. Otherwise, use Eigen
        matrix. */
       if constexpr (std::is_same_v<T, double>) {
-        model_->CalcTangentMatrix(*state, tangent_matrix_petsc_.get());
+        model_->CalcTangentMatrix(*state, integrator_->weights(),
+                                  tangent_matrix_petsc_.get());
         tangent_matrix_petsc_->AssembleIfNecessary();
-        /* Solving for A * dz = -b, where A is the tangent matrix. */
+        /* Solve for A * dz = -b, where A is the tangent matrix. */
         dz_ = tangent_matrix_petsc_->Solve(
             internal::PetscSymmetricBlockSparseMatrix::SolverType::
                 kConjugateGradient,
             internal::PetscSymmetricBlockSparseMatrix::PreconditionerType::
                 kIncompleteCholesky,
             -b_);
-
       } else {
-        model_->CalcTangentMatrix(*state, &tangent_matrix_eigen_);
-        linear_solver_->Compute();
-        /* Solving for A * dz = -b, where A is the tangent matrix. */
-        linear_solver_->Solve(-b_, &dz_);
+        model_->CalcTangentMatrix(*state, integrator_->weights(),
+                                  &tangent_matrix_eigen_);
+        /* Solve for A * dz = -b, where A is the tangent matrix. */
+        eigen_tangent_matrix_solver_.compute(tangent_matrix_eigen_);
+        dz_ = eigen_tangent_matrix_solver_.solve(-b_);
       }
-      model_->UpdateStateFromChangeInUnknowns(dz_, state);
+      integrator_->UpdateStateFromChangeInUnknowns(dz_, state);
       model_->CalcResidual(*state, &b_);
       ++iter;
     } while (dz_.norm() > std::max(relative_tolerance_ *
-                                       model_->GetUnknowns(*state).norm(),
+                                       integrator_->GetUnknowns(*state).norm(),
                                    absolute_tolerance_) &&
              iter < kMaxIterations_);
     if (iter == kMaxIterations_) {
-      // TODO(xuchenhan-tri): Provide some advice on how to get a "better
-      //  initial guess". Or instead, return a status indicating the solver
-      //  did not converge and let users decide what to do.
-      throw std::runtime_error(
-          "The solver did not converge " + std::to_string(kMaxIterations_) +
-          " iterations. Please provide a better initial guess.");
+      throw std::runtime_error(fmt::format(
+          "The solver did not converge in {} iterations. Please provide a "
+          "better initial guess. Consider taking a smaller time step, "
+          "especially if the constitutive model you are using is nonlinear "
+          "(e.g. CorotatedModel).",
+          kMaxIterations_));
     }
     return iter;
   }
 
-  /* Resize the scratch quantities to the size of the model. */
-  void Resize() const {
+  /* Reset the scratch data in this class (tangent matrix, residual, and dz) if
+   necessary. */
+  void ResetScratchDataIfNecessary() const {
     if (b_.size() != model_->num_dofs()) {
       b_.resize(model_->num_dofs());
       dz_.resize(model_->num_dofs());
       if constexpr (std::is_same_v<T, double>) {
         tangent_matrix_petsc_ =
             model_->MakePetscSymmetricBlockSparseTangentMatrix();
-        tangent_matrix_petsc_->set_relative_tolerance(linear_solve_tolerance_);
       } else {
-        tangent_matrix_eigen_.resize(model_->num_dofs(), model_->num_dofs());
-        model_->SetTangentMatrixSparsityPattern(&tangent_matrix_eigen_);
+        tangent_matrix_eigen_ = model_->MakeEigenSparseTangentMatrix();
       }
+      set_linear_solve_tolerance(linear_solve_tolerance_);
     }
   }
 
   /* The FEM model being solved by `this` solver. */
   const FemModelBase<T>* model_;
-  /* The linear solver used to solve the FEM model. */
-  std::unique_ptr<internal::LinearSystemSolver<T>> linear_solver_;
-  /* A scratch sparse matrix to store the tangent matrix of the model. */
+  /* The discrete time integrator the solver uses. */
+  const DiscreteTimeIntegrator<T>* integrator_;
+  /* A scratch sparse matrix to store the tangent matrix of the model. We use
+   PETSc matrix for T=double and an Eigen::SparseMatrix otherwise. */
   mutable Eigen::SparseMatrix<T> tangent_matrix_eigen_;
   mutable std::unique_ptr<internal::PetscSymmetricBlockSparseMatrix>
       tangent_matrix_petsc_;
-  /* The operator form of the Eigen tangent matrix. */
-  const contact_solvers::internal::SparseLinearOperator<T> tangent_operator_{
-      "FEM tangent matrix", &tangent_matrix_eigen_};
+  /* Solver for the tangent matrix when T!=double.  */
+  mutable Eigen::ConjugateGradient<Eigen::SparseMatrix<T>,
+                                   Eigen::Lower | Eigen::Upper>
+      eigen_tangent_matrix_solver_;
   /* A scratch vector to store the residual of the model. */
   mutable VectorX<T> b_;
   /* A scratch vector to store the solution to A * dz = -b, where A is the
@@ -238,15 +207,16 @@ class FemSolver {
   T relative_tolerance_{1e-6};
   /* The absolute tolerance for determining the convergence of the Newton
    solver. It has the same unit as the unknown variable z. */
-  T absolute_tolerance_{1e-6};
+  T absolute_tolerance_{1e-3};
   /* The relative tolerance when solving for A * dz = -b, where A is the tangent
    matrix. */
   T linear_solve_tolerance_{1e-4};
-  // TODO(xuchenhan-tri): Consider making `kMaxIterations_` configurable.
-  /* Any reasonable Newton solve should converge within 20 iterations. If it
-   doesn't converge in 20 iterations, chances are it will never converge. */
-  int kMaxIterations_{20};
+  /* Max number of Newton-Raphson iterations the solver takes before it gives
+   up. */
+  static constexpr int kMaxIterations_ = 100;
 };
+
+}  // namespace internal
 }  // namespace fem
 }  // namespace multibody
 }  // namespace drake

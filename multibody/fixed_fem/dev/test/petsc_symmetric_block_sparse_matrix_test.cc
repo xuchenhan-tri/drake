@@ -171,6 +171,7 @@ GTEST_TEST(PetscSymmetricBlockSparseMatrixTest, Clone) {
       PetscSymmetricBlockSparseMatrix::PreconditionerType::kJacobi, b);
   EXPECT_TRUE(CompareMatrices(x, x_clone, kEps));
 }
+
 /* Test if we can run several PETSc solves simultaneously on multiple threads.
  We solve the same linear system with multiple right hand sides. The solution
  from using threads should be the same as those from serial. */

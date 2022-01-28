@@ -3,6 +3,7 @@
 namespace drake {
 namespace multibody {
 namespace fem {
+
 template <typename T>
 std::unique_ptr<FemStateBase<T>> FemModelBase<T>::MakeFemStateBase() const {
   return DoMakeFemStateBase();
@@ -14,40 +15,31 @@ void FemModelBase<T>::CalcResidual(const FemStateBase<T>& state,
   DRAKE_DEMAND(residual != nullptr);
   ThrowIfModelStateIncompatible(__func__, state);
   DoCalcResidual(state, residual);
-  // TODO(xuchenhan-tri): remove me.
-  if (dirichlet_bc_ != nullptr) {
-    dirichlet_bc_->ApplyBoundaryConditionToResidual(residual);
-  }
+  dirichlet_bc_.ApplyBoundaryConditionToResidual(residual);
 }
 
 template <typename T>
 void FemModelBase<T>::CalcTangentMatrix(
-    const FemStateBase<T>& state,
+    const FemStateBase<T>& state, const Vector3<T>& weights,
     Eigen::SparseMatrix<T>* tangent_matrix) const {
   DRAKE_DEMAND(tangent_matrix != nullptr);
   DRAKE_DEMAND(tangent_matrix->rows() == num_dofs());
   DRAKE_DEMAND(tangent_matrix->cols() == num_dofs());
   ThrowIfModelStateIncompatible(__func__, state);
-  DoCalcTangentMatrix(state, tangent_matrix);
-  // TODO(xuchenhan-tri): remove me.
-  if (dirichlet_bc_ != nullptr) {
-    dirichlet_bc_->ApplyBoundaryConditionToTangentMatrix(tangent_matrix);
-  }
+  DoCalcTangentMatrix(state, weights, tangent_matrix);
+  dirichlet_bc_.ApplyBoundaryConditionToTangentMatrix(tangent_matrix);
 }
 
 template <typename T>
 void FemModelBase<T>::CalcTangentMatrix(
-    const FemStateBase<T>& state,
+    const FemStateBase<T>& state, const Vector3<T>& weights,
     internal::PetscSymmetricBlockSparseMatrix* tangent_matrix) const {
   DRAKE_DEMAND(tangent_matrix != nullptr);
   DRAKE_DEMAND(tangent_matrix->rows() == num_dofs());
   DRAKE_DEMAND(tangent_matrix->cols() == num_dofs());
   ThrowIfModelStateIncompatible(__func__, state);
-  DoCalcTangentMatrix(state, tangent_matrix);
-  // TODO(xuchenhan-tri): remove me.
-  if (dirichlet_bc_ != nullptr) {
-    dirichlet_bc_->ApplyBoundaryConditionToTangentMatrix(tangent_matrix);
-  }
+  DoCalcTangentMatrix(state, weights, tangent_matrix);
+  dirichlet_bc_.ApplyBoundaryConditionToTangentMatrix(tangent_matrix);
 }
 
 template <typename T>
@@ -63,47 +55,13 @@ FemModelBase<T>::MakePetscSymmetricBlockSparseTangentMatrix() const {
   return DoMakePetscSymmetricBlockSparseTangentMatrix();
 }
 
-// TODO(xuchenhan-tri): remove me.
-template <typename T>
-const VectorX<T>& FemModelBase<T>::GetUnknowns(
-    const FemStateBase<T>& state) const {
-  ThrowIfModelStateIncompatible(__func__, state);
-  return state_updater_->GetUnknowns(state);
-}
-
-// TODO(xuchenhan-tri): remove me.
-template <typename T>
-void FemModelBase<T>::UpdateStateFromChangeInUnknowns(
-    const VectorX<T>& dz, FemStateBase<T>* state) const {
-  DRAKE_DEMAND(state != nullptr);
-  DRAKE_DEMAND(dz.size() == state->num_generalized_positions());
-  ThrowIfModelStateIncompatible(__func__, *state);
-  state_updater_->UpdateStateFromChangeInUnknowns(dz, state);
-}
-
-// TODO(xuchenhan-tri): remove me.
-template <typename T>
-void FemModelBase<T>::AdvanceOneTimeStep(const FemStateBase<T>& prev_state,
-                                         const VectorX<T>& unknown_variable,
-                                         FemStateBase<T>* next_state) const {
-  DRAKE_DEMAND(next_state != nullptr);
-  DRAKE_DEMAND(unknown_variable.size() ==
-               next_state->num_generalized_positions());
-  DRAKE_THROW_UNLESS(ode_order() > 0);
-  ThrowIfModelStateIncompatible(__func__, prev_state);
-  ThrowIfModelStateIncompatible(__func__, *next_state);
-  state_updater_->AdvanceOneTimeStep(prev_state, unknown_variable, next_state);
-}
-
-// TODO(xuchenhan-tri): remove me.
 template <typename T>
 void FemModelBase<T>::ApplyBoundaryCondition(FemStateBase<T>* state) const {
   DRAKE_DEMAND(state != nullptr);
   ThrowIfModelStateIncompatible(__func__, *state);
-  if (dirichlet_bc_ != nullptr) {
-    state->ApplyBoundaryCondition(*dirichlet_bc_);
-  }
+  dirichlet_bc_.ApplyBoundaryConditionToState(state);
 }
+
 }  // namespace fem
 }  // namespace multibody
 }  // namespace drake
