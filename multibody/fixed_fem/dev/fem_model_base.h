@@ -191,11 +191,6 @@ class FemModelBase {
       internal::PetscSymmetricBlockSparseMatrix* tangent_matrix) const = 0;
 
   /** Derived classes must override this method to provide an implementation for
-   the NVI SetTangentMatrixSparsityPattern(). */
-  virtual void DoSetTangentMatrixSparsityPattern(
-      Eigen::SparseMatrix<T>* tangent_matrix) const = 0;
-
-  /** Derived classes must override this method to provide an implementation for
    the NVI MakeEigenSparseTangentMatrix(). */
   virtual Eigen::SparseMatrix<T> DoMakeEigenSparseTangentMatrix() const = 0;
 

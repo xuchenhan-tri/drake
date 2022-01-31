@@ -14,24 +14,13 @@ namespace multibody {
 namespace fem {
 namespace internal {
 
-// TODO(xuchenhan-tri): Update the class doc.
-/* FemSolver solves for the state of a given FemModel at which the residual of
- the model is sufficiently close to zero. %FemSolver uses a simple
- Newton-Raphson solver to solve for the zero residual state. A common workflow
- for solving a static FEM model looks like:
- ```
- // Creates a solver for the given FemModel.
- FemSolver<double> solver(&model));
- // Optionally, sets the tolerances under which we deem the residual is
- // effectively zero.
- solver.set_absolute_tolerance(kAbsoluteTolereance);
- solver.set_relative_tolerance(kRelativeTolereance);
- // Finally, provide an initial guess and solve for the zero residual state.
- solver.SolveStaticModelWithInitialGuess(&state);
- ```
- The workflow for solving dynamics FEM model is similar. AdvanceOneTimeStep()
- should be called in the place of SolveStaticModelWithInitialGuess().
- @tparam_nonsymbolic_scalar T. */
+/* FemSolver solves discrete dynamic elasticity problems. The governing PDE of
+ the dynamics is spatially discretized in FemModelBase and temporally
+ discretized by DiscreteTimeIntegrator. FemSolver provides the
+ AdvanceOneTimeStep method that advances the states of the spatially discretized
+ FEM model by one time step according to the prescribed discrete time
+ integration scheme using a Newton-Raphson solver.
+ @tparam_nonsymbolic_scalar. */
 template <typename T>
 class FemSolver {
  public:
@@ -73,6 +62,8 @@ class FemSolver {
     relative_tolerance_ = tolerance;
   }
 
+  const T& relative_tolerance() const { return relative_tolerance_; }
+
   /* Sets the absolute tolerance which has the same unit as the unknown
    variable z. The Newton-Raphson iterations are considered as converged if the
    change in the state is smaller than the absolute tolerance _or_ if the
@@ -82,10 +73,14 @@ class FemSolver {
     absolute_tolerance_ = tolerance;
   }
 
+  const T& absolute_tolerance() const { return absolute_tolerance_; }
+
   /* Sets the relative tolerance for the linear solver used in the
    Newton-Raphson iterations if the linear solver is iterative. The default
    (unitless) tolerance is 1e-4. No-op if the linear solver is direct. */
   void set_linear_solve_tolerance(const T& tolerance);
+
+  const T& linear_solve_tolerance() const { return linear_solve_tolerance_; }
 
  private:
   /* Uses a Newton-Raphson solver to solve for the equilibrium state that

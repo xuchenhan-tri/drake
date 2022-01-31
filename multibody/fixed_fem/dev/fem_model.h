@@ -88,17 +88,16 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
  private:
   /* Implements FemModelBase::MakeFemStateBase(). */
   std::unique_ptr<FemStateBase<T>> DoMakeFemStateBase() const final {
-    /* Hide the concrete state behind a pointer to abstract state. */
-    std::unique_ptr<FemStateBase<T>> state =
-        std::make_unique<FemState<Element>>(DoMakeFemState());
+    auto state = std::make_unique<FemState<Element>>(DoMakeFemState());
     /* Initialize per-element state-dependent data. */
     state->MakeElementData(elements_);
+    return state;
   }
 
   /* Helper for DoCalcResidual(). */
   void CalcResidualForConcreteState(const FemState<Element>& state,
                                     EigenPtr<VectorX<T>> residual) const {
-    DRAKE_DEMAND(residual != nullptr && residual->size() == num_dofs());
+    DRAKE_DEMAND(residual != nullptr && residual->size() == this->num_dofs());
     DRAKE_DEMAND(state.element_cache_size() == num_elements());
     /* The values are accumulated in the residual, so it is important to clear
      the old data. */
@@ -127,8 +126,8 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
       const FemState<Element>& state, const Vector3<T>& weights,
       Eigen::SparseMatrix<T>* tangent_matrix) const {
     DRAKE_DEMAND(tangent_matrix != nullptr &&
-                 tangent_matrix->rows() == num_dofs() &&
-                 tangent_matrix->cols() == num_dofs());
+                 tangent_matrix->rows() == this->num_dofs() &&
+                 tangent_matrix->cols() == this->num_dofs());
     DRAKE_DEMAND(state.element_cache_size() == num_elements());
     /* The values are accumulated in the tangent_matrix, so it is important to
      clear the old data. */
@@ -175,8 +174,8 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
           "type `double`.");
     } else {
       DRAKE_DEMAND(tangent_matrix != nullptr &&
-                   tangent_matrix->rows() == num_dofs() &&
-                   tangent_matrix->cols() == num_dofs());
+                   tangent_matrix->rows() == this->num_dofs() &&
+                   tangent_matrix->cols() == this->num_dofs());
       DRAKE_DEMAND(state.element_cache_size() == num_elements());
 
       /* The values are accumulated in the tangent_matrix, so it is important to
@@ -205,8 +204,8 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
   }
 
   /* Implements FemModelBase::DoMakeEigenSparseTangentMatrix(). */
-  void DoMakeEigenSparseTangentMatrix() const final {
-    Eigen::SparseMatrix<T> tangent_matrix(num_dofs(), num_dofs());
+  Eigen::SparseMatrix<T> DoMakeEigenSparseTangentMatrix() const final {
+    Eigen::SparseMatrix<T> tangent_matrix(this->num_dofs(), this->num_dofs());
     std::vector<Eigen::Triplet<T>> non_zero_entries;
     /* Alias for readability. */
     constexpr int element_num_dofs = Element::Traits::num_dofs;
@@ -267,7 +266,7 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
       nonzero_blocks[i] = neighbor_nodes[i].size();
     }
     auto tangent_matrix = std::make_unique<PetscSymmetricBlockSparseMatrix>(
-        num_dofs(), kDim, nonzero_blocks);
+        this->num_dofs(), kDim, nonzero_blocks);
 
     /* Populate the tangent matrix with zeros at appropriate places to allocate
      memory. */
@@ -314,7 +313,7 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
   }
 
   /* Implements FemModelBase::SetGravityVector(). */
-  void DoSetGravityVector(const Vector<T, kSpatialDimension>& gravity) {
+  void DoSetGravityVector(const Vector3<T>& gravity) {
     /* Update the gravity vector of all existing elements. */
     for (ElementIndex e(0); e < num_elements(); ++e) {
       elements_[e].set_gravity_vector(gravity);
@@ -342,11 +341,11 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
           "(): The type of the FemState is incompatible with the type of the "
           "FemModel.");
     }
-    if (concrete_state_ptr->num_generalized_positions() != num_dofs()) {
-      throw std::logic_error(fmt::format(
-          "{}(): The size of the FemState ({}) is incompatible "
-          "with the size of the FemModel ({}).",
-          func, concrete_state_ptr->num_generalized_positions(), num_dofs()));
+    if (concrete_state_ptr->num_dofs() != this->num_dofs()) {
+      throw std::logic_error(
+          fmt::format("{}(): The size of the FemState ({}) is incompatible "
+                      "with the size of the FemModel ({}).",
+                      func, concrete_state_ptr->num_dofs(), this->num_dofs()));
     }
   }
 

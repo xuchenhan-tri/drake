@@ -8,25 +8,25 @@ namespace internal {
 template <typename T>
 void AccelerationNewmarkScheme<T>::DoUpdateStateFromChangeInUnknowns(
     const VectorX<T>& dz, FemStateBase<T>* state) const {
-  const VectorX<T>& a = state->qddot();
-  const VectorX<T>& v = state->qdot();
-  const VectorX<T>& x = state->q();
-  state->SetQddot(a + dz);
-  state->SetQdot(v + dt() * gamma() * dz);
-  state->SetQ(x + dt() * dt() * beta() * dz);
+  const VectorX<T>& a = state->GetAccelerations();
+  const VectorX<T>& v = state->GetVelocities();
+  const VectorX<T>& x = state->GetPositions();
+  state->SetAccelerations(a + dz);
+  state->SetVelocities(v + dt() * gamma() * dz);
+  state->SetPositions(x + dt() * dt() * beta() * dz);
 }
 
 template <typename T>
 void AccelerationNewmarkScheme<T>::DoAdvanceOneTimeStep(
     const FemStateBase<T>& prev_state, const VectorX<T>& unknown_variable,
     FemStateBase<T>* state) const {
-  const VectorX<T>& an = prev_state.qddot();
-  const VectorX<T>& vn = prev_state.qdot();
-  const VectorX<T>& xn = prev_state.q();
+  const VectorX<T>& an = prev_state.GetAccelerations();
+  const VectorX<T>& vn = prev_state.GetVelocities();
+  const VectorX<T>& xn = prev_state.GetPositions();
   const VectorX<T>& a = unknown_variable;
-  state->SetQddot(a);
-  state->SetQdot(vn + dt() * (gamma() * a + (1.0 - gamma()) * an));
-  state->SetQ(xn + dt() * vn +
+  state->SetAccelerations(a);
+  state->SetVelocities(vn + dt() * (gamma() * a + (1.0 - gamma()) * an));
+  state->SetPositions(xn + dt() * vn +
               dt() * dt() * (beta() * a + (0.5 - beta()) * an));
 }
 

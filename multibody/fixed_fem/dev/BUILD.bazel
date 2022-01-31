@@ -769,6 +769,17 @@ drake_cc_library(
     ],
 )
 
+drake_cc_library(
+    name = "dummy_model",
+    testonly = 1,
+    srcs = ["test/dummy_element.cc"],
+    hdrs = ["test/dummy_model.h"],
+    deps = [
+        ":dummy_element",
+        ":fem_model",
+    ],
+)
+
 drake_cc_googletest(
     name = "dynamic_elasticity_element_test",
     deps = [
@@ -828,19 +839,11 @@ drake_cc_googletest(
 drake_cc_googletest(
     name = "fem_solver_test",
     deps = [
-        ":dummy_element",
-        ":eigen_conjugate_gradient_solver",
+        ":acceleration_newmark_scheme",
+        ":dummy_model",
         ":fem_solver",
-        ":linear_constitutive_model",
-        ":static_elasticity_element",
-        ":static_elasticity_model",
-        ":zeroth_order_discrete_time_integrator",
         "//common/test_utilities:eigen_matrix_compare",
         "//common/test_utilities:expect_throws_message",
-        "//geometry/proximity:make_box_mesh",
-        "//math:gradient",
-        "//multibody/fem:linear_simplex_element",
-        "//multibody/fem:simplex_gaussian_quadrature",
     ],
 )
 

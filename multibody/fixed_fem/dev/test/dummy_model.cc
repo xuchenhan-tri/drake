@@ -1,0 +1,1 @@
+#include "drake/multibody/fixed_fem/dev/test/dummy_model.h"

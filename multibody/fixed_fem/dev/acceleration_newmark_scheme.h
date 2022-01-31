@@ -44,7 +44,7 @@ class AccelerationNewmarkScheme final : public NewmarkScheme<T> {
   }
 
   const VectorX<T>& DoGetUnknowns(const FemStateBase<T>& state) const final {
-    return state.qddot();
+    return state.GetAccelerations();
   }
 
   void DoUpdateStateFromChangeInUnknowns(const VectorX<T>& dz,

@@ -45,7 +45,7 @@ class VelocityNewmarkScheme final : public NewmarkScheme<T> {
   }
 
   const VectorX<T>& DoGetUnknowns(const FemStateBase<T>& state) const final {
-    return state.qdot();
+    return state.GetVelocities();
   }
 
   void DoUpdateStateFromChangeInUnknowns(const VectorX<T>& dz,
