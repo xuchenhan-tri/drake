@@ -18,6 +18,7 @@ namespace test {
 
 using Eigen::Matrix3d;
 const double kTolerance = 1e-12;
+constexpr int kSpatialDimension = 3;
 
 /* Creates an array of arbitrary autodiff deformation gradients. */
 template <int num_locations>
