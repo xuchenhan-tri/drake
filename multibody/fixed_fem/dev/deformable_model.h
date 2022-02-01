@@ -9,7 +9,7 @@
 #include "drake/geometry/geometry_roles.h"
 #include "drake/geometry/proximity/volume_mesh.h"
 #include "drake/multibody/fixed_fem/dev/deformable_body_config.h"
-#include "drake/multibody/fixed_fem/dev/fem_model_base.h"
+#include "drake/multibody/fixed_fem/dev/fem_model.h"
 #include "drake/multibody/fixed_fem/dev/mesh_utilities.h"
 #include "drake/multibody/plant/physical_model.h"
 
@@ -96,9 +96,9 @@ class DeformableModel final : public multibody::internal::PhysicalModel<T> {
 
   /** Returns the FEM model of the selected deformable body. Each deformable
    body is modeled as an individual FEM model. */
-  const FemModelBase<T>& fem_model(DeformableBodyIndex body_index) const {
+  const FemModel<T>& fem_model_impl(DeformableBodyIndex body_index) const {
     DRAKE_DEMAND(body_index < num_bodies());
-    return *fem_models_[body_index];
+    return *fem_model_impls_[body_index];
   }
 
   /** Returns the discrete state indexes of all the deformable bodies. There is
@@ -160,8 +160,8 @@ class DeformableModel final : public multibody::internal::PhysicalModel<T> {
 
   /* The MultibodyPlant that owns `this` DeformableModel. */
   const MultibodyPlant<T>* plant_{nullptr};
-  /* The FemModels owned by this DeformableModel. One per deformable body. */
-  std::vector<std::unique_ptr<FemModelBase<T>>> fem_models_{};
+  /* The FemModelImpls owned by this DeformableModel. One per deformable body. */
+  std::vector<std::unique_ptr<FemModel<T>>> fem_model_impls_{};
   /* The geometries of the deformable bodies at reference configuration. */
   std::vector<internal::ReferenceDeformableGeometry<T>>
       reference_configuration_geometries_{};

@@ -19,7 +19,7 @@ namespace internal {
 /* FemElement is the base class for spatially discretized FEM elements for
  dynamic elasticity problems. It computes quantities such as the residual and
  the tangent matrix on a single FEM element given the state of the FEM system.
- These quantities are then assembled into their global counterparts by FemModel.
+ These quantities are then assembled into their global counterparts by FemModelImpl.
 
  Since FEM elements are usually evaluated in computationally intensive inner
  loops of the simulation, the overhead caused by virtual methods and heap

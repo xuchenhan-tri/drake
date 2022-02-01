@@ -162,7 +162,7 @@ drake_cc_library(
         ":dirichlet_boundary_condition",
         ":dynamic_elasticity_element",
         ":volumetric_model",
-        ":fem_model_base",
+        ":fem_model",
         ":linear_constitutive_model",
         ":mesh_utilities",
         "//common:essential",
@@ -286,7 +286,7 @@ drake_cc_library(
     ],
     deps = [
         ":volumetric_element",
-        ":fem_model",
+        ":fem_model_impl",
         ":acceleration_newmark_scheme",
         ":damping_model",
         "//geometry/proximity:volume_mesh",
@@ -329,14 +329,14 @@ drake_cc_library(
 )
 
 drake_cc_library(
-    name = "fem_model",
+    name = "fem_model_impl",
     hdrs = [
-        "fem_model.h",
+        "fem_model_impl.h",
     ],
     deps = [
         ":fem_element",
         ":fem_indexes",
-        ":fem_model_base",
+        ":fem_model",
         ":fem_state_impl",
         "//common:essential",
         "//common:unused",
@@ -344,12 +344,12 @@ drake_cc_library(
 )
 
 drake_cc_library(
-    name = "fem_model_base",
+    name = "fem_model",
     srcs = [
-        "fem_model_base.cc",
+        "fem_model.cc",
     ],
     hdrs = [
-        "fem_model_base.h",
+        "fem_model.h",
     ],
     deps = [
         ":dirichlet_boundary_condition",
@@ -370,7 +370,7 @@ drake_cc_library(
         "fem_solver.h",
     ],
     deps = [
-        ":fem_model",
+        ":fem_model_impl",
         ":discrete_time_integrator",
         "//common:essential",
     ],
@@ -776,7 +776,7 @@ drake_cc_library(
     hdrs = ["test/dummy_model.h"],
     deps = [
         ":dummy_element",
-        ":fem_model",
+        ":fem_model_impl",
     ],
 )
 

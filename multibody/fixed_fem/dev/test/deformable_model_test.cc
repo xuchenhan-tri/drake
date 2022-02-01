@@ -11,7 +11,7 @@ namespace drake {
 namespace multibody {
 namespace fem {
 // TODO(xuchenhan-tri): Add a test to verify that the deformable body parameters
-//  are properly passed to the FemModel.
+//  are properly passed to the FemModelImpl.
 /* Deformable body parameters. These parameters are arbitrary and they do not
  affect the result of the test as long as they are valid. */
 const double kYoungsModulus = 1.23;

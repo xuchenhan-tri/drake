@@ -1,6 +1,6 @@
 #pragma once
 
-#include "drake/multibody/fixed_fem/dev/fem_model.h"
+#include "drake/multibody/fixed_fem/dev/fem_model_impl.h"
 #include "drake/multibody/fixed_fem/dev/test/dummy_element.h"
 
 namespace drake {
@@ -9,8 +9,8 @@ namespace fem {
 namespace internal {
 namespace test {
 
-/* A dummy FemModel with a single DummyElement for testing purpose. */
-class DummyModel final : public FemModel<DummyElement> {
+/* A dummy FemModelImpl with a single DummyElement for testing purpose. */
+class DummyModel final : public FemModelImpl<DummyElement> {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(DummyModel);
 

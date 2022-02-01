@@ -6,7 +6,7 @@ namespace fem {
 namespace internal {
 
 template <typename T>
-FemSolver<T>::FemSolver(const FemModelBase<T>* model,
+FemSolver<T>::FemSolver(const FemModel<T>* model,
                         const DiscreteTimeIntegrator<T>* integrator)
     : model_(model), integrator_(integrator) {
   DRAKE_DEMAND(model_ != nullptr);

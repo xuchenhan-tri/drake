@@ -84,9 +84,9 @@ template <typename T>
 void DeformableRigidManager<T>::MakeFemSolvers() {
   DRAKE_DEMAND(deformable_model_ != nullptr);
   for (int i = 0; i < deformable_model_->num_bodies(); ++i) {
-    const FemModelBase<T>& fem_model =
-        deformable_model_->fem_model(DeformableBodyIndex(i));
-    fem_solvers_.emplace_back(std::make_unique<FemSolver<T>>(&fem_model));
+    const FemModel<T>& fem_model_impl =
+        deformable_model_->fem_model_impl(DeformableBodyIndex(i));
+    fem_solvers_.emplace_back(std::make_unique<FemSolver<T>>(&fem_model_impl));
   }
 }
 
@@ -109,10 +109,10 @@ void DeformableRigidManager<T>::DeclareCacheEntries() {
   for (DeformableBodyIndex deformable_body_id(0);
        deformable_body_id < deformable_model_->num_bodies();
        ++deformable_body_id) {
-    const FemModelBase<T>& fem_model =
-        deformable_model_->fem_model(deformable_body_id);
+    const FemModel<T>& fem_model_impl =
+        deformable_model_->fem_model_impl(deformable_body_id);
     const std::unique_ptr<const FemState<T>> model_fem_state_impl =
-        fem_model.MakeFemState();
+        fem_model_impl.MakeFemState();
 
     /* Extracts the q, qdot, and qddot from the given context and copies them
      to the cached fem state. */
@@ -159,8 +159,8 @@ void DeformableRigidManager<T>::DeclareCacheEntries() {
     /* Allocates and calculates the free-motion tangent matrix for the
      deformable body. */
     EigenSparseMatrix<T> model_tangent_matrix = {
-        Eigen::SparseMatrix<T>(fem_model.num_dofs(), fem_model.num_dofs())};
-    fem_model.SetTangentMatrixSparsityPattern(&(model_tangent_matrix.data));
+        Eigen::SparseMatrix<T>(fem_model_impl.num_dofs(), fem_model_impl.num_dofs())};
+    fem_model_impl.SetTangentMatrixSparsityPattern(&(model_tangent_matrix.data));
     const auto& tangent_matrix_cache_entry = this->DeclareCacheEntry(
         fmt::format("Free motion FEM tangent matrix {}", deformable_body_id),
         systems::ValueProducer(model_tangent_matrix,
@@ -557,9 +557,9 @@ void DeformableRigidManager<T>::CalcNextFemState(
   // precomputed.
   int dofs_offset = 0;
   for (DeformableBodyIndex b(0); b < body_index; ++b) {
-    dofs_offset += deformable_model_->fem_model(b).num_dofs();
+    dofs_offset += deformable_model_->fem_model_impl(b).num_dofs();
   }
-  const int body_num_dofs = deformable_model_->fem_model(body_index).num_dofs();
+  const int body_num_dofs = deformable_model_->fem_model_impl(body_index).num_dofs();
   const VectorX<T>& body_velocity =
       deformable_velocities.segment(dofs_offset, body_num_dofs);
   const FemState<T>& state0 = EvalFemState(context, body_index);
@@ -572,8 +572,8 @@ void DeformableRigidManager<T>::CalcFreeMotionTangentMatrix(
     EigenSparseMatrix<T>* tangent_matrix) const {
   const FemState<T>& free_motion_fem_state_impl =
       EvalFreeMotionFemState(context, index);
-  const FemModelBase<T>& fem_model = deformable_model_->fem_model(index);
-  fem_model.CalcTangentMatrix(free_motion_fem_state_impl, &(tangent_matrix->data));
+  const FemModel<T>& fem_model_impl = deformable_model_->fem_model_impl(index);
+  fem_model_impl.CalcTangentMatrix(free_motion_fem_state_impl, &(tangent_matrix->data));
 }
 
 template <typename T>
@@ -857,7 +857,7 @@ MatrixX<T> DeformableRigidManager<T>::CalcContactJacobianDeformableBlock(
   DRAKE_DEMAND(contact_data.num_contact_points() > 0 &&
                deformable_body_index.is_valid());
   const DirichletBoundaryCondition<T>* bc =
-      deformable_model_->fem_model(deformable_body_index)
+      deformable_model_->fem_model_impl(deformable_body_index)
           .dirichlet_boundary_condition();
   if (bc != nullptr) {
     const std::map<DofIndex, VectorX<T>>& bc_map = bc->get_bcs();
@@ -1143,7 +1143,7 @@ void DeformableRigidManager<T>::ExtractParticipatingVelocities(
   for (DeformableBodyIndex deformable_index(0);
        deformable_index < deformable_contact_data.size(); ++deformable_index) {
     const int num_dofs =
-        deformable_model_->fem_model(deformable_index).num_dofs();
+        deformable_model_->fem_model_impl(deformable_index).num_dofs();
     /* The velocity of all dofs associated with the deformable body with index
      `deformable_index`. */
     const auto& v_body = v.segment(v_offset, num_dofs);

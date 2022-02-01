@@ -1,16 +1,16 @@
-#include "drake/multibody/fixed_fem/dev/fem_model_base.h"
+#include "drake/multibody/fixed_fem/dev/fem_model.h"
 
 namespace drake {
 namespace multibody {
 namespace fem {
 
 template <typename T>
-std::unique_ptr<FemState<T>> FemModelBase<T>::MakeFemState() const {
+std::unique_ptr<FemState<T>> FemModel<T>::MakeFemState() const {
   return DoMakeFemState();
 }
 
 template <typename T>
-void FemModelBase<T>::CalcResidual(const FemState<T>& state,
+void FemModel<T>::CalcResidual(const FemState<T>& state,
                                    EigenPtr<VectorX<T>> residual) const {
   DRAKE_DEMAND(residual != nullptr);
   ThrowIfModelStateIncompatible(__func__, state);
@@ -19,7 +19,7 @@ void FemModelBase<T>::CalcResidual(const FemState<T>& state,
 }
 
 template <typename T>
-void FemModelBase<T>::CalcTangentMatrix(
+void FemModel<T>::CalcTangentMatrix(
     const FemState<T>& state, const Vector3<T>& weights,
     Eigen::SparseMatrix<T>* tangent_matrix) const {
   DRAKE_DEMAND(tangent_matrix != nullptr);
@@ -31,7 +31,7 @@ void FemModelBase<T>::CalcTangentMatrix(
 }
 
 template <typename T>
-void FemModelBase<T>::CalcTangentMatrix(
+void FemModel<T>::CalcTangentMatrix(
     const FemState<T>& state, const Vector3<T>& weights,
     internal::PetscSymmetricBlockSparseMatrix* tangent_matrix) const {
   DRAKE_DEMAND(tangent_matrix != nullptr);
@@ -43,25 +43,25 @@ void FemModelBase<T>::CalcTangentMatrix(
 }
 
 template <typename T>
-Eigen::SparseMatrix<T> FemModelBase<T>::MakeEigenSparseTangentMatrix() const {
+Eigen::SparseMatrix<T> FemModel<T>::MakeEigenSparseTangentMatrix() const {
   return DoMakeEigenSparseTangentMatrix();
 }
 
 template <typename T>
 std::unique_ptr<internal::PetscSymmetricBlockSparseMatrix>
-FemModelBase<T>::MakePetscSymmetricBlockSparseTangentMatrix() const {
+FemModel<T>::MakePetscSymmetricBlockSparseTangentMatrix() const {
   return DoMakePetscSymmetricBlockSparseTangentMatrix();
 }
 
 template <typename T>
-void FemModelBase<T>::ApplyBoundaryCondition(FemState<T>* state) const {
+void FemModel<T>::ApplyBoundaryCondition(FemState<T>* state) const {
   DRAKE_DEMAND(state != nullptr);
   ThrowIfModelStateIncompatible(__func__, *state);
   dirichlet_bc_.ApplyBoundaryConditionToState(state);
 }
 
 template <typename T>
-void FemModelBase<T>::SetGravityVector(const Vector3<T>& gravity) {
+void FemModel<T>::SetGravityVector(const Vector3<T>& gravity) {
   /* Store gravity so that all elements added after the call to this method
    get the "new" gravity constant. */
   gravity_ = gravity;
@@ -75,4 +75,4 @@ void FemModelBase<T>::SetGravityVector(const Vector3<T>& gravity) {
 }  // namespace drake
 
 DRAKE_DEFINE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_NONSYMBOLIC_SCALARS(
-    class ::drake::multibody::fem::FemModelBase);
+    class ::drake::multibody::fem::FemModel);

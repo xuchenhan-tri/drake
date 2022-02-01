@@ -6,7 +6,7 @@
 
 #include "drake/common/eigen_types.h"
 #include "drake/multibody/fixed_fem/dev/discrete_time_integrator.h"
-#include "drake/multibody/fixed_fem/dev/fem_model_base.h"
+#include "drake/multibody/fixed_fem/dev/fem_model.h"
 #include "drake/multibody/fixed_fem/dev/fem_state.h"
 
 namespace drake {
@@ -15,7 +15,7 @@ namespace fem {
 namespace internal {
 
 /* FemSolver solves discrete dynamic elasticity problems. The governing PDE of
- the dynamics is spatially discretized in FemModelBase and temporally
+ the dynamics is spatially discretized in FemModel and temporally
  discretized by DiscreteTimeIntegrator. FemSolver provides the
  AdvanceOneTimeStep method that advances the states of the spatially discretized
  FEM model by one time step according to the prescribed discrete time
@@ -36,7 +36,7 @@ class FemSolver {
    thus the model and the integrator must outlive this solver.
    @pre model != nullptr.
    @pre integrator != nullptr.*/
-  FemSolver(const FemModelBase<T>* model,
+  FemSolver(const FemModel<T>* model,
             const DiscreteTimeIntegrator<T>* integrator);
 
   /* Advances the state of the FEM model by one time step with the integrator
@@ -57,7 +57,7 @@ class FemSolver {
                          FemState<T>* next_state) const;
 
   /* Returns the FEM model that this solver solves for. */
-  const FemModelBase<T>& model() const { return *model_; }
+  const FemModel<T>& model() const { return *model_; }
 
   /* Returns the discrete time integrator that this solver uses. */
   const DiscreteTimeIntegrator<T>& integrator() const { return *integrator_; }
@@ -100,7 +100,7 @@ class FemSolver {
   void set_linear_solve_tolerance(const T& residual_norm) const;
 
   /* The FEM model being solved by `this` solver. */
-  const FemModelBase<T>* model_;
+  const FemModel<T>* model_;
   /* The discrete time integrator the solver uses. */
   const DiscreteTimeIntegrator<T>* integrator_;
   /* A scratch sparse matrix to store the tangent matrix of the model. We use

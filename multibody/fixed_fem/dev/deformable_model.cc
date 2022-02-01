@@ -51,12 +51,12 @@ void DeformableModel<T>::SetWallBoundaryCondition(DeformableBodyIndex body_id,
   const Vector3<T>& n_hatW = n_W.normalized();
   DRAKE_THROW_UNLESS(body_id < num_bodies());
   const int kDim = 3;
-  auto& fem_model = fem_models_[body_id];
-  const int num_nodes = fem_model->num_nodes();
-  // TODO(xuchenhan-tri): FemModel should support an easier way to retrieve its
+  auto& fem_model_impl = fem_model_impls_[body_id];
+  const int num_nodes = fem_model_impl->num_nodes();
+  // TODO(xuchenhan-tri): FemModelImpl should support an easier way to retrieve its
   //  reference positions.
   const std::unique_ptr<FemState<T>> fem_state_impl =
-      fem_model->MakeFemState();
+      fem_model_impl->MakeFemState();
   const VectorX<T>& initial_positions = fem_state_impl->q();
   auto bc = std::make_unique<DirichletBoundaryCondition<T>>(/* ODE order */ 2);
   for (int n = 0; n < num_nodes; ++n) {
@@ -71,14 +71,14 @@ void DeformableModel<T>::SetWallBoundaryCondition(DeformableBodyIndex body_id,
       }
     }
   }
-  fem_model->SetDirichletBoundaryCondition(std::move(bc));
+  fem_model_impl->SetDirichletBoundaryCondition(std::move(bc));
 }
 
 template <typename T>
 int DeformableModel<T>::NumDofs() const {
   int dofs = 0;
-  for (const auto& fem_model : fem_models_) {
-    dofs += fem_model->num_dofs();
+  for (const auto& fem_model_impl : fem_model_impls_) {
+    dofs += fem_model_impl->num_dofs();
   }
   return dofs;
 }
@@ -108,29 +108,29 @@ void DeformableModel<T>::RegisterDeformableBodyHelper(
   using ElementType =
       DynamicElasticityElement<IsoparametricElementType, QuadratureType,
                                ConstitutiveModelType>;
-  using FemModelType = DynamicElasticityModel<ElementType>;
+  using FemModelImplType = DynamicElasticityModel<ElementType>;
   using StateType = FemStateImpl<ElementType>;
 
   const DampingModel<T> damping_model(config.mass_damping_coefficient(),
                                       config.stiffness_damping_coefficient());
-  auto fem_model = std::make_unique<FemModelType>(plant_->time_step());
+  auto fem_model_impl = std::make_unique<FemModelImplType>(plant_->time_step());
   // TODO(xuchenhan-tri): Any changes to the gravity will not reflect on the
   //  deformable bodies added before the gravity change. This needs to be fixed.
-  fem_model->SetGravity(plant_->gravity_field().gravity_vector());
+  fem_model_impl->SetGravity(plant_->gravity_field().gravity_vector());
   ConstitutiveModelType constitutive_model(config.youngs_modulus(),
                                            config.poisson_ratio());
-  fem_model->AddDynamicElasticityElementsFromTetMesh(
+  fem_model_impl->AddDynamicElasticityElementsFromTetMesh(
       mesh, constitutive_model, config.mass_density(), damping_model);
 
-  const StateType state = fem_model->MakeFemStateImpl();
-  const int num_dofs = state.num_generalized_positions();
+  const StateType state = fem_model_impl->MakeFemStateImpl();
+  const int num_dofs = state.num_dofs();
   VectorX<T> discrete_state(num_dofs * 3);
   discrete_state.head(num_dofs) = state.q();
   discrete_state.segment(num_dofs, num_dofs) = state.qdot();
   discrete_state.tail(num_dofs) = state.qddot();
   model_discrete_states_.emplace_back(discrete_state);
 
-  fem_models_.emplace_back(std::move(fem_model));
+  fem_model_impls_.emplace_back(std::move(fem_model_impl));
   names_.emplace_back(std::move(name));
 }
 

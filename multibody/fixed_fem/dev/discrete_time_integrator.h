@@ -1,6 +1,6 @@
 #pragma once
 
-#include "drake/multibody/fixed_fem/dev/fem_state_impl.h"
+#include "drake/multibody/fixed_fem/dev/fem_state.h"
 
 namespace drake {
 namespace multibody {
@@ -44,7 +44,7 @@ class DiscreteTimeIntegrator {
   /* Returns (αₚ, αᵥ, αₐ), the derivative of (q, v, a) with respect to the
    unknown variable z (See class documentation). These weights can be used to
    combine stiffness, damping, and mass matrices to form the tangent
-   matrix (see FemModelBase::CalcTangentMatrix). */
+   matrix (see FemModel::CalcTangentMatrix). */
   Vector3<T> weights() const;
 
   /* Extracts the unknown variable `z` from the given FEM `state`. */
@@ -83,13 +83,12 @@ class DiscreteTimeIntegrator {
 
   /* Derived classes must override this method to implement the NVI
    GetUnknowns(). */
-  virtual const VectorX<T>& DoGetUnknowns(
-      const FemState<T>& state) const = 0;
+  virtual const VectorX<T>& DoGetUnknowns(const FemState<T>& state) const = 0;
 
   /* Derived classes must override this method to implement the NVI
    UpdateStateFromChangeInUnknowns(). */
-  virtual void DoUpdateStateFromChangeInUnknowns(
-      const VectorX<T>& dz, FemState<T>* state) const = 0;
+  virtual void DoUpdateStateFromChangeInUnknowns(const VectorX<T>& dz,
+                                                 FemState<T>* state) const = 0;
 
   /* Derived classes must override this method to implement the NVI
    AdvanceOneTimeStep(). */

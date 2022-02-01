@@ -420,9 +420,9 @@ class DeformableRigidContactDataTest : public ::testing::Test {
                                                  Vector3d(1, 1, 1));
       /* Verify our clear box knowledge that the vertex at position (-0.5,
        -0.5, -0.5) has vertex index 0 and thus dof index 0, 1, 2. */
-      const FemModelBase<double>& fem_model = deformable_model->fem_model(A_);
+      const FemModel<double>& fem_model_impl = deformable_model->fem_model_impl(A_);
       const DirichletBoundaryCondition<double>* dirichlet_bc =
-          fem_model.dirichlet_boundary_condition();
+          fem_model_impl.dirichlet_boundary_condition();
       ASSERT_NE(dirichlet_bc, nullptr);
       const std::map<DofIndex, VectorXd>& bc_map = dirichlet_bc->get_bcs();
       ASSERT_EQ(bc_map.size(), 3);

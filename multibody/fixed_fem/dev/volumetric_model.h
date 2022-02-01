@@ -7,7 +7,7 @@
 #include "drake/geometry/proximity/volume_mesh.h"
 #include "drake/multibody/fixed_fem/dev/acceleration_newmark_scheme.h"
 #include "drake/multibody/fixed_fem/dev/damping_model.h"
-#include "drake/multibody/fixed_fem/dev/fem_model.h"
+#include "drake/multibody/fixed_fem/dev/fem_model_impl.h"
 #include "drake/multibody/fixed_fem/dev/volumetric_element.h"
 
 namespace drake {
@@ -19,7 +19,7 @@ namespace internal {
  @tparam Element  The type of FEM element used in this model. Must be of
  template type VolumetricElement. */
 template <class Element>
-class VolumetricModel : public FemModel<Element> {
+class VolumetricModel : public FemModelImpl<Element> {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(VolumetricModel);
 
@@ -131,7 +131,7 @@ class VolumetricModel : public FemModel<Element> {
   const VectorX<T>& reference_positions() const { return reference_positions_; }
 
  private:
-  /* Implements FemModel::DoMakeFemStateImpl(). Generalized positions are
+  /* Implements FemModelImpl::DoMakeFemStateImpl(). Generalized positions are
    initialized to be reference positions of the input mesh vertices. Velocities
    and accelerations are initialized to 0. */
   FemStateImpl<Element> DoMakeFemStateImpl() const final {

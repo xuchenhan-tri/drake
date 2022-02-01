@@ -53,6 +53,8 @@ constexpr int kNumDofs = kNumCubeVertices * kSpatialDimension;
 constexpr int kNumElements = 6;
 /* Parameters for Newmark scheme. */
 const double kDt = 1e-3;
+const double kGamma = 0.5;
+const double kBeta = 0.25;
 /* Parameters for the damping model. */
 const double kMassDamping = 0.01;
 const double kStiffnessDamping = 0.02;
@@ -71,7 +73,7 @@ class VolumetricModelTest : public ::testing::Test {
   }
 
   /* Adds a FEM model of a box discretized into 6 tetrahedra into the given
-   `fem_model`. */
+   `fem_model_impl`. */
   template <typename FemModelType>
   void AddBoxToModel(FemModelType* fem_model) {
     using T = typename FemModelType::T;
@@ -95,42 +97,45 @@ class VolumetricModelTest : public ::testing::Test {
     return delta;
   }
 
-  /* Returns an arbitrary FemStateImpl whose generalized positions are different
+  /* Returns an arbitrary FEM state whose generalized positions are different
    from reference positions and whose velocities and acclerations are nonzero.
-   In addition, set up autodiff derivatives for qddot if the scalar type is
-   AutoDiffXd. */
+   In addition, set up autodiff derivatives for accelerations if the scalar type
+   is AutoDiffXd. */
   template <typename FemModelType>
-  typename FemModelType::State MakeDeformedState(
+  std::unique_ptr<FemState<typename FemModelType::T>> MakeDeformedState(
       const FemModelType& fem_model) const {
-    using State = typename FemModelType::State;
     using T = typename FemModelType::T;
+    using State = FemState<T>;
 
-    const State reference_state = fem_model.MakeFemStateImpl();
-    State deformed_state = fem_model.MakeFemStateImpl();
+    std::unique_ptr<State> reference_state = fem_model.MakeFemState();
+    std::unique_ptr<State> deformed_state = fem_model.MakeFemState();
     if constexpr (std::is_same_v<T, AutoDiffXd>) {
-      /* Perturb qddot. */
-      const Vector<double, kNumDofs> perturbed_qddot =
-          math::ExtractValue(deformed_state.qddot()) + perturbation();
+      /* Perturb a. */
+      const Vector<double, kNumDofs> perturbed_a =
+          math::ExtractValue(deformed_state->GetAccelerations()) +
+          perturbation();
       /* Set up AutodiffXd derivatives. */
-      Vector<AutoDiffXd, kNumDofs> perturbed_qddot_autodiff;
-      math::InitializeAutoDiff(perturbed_qddot, &perturbed_qddot_autodiff);
+      Vector<AutoDiffXd, kNumDofs> perturbed_a_autodiff;
+      math::InitializeAutoDiff(perturbed_a, &perturbed_a_autodiff);
       /* It's important to set up the `deformed_state` with AdvanceOneTimeStep()
-       so that the derivatives such as dq/dqddot are set up. */
-      fem_model.AdvanceOneTimeStep(reference_state, perturbed_qddot_autodiff,
-                                   &deformed_state);
+       so that the derivatives such as dq/da are set up. */
+      integrator_.AdvanceOneTimeStep(*reference_state, perturbed_a_autodiff,
+                                     deformed_state.get());
     } else {
-      /* Perturb qddot. */
-      const Vector<double, kNumDofs> perturbed_qddot =
-          deformed_state.qddot() + perturbation();
-      fem_model.AdvanceOneTimeStep(reference_state, perturbed_qddot,
-                                   &deformed_state);
+      /* Perturb a. */
+      const Vector<double, kNumDofs> perturbed_a =
+          deformed_state->GetAccelerations() + perturbation();
+      AccelerationNewmarkScheme<double> double_integrator(kDt, kGamma, kBeta);
+      double_integrator.AdvanceOneTimeStep(*reference_state, perturbed_a,
+                                           deformed_state.get());
     }
 
     return deformed_state;
   }
 
   /* The model under test. */
-  VolumetricModel<AutoDiffElement> model_{kDt};
+  VolumetricModel<AutoDiffElement> model_{};
+  AccelerationNewmarkScheme<AutoDiffXd> integrator_{kDt, kGamma, kBeta};
 };
 
 /* Tests the mesh has been successfully converted to elements. */
@@ -140,17 +145,16 @@ TEST_F(VolumetricModelTest, Geometry) {
 }
 
 /* Tests that the tangent matrix of the model is the derivative of the residual
- with respect to the change in qddot. */
+ with respect to the change in a. */
 TEST_F(VolumetricModelTest, TangentMatrixIsResidualDerivative) {
   using T = AutoDiffXd;
 
-  const FemStateImpl<AutoDiffElement> state = MakeDeformedState(model_);
-  VectorX<T> residual(state.num_generalized_positions());
-  model_.CalcResidual(state, &residual);
+  std::unique_ptr<FemState<AutoDiffXd>> state = MakeDeformedState(model_);
+  VectorX<T> residual(state->num_dofs());
+  model_.CalcResidual(*state, &residual);
 
-  Eigen::SparseMatrix<T> tangent_matrix;
-  model_.SetTangentMatrixSparsityPattern(&tangent_matrix);
-  model_.CalcTangentMatrix(state, &tangent_matrix);
+  Eigen::SparseMatrix<T> tangent_matrix = model_.MakeEigenSparseTangentMatrix();
+  model_.CalcTangentMatrix(*state, integrator_.weights(), &tangent_matrix);
 
   /* In the discretization of the unit cube by 6 tetrahedra, there are 19 edges,
    and 8 nodes, creating 19*2 + 8 blocks of 3-by-3 nonzero entries. Hence the
@@ -159,7 +163,7 @@ TEST_F(VolumetricModelTest, TangentMatrixIsResidualDerivative) {
   EXPECT_EQ(tangent_matrix.nonZeros(), nnz);
 
   const MatrixX<T> dense_tangent_matrix(tangent_matrix);
-  for (int i = 0; i < state.num_generalized_positions(); ++i) {
+  for (int i = 0; i < state->num_dofs(); ++i) {
     /* The tangent matrix should be the derivative of the residual. Notice that
      here we are comparing a VectorX<double> and the value of a
      VectorX<AutoDiffXd>. */
@@ -172,21 +176,26 @@ TEST_F(VolumetricModelTest, TangentMatrixIsResidualDerivative) {
 /* Verifies that the tangent matrix calculated as PETSc matrix is the same as
  that calculated as Eigen::SparseMatrix. */
 TEST_F(VolumetricModelTest, TangentMatrixParity) {
-  const FemStateImpl<AutoDiffElement> state = MakeDeformedState(model_);
-  Eigen::SparseMatrix<AutoDiffXd> eigen_tangent_matrix;
-  model_.SetTangentMatrixSparsityPattern(&eigen_tangent_matrix);
-  model_.CalcTangentMatrix(state, &eigen_tangent_matrix);
+  std::unique_ptr<FemState<AutoDiffXd>> state = MakeDeformedState(model_);
+  Eigen::SparseMatrix<AutoDiffXd> eigen_tangent_matrix =
+      model_.MakeEigenSparseTangentMatrix();
+  model_.CalcTangentMatrix(*state, integrator_.weights(),
+                           &eigen_tangent_matrix);
   const MatrixX<AutoDiffXd> eigen_dense_autodiff_matrix = eigen_tangent_matrix;
   const MatrixXd eigen_dense_matrix =
       math::ExtractValue(eigen_dense_autodiff_matrix);
 
-  VolumetricModel<DoubleElement> double_model(kDt);
+  VolumetricModel<DoubleElement> double_model;
   AddBoxToModel(&double_model);
-  const FemStateImpl<DoubleElement> double_state = MakeDeformedState(double_model);
+  std::unique_ptr<FemState<double>> double_state =
+      MakeDeformedState(double_model);
+  const AccelerationNewmarkScheme<double> double_integrator_{kDt, kGamma,
+                                                             kBeta};
   std::unique_ptr<internal::PetscSymmetricBlockSparseMatrix>
       petsc_tangent_matrix =
           double_model.MakePetscSymmetricBlockSparseTangentMatrix();
-  double_model.CalcTangentMatrix(double_state, petsc_tangent_matrix.get());
+  double_model.CalcTangentMatrix(*double_state, double_integrator_.weights(),
+                                 petsc_tangent_matrix.get());
   petsc_tangent_matrix->AssembleIfNecessary();
   const MatrixXd petsc_dense_matrix = petsc_tangent_matrix->MakeDenseMatrix();
   EXPECT_TRUE(CompareMatrices(eigen_dense_matrix, petsc_dense_matrix,
@@ -204,11 +213,11 @@ TEST_F(VolumetricModelTest, MultipleMesh) {
   /* Each cube is split into 6 tetrahedra. */
   EXPECT_EQ(model_.num_elements(), 2 * kNumElements);
 
-  FemStateImpl<AutoDiffElement> state = model_.MakeFemStateImpl();
-  EXPECT_EQ(state.num_generalized_positions(), 2 * kNumDofs);
+  std::unique_ptr<FemState<AutoDiffXd>> state = model_.MakeFemState();
+  EXPECT_EQ(state->num_dofs(), 2 * kNumDofs);
 
-  VectorX<T> residual(state.num_generalized_positions());
-  model_.CalcResidual(state, &residual);
+  VectorX<T> residual(state->num_dofs());
+  model_.CalcResidual(*state, &residual);
   EXPECT_TRUE(
       CompareMatrices(residual.head(kNumDofs), residual.tail(kNumDofs), 0));
 }
