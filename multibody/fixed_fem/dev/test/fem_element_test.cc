@@ -14,16 +14,29 @@ namespace {
 using T = DummyElementTraits::T;
 const ElementIndex kZeroIndex = ElementIndex(0);
 const std::array<NodeIndex, DummyElementTraits::num_nodes> kNodeIndices = {
-    {NodeIndex(0), NodeIndex(1)}};
+    {NodeIndex(0), NodeIndex(1), NodeIndex(2), NodeIndex(3)}};
 const DummyElementTraits::ConstitutiveModel kConstitutiveModel(5e4, 0.4);
 const DampingModel<T> kDampingModel(0.01, 0.02);
+constexpr int kNumDofs = DummyElementTraits::num_dofs;
 
 class FemElementTest : public ::testing::Test {
  protected:
   /* Default values for the state. */
-  static VectorX<double> q() { return Vector3<double>(0.1, 0.2, 0.3); }
-  static VectorX<double> v() { return Vector3<double>(0.3, 0.4, 0.5); }
-  static VectorX<double> a() { return Vector3<double>(0.6, 0.7, 0.8); }
+  static VectorX<double> q() {
+    Vector<double, kNumDofs> q;
+    q << 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2;
+    return q;
+  }
+  static VectorX<double> v() {
+    Vector<double, kNumDofs> v;
+    v << 1.1, 1.2, 2.3, 2.4, 2.5, 2.6, 2.7, 1.8, 1.9, 2.0, 2.1, 2.2;
+    return v;
+  }
+  static VectorX<double> a() {
+    Vector<double, kNumDofs> a;
+    a << 2.1, 2.2, 3.3, 3.4, 3.5, 2.6, 2.7, 2.8, 2.9, 3.0, 3.1, 3.2;
+    return a;
+  }
 
   /* FemElement under test. */
   DummyElement element_{kZeroIndex, kNodeIndices, kConstitutiveModel,
@@ -42,6 +55,13 @@ TEST_F(FemElementTest, Constructor) {
  FemElement whose implementation returns/adds a specific value. */
 TEST_F(FemElementTest, Residual) {
   Vector<T, DummyElementTraits::num_dofs> residual;
+  element_.CalcResidual(state_, &residual);
+  const Vector<T, kNumDofs> zero_vector = Vector<T, kNumDofs>::Zero();
+  EXPECT_EQ(residual, zero_vector);
+
+  state_.SetPositions(zero_vector);
+  state_.SetVelocities(zero_vector);
+  state_.SetAccelerations(zero_vector);
   element_.CalcResidual(state_, &residual);
   EXPECT_EQ(residual, element_.dummy_residual());
 }
