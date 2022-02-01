@@ -15,7 +15,9 @@ template <typename T, int num_locations>
 LinearConstitutiveModel<T, num_locations>::LinearConstitutiveModel(
     const T& youngs_modulus, const T& poisson_ratio)
     : E_(youngs_modulus), nu_(poisson_ratio) {
-  std::tie(lambda_, mu_) = CalcLameParameters(E_, nu_);
+  const LameParameters<T> lame = CalcLameParameters(E_, nu_);
+  lambda_ = lame.lambda;
+  mu_ = lame.mu;
   /* Recall that
         Pᵢⱼ = 2μ * εᵢⱼ + λ * εₐₐ * δᵢⱼ,
     So,

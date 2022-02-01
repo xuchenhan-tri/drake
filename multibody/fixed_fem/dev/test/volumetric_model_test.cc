@@ -95,7 +95,7 @@ class VolumetricModelTest : public ::testing::Test {
     return delta;
   }
 
-  /* Returns an arbitrary FemState whose generalized positions are different
+  /* Returns an arbitrary FemStateImpl whose generalized positions are different
    from reference positions and whose velocities and acclerations are nonzero.
    In addition, set up autodiff derivatives for qddot if the scalar type is
    AutoDiffXd. */
@@ -105,8 +105,8 @@ class VolumetricModelTest : public ::testing::Test {
     using State = typename FemModelType::State;
     using T = typename FemModelType::T;
 
-    const State reference_state = fem_model.MakeFemState();
-    State deformed_state = fem_model.MakeFemState();
+    const State reference_state = fem_model.MakeFemStateImpl();
+    State deformed_state = fem_model.MakeFemStateImpl();
     if constexpr (std::is_same_v<T, AutoDiffXd>) {
       /* Perturb qddot. */
       const Vector<double, kNumDofs> perturbed_qddot =
@@ -144,7 +144,7 @@ TEST_F(VolumetricModelTest, Geometry) {
 TEST_F(VolumetricModelTest, TangentMatrixIsResidualDerivative) {
   using T = AutoDiffXd;
 
-  const FemState<AutoDiffElement> state = MakeDeformedState(model_);
+  const FemStateImpl<AutoDiffElement> state = MakeDeformedState(model_);
   VectorX<T> residual(state.num_generalized_positions());
   model_.CalcResidual(state, &residual);
 
@@ -172,7 +172,7 @@ TEST_F(VolumetricModelTest, TangentMatrixIsResidualDerivative) {
 /* Verifies that the tangent matrix calculated as PETSc matrix is the same as
  that calculated as Eigen::SparseMatrix. */
 TEST_F(VolumetricModelTest, TangentMatrixParity) {
-  const FemState<AutoDiffElement> state = MakeDeformedState(model_);
+  const FemStateImpl<AutoDiffElement> state = MakeDeformedState(model_);
   Eigen::SparseMatrix<AutoDiffXd> eigen_tangent_matrix;
   model_.SetTangentMatrixSparsityPattern(&eigen_tangent_matrix);
   model_.CalcTangentMatrix(state, &eigen_tangent_matrix);
@@ -182,7 +182,7 @@ TEST_F(VolumetricModelTest, TangentMatrixParity) {
 
   VolumetricModel<DoubleElement> double_model(kDt);
   AddBoxToModel(&double_model);
-  const FemState<DoubleElement> double_state = MakeDeformedState(double_model);
+  const FemStateImpl<DoubleElement> double_state = MakeDeformedState(double_model);
   std::unique_ptr<internal::PetscSymmetricBlockSparseMatrix>
       petsc_tangent_matrix =
           double_model.MakePetscSymmetricBlockSparseTangentMatrix();
@@ -204,7 +204,7 @@ TEST_F(VolumetricModelTest, MultipleMesh) {
   /* Each cube is split into 6 tetrahedra. */
   EXPECT_EQ(model_.num_elements(), 2 * kNumElements);
 
-  FemState<AutoDiffElement> state = model_.MakeFemState();
+  FemStateImpl<AutoDiffElement> state = model_.MakeFemStateImpl();
   EXPECT_EQ(state.num_generalized_positions(), 2 * kNumDofs);
 
   VectorX<T> residual(state.num_generalized_positions());

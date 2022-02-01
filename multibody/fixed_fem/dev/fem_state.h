@@ -1,105 +1,77 @@
 #pragma once
 
 #include <memory>
-#include <vector>
 
-#include "drake/common/eigen_types.h"
-#include "drake/multibody/fixed_fem/dev/element_cache_entry.h"
-#include "drake/multibody/fixed_fem/dev/fem_indexes.h"
-#include "drake/multibody/fixed_fem/dev/fem_state_base.h"
+#include "drake/common/default_scalars.h"
 
 namespace drake {
 namespace multibody {
 namespace fem {
-namespace internal {
 
-/* FemState implements FemStateBase for a particular type of FEM element.
- It is templated on the concrete FemElement type in order to allow compile time
- optimizations based on fixed sizes. It also stores the per-element
- state-dependent quantities for its corresponding elements (see
- ElementCacheEntry).
- @tparam Element The type of FemElement that consumes this FemState. This
- template parameter provides the scalar type and the type of per-element data
- this FemState stores. */
-template <typename Element>
-class FemState : public FemStateBase<typename Element::T> {
+/** An abstract class that stores the FEM states. The states include the
+ generalized positions, velocities, and accelerations associated with each node.
+ @tparam_nonsymbolic_scalar */
+template <typename T>
+class FemState {
  public:
-  using T = typename Element::T;
-
   DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(FemState);
 
-  /* Constructs an FemState with the prescribed positions, velocities, and
-   accelerations.
+  virtual ~FemState() = default;
+
+  /** @name State getters. @{ */
+  const VectorX<T>& GetPositions() const { return q_; }
+
+  const VectorX<T>& GetVelocities() const { return v_; }
+
+  const VectorX<T>& GetAccelerations() const { return a_; }
+  /** @} */
+
+  /** @name State setters.
+   The size of the values provided must match the current size of the states.
+   Throw an exception otherwise.
+   @{ */
+  void SetPositions(const Eigen::Ref<const VectorX<T>>& q);
+
+  void SetVelocities(const Eigen::Ref<const VectorX<T>>& v);
+
+  void SetAccelerations(const Eigen::Ref<const VectorX<T>>& a);
+  /** @} */
+
+  /* Returns the number of generalized positions in the state. */
+  int num_dofs() const { return q_.size(); }
+
+ protected:
+  /** Constructs an %FemState with prescribed generalized positions,
+   velocities, and accelerations.
    @param[in] q  The prescribed generalized positions.
    @param[in] v  The prescribed generalized velocities.
    @param[in] a  The prescribed generalized accelerations.
-   positions.
-   @pre q.size() == qdot.size().
-   @pre q.size() == qddot.size(). */
+   @pre q.size() == v.size().
+   @pre q.size() == a.size(). */
   FemState(const Eigen::Ref<const VectorX<T>>& q,
-           const Eigen::Ref<const VectorX<T>>& v,
-           const Eigen::Ref<const VectorX<T>>& a)
-      : FemStateBase<T>(q, v, a) {}
-
-  /* Creates the per-element state-dependent data for the given `elements`. The
-  following invariant must be satisfied: `elements[i].element_index() == i` --
-  the i-th element reports an element index of `i`, as FemState assumes this
-  invariant when the Element::Traits::Data are accessed via element_data().
-  @throw std::exception if elements[i].element_index() != i for some `i` = 0,
-  ..., `element.size()-1`. */
-  void MakeElementData(const std::vector<Element>& elements) {
-    /* Note: the element data is stored in a simple bespoke cache (see
-     internal::ElementCacheEntry). The newly created cache entries are
-     initially stale. */
-    element_cache_.clear();
-    for (int i = 0; i < static_cast<int>(elements.size()); ++i) {
-      if (elements[i].element_index() != ElementIndex(i)) {
-        throw std::runtime_error(
-            "Input element entry at " + std::to_string(i) + " has index " +
-            std::to_string(elements[i].element_index()) + " instead of " +
-            std::to_string(i) +
-            ". The entry with index i must be stored at position i.");
-      }
-    }
-    element_cache_.resize(elements.size());
-  }
-
-  /* Returns the number of element cache entries. */
-  int element_cache_size() const { return element_cache_.size(); }
-
-  /* Getter for element state-dependpent quantities. */
-  const typename Element::Traits::Data& element_data(
-      const Element& element) const {
-    ElementIndex id = element.element_index();
-    DRAKE_ASSERT(id.is_valid() && id < element_cache_size());
-    typename Element::Traits::Data& data =
-        element_cache_[id].mutable_element_data();
-    if (element_cache_[id].is_stale()) {
-      data = element.ComputeData(*this);
-      element_cache_[id].set_stale(false);
-    }
-    return data;
+               const Eigen::Ref<const VectorX<T>>& v,
+               const Eigen::Ref<const VectorX<T>>& a)
+      : q_(q), v_(v), a_(a) {
+    DRAKE_DEMAND(q_.size() == v_.size());
+    DRAKE_DEMAND(q_.size() == a_.size());
   }
 
  private:
-  friend class FemStateTest;
+  /* Invalidate state-dependent quantities. Should be called on state changes.
+   */
+  virtual void InvalidateAllCacheEntries() = 0;
 
-  // TODO(xuchenhan-tri): Currently, all cache entries are thrashed when *any*
-  //  state (q, v, or a) is changed. For most FEM models, there exist more
-  //  fine-grained caching mechanisms which may improve the cache efficiency.
-  /* Mark all cache entries associated with `this` FemState as stale. */
-  void InvalidateAllCacheEntries() final {
-    for (auto& element_cache_entry : element_cache_) {
-      element_cache_entry.set_stale(true);
-    }
-  }
-
-  /* Owned element cache entries. */
-  mutable std::vector<ElementCacheEntry<typename Element::Traits::Data>>
-      element_cache_{};
+  /* Generalized positions. */
+  VectorX<T> q_{};
+  /* Generalized velocities. */
+  VectorX<T> v_{};
+  /* Generalized accelerations. */
+  VectorX<T> a_{};
 };
 
-}  // namespace internal
 }  // namespace fem
 }  // namespace multibody
 }  // namespace drake
+
+DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_NONSYMBOLIC_SCALARS(
+    class ::drake::multibody::fem::FemState);

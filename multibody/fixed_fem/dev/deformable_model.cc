@@ -55,9 +55,9 @@ void DeformableModel<T>::SetWallBoundaryCondition(DeformableBodyIndex body_id,
   const int num_nodes = fem_model->num_nodes();
   // TODO(xuchenhan-tri): FemModel should support an easier way to retrieve its
   //  reference positions.
-  const std::unique_ptr<FemStateBase<T>> fem_state =
-      fem_model->MakeFemStateBase();
-  const VectorX<T>& initial_positions = fem_state->q();
+  const std::unique_ptr<FemState<T>> fem_state_impl =
+      fem_model->MakeFemState();
+  const VectorX<T>& initial_positions = fem_state_impl->q();
   auto bc = std::make_unique<DirichletBoundaryCondition<T>>(/* ODE order */ 2);
   for (int n = 0; n < num_nodes; ++n) {
     const Vector3<T>& p_WV = initial_positions.template segment<kDim>(n * kDim);
@@ -109,7 +109,7 @@ void DeformableModel<T>::RegisterDeformableBodyHelper(
       DynamicElasticityElement<IsoparametricElementType, QuadratureType,
                                ConstitutiveModelType>;
   using FemModelType = DynamicElasticityModel<ElementType>;
-  using StateType = FemState<ElementType>;
+  using StateType = FemStateImpl<ElementType>;
 
   const DampingModel<T> damping_model(config.mass_damping_coefficient(),
                                       config.stiffness_damping_coefficient());
@@ -122,7 +122,7 @@ void DeformableModel<T>::RegisterDeformableBodyHelper(
   fem_model->AddDynamicElasticityElementsFromTetMesh(
       mesh, constitutive_model, config.mass_density(), damping_model);
 
-  const StateType state = fem_model->MakeFemState();
+  const StateType state = fem_model->MakeFemStateImpl();
   const int num_dofs = state.num_generalized_positions();
   VectorX<T> discrete_state(num_dofs * 3);
   discrete_state.head(num_dofs) = state.q();

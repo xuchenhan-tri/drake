@@ -44,16 +44,16 @@ class VelocityNewmarkScheme final : public NewmarkScheme<T> {
     return {beta_over_gamma_ * dt(), 1.0, one_over_dt_gamma_};
   }
 
-  const VectorX<T>& DoGetUnknowns(const FemStateBase<T>& state) const final {
+  const VectorX<T>& DoGetUnknowns(const FemState<T>& state) const final {
     return state.GetVelocities();
   }
 
   void DoUpdateStateFromChangeInUnknowns(const VectorX<T>& dz,
-                                         FemStateBase<T>* state) const final;
+                                         FemState<T>* state) const final;
 
-  void DoAdvanceOneTimeStep(const FemStateBase<T>& prev_state,
+  void DoAdvanceOneTimeStep(const FemState<T>& prev_state,
                             const VectorX<T>& unknown_variable,
-                            FemStateBase<T>* state) const final;
+                            FemState<T>* state) const final;
 
   double beta_over_gamma_{};
   double one_over_dt_gamma_{};

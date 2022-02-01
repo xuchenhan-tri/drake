@@ -1039,11 +1039,11 @@ class DeformableRigidDynamicsDataTest : public ::testing::Test {
     return deformable_rigid_manager_->EvalParticipatingVelocities(context);
   }
 
-  /* Calls DeformableRigidManager::EvalFreeMotionFemStateBase(). */
-  const FemStateBase<double>& EvalFreeMotionFemStateBase(
+  /* Calls DeformableRigidManager::EvalFreeMotionFemState(). */
+  const FemState<double>& EvalFreeMotionFemState(
       const systems::Context<double>& context,
       DeformableBodyIndex index) const {
-    return deformable_rigid_manager_->EvalFreeMotionFemStateBase(context,
+    return deformable_rigid_manager_->EvalFreeMotionFemState(context,
                                                                  index);
   }
 
@@ -1220,7 +1220,7 @@ TEST_F(DeformableRigidDynamicsDataTest, ParticipatingFreeMotionVelocities) {
   plant_->SetFreeBodyPose(&plant_context, plant_->get_body(C_), X_WC);
   const VectorXd& rigid_v_star = EvalFreeMotionRigidVelocities(plant_context);
   const VectorXd& deformable_v_star =
-      EvalFreeMotionFemStateBase(plant_context, B_).qdot();
+      EvalFreeMotionFemState(plant_context, B_).qdot();
   constexpr int kNumRigidDofs = 6;
   EXPECT_EQ(rigid_v_star.size(), kNumRigidDofs);
   EXPECT_EQ(deformable_v_star.size(),

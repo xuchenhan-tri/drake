@@ -48,10 +48,10 @@ TEST_F(FemSolverTest, Tolerancse) {
  case) should satisfy A*z = -b, where A is the constant tangent matrix and b is
  the nonzero residual evaluated at the zero state. */
 TEST_F(FemSolverTest, AdvanceOneTimeStep) {
-  std::unique_ptr<FemStateBase<double>> state0 = model_.MakeFemStateBase();
-  std::unique_ptr<FemStateBase<double>> state = model_.MakeFemStateBase();
-  std::unique_ptr<FemStateBase<double>> expected_state =
-      model_.MakeFemStateBase();
+  std::unique_ptr<FemState<double>> state0 = model_.MakeFemState();
+  std::unique_ptr<FemState<double>> state = model_.MakeFemState();
+  std::unique_ptr<FemState<double>> expected_state =
+      model_.MakeFemState();
   const int num_iterations = solver_.AdvanceOneTimeStep(*state0, state.get());
   EXPECT_EQ(num_iterations, 1);
 

@@ -234,7 +234,7 @@ drake_cc_library(
     ],
     deps = [
         ":fem_indexes",
-        ":fem_state_base",
+        ":fem_state",
         ":petsc_symmetric_block_sparse_matrix",
         "//common:essential",
     ],
@@ -311,7 +311,7 @@ drake_cc_library(
     ],
     deps = [
         ":damping_model",
-        ":fem_state",
+        ":fem_state_impl",
         "//multibody/fem:constitutive_model",
         "//common:essential",
     ],
@@ -337,7 +337,7 @@ drake_cc_library(
         ":fem_element",
         ":fem_indexes",
         ":fem_model_base",
-        ":fem_state",
+        ":fem_state_impl",
         "//common:essential",
         "//common:unused",
     ],
@@ -353,7 +353,7 @@ drake_cc_library(
     ],
     deps = [
         ":dirichlet_boundary_condition",
-        ":fem_state_base",
+        ":fem_state",
         ":petsc_symmetric_block_sparse_matrix",
         ":discrete_time_integrator",
         "//common:default_scalars",
@@ -377,24 +377,24 @@ drake_cc_library(
 )
 
 drake_cc_library(
-    name = "fem_state",
+    name = "fem_state_impl",
     hdrs = [
-        "fem_state.h",
+        "fem_state_impl.h",
     ],
     deps = [
         ":element_cache_entry",
-        ":fem_state_base",
+        ":fem_state",
         "//common:essential",
     ],
 )
 
 drake_cc_library(
-    name = "fem_state_base",
+    name = "fem_state",
     srcs = [
-        "fem_state_base.cc",
+        "fem_state.cc",
     ],
     hdrs = [
-        "fem_state_base.h",
+        "fem_state.h",
     ],
     deps = [
         "//common:default_scalars",
@@ -764,7 +764,7 @@ drake_cc_library(
         ":damping_model",
         ":element_cache_entry",
         ":fem_element",
-        ":fem_state",
+        ":fem_state_impl",
         ":linear_constitutive_model",
     ],
 )
@@ -839,7 +839,7 @@ drake_cc_googletest(
         ":dummy_element",
         ":element_cache_entry",
         ":fem_element",
-        ":fem_state",
+        ":fem_state_impl",
         "//common/test_utilities:expect_throws_message",
     ],
 )

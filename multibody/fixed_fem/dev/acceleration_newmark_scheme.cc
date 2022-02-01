@@ -7,7 +7,7 @@ namespace internal {
 
 template <typename T>
 void AccelerationNewmarkScheme<T>::DoUpdateStateFromChangeInUnknowns(
-    const VectorX<T>& dz, FemStateBase<T>* state) const {
+    const VectorX<T>& dz, FemState<T>* state) const {
   const VectorX<T>& a = state->GetAccelerations();
   const VectorX<T>& v = state->GetVelocities();
   const VectorX<T>& x = state->GetPositions();
@@ -18,8 +18,8 @@ void AccelerationNewmarkScheme<T>::DoUpdateStateFromChangeInUnknowns(
 
 template <typename T>
 void AccelerationNewmarkScheme<T>::DoAdvanceOneTimeStep(
-    const FemStateBase<T>& prev_state, const VectorX<T>& unknown_variable,
-    FemStateBase<T>* state) const {
+    const FemState<T>& prev_state, const VectorX<T>& unknown_variable,
+    FemState<T>* state) const {
   const VectorX<T>& an = prev_state.GetAccelerations();
   const VectorX<T>& vn = prev_state.GetVelocities();
   const VectorX<T>& xn = prev_state.GetPositions();

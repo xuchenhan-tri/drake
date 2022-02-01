@@ -38,8 +38,8 @@ GTEST_TEST(AccelerationNewmarkSchemeTest, Weights) {
  with the weights. */
 GTEST_TEST(AccelerationNewmarkSchemeTest, UpdateStateFromChangeInUnknowns) {
   AccelerationNewmarkScheme<double> scheme{kDt, kGamma, kBeta};
-  FemState<DummyElement> state0(MakeQ(), MakeQdot(), MakeQddot());
-  FemState<DummyElement> state(state0);
+  FemStateImpl<DummyElement> state0(MakeQ(), MakeQdot(), MakeQddot());
+  FemStateImpl<DummyElement> state(state0);
   const Vector4<double> dz(1.234, 4.567, 7.890, 0.123);
   const Vector3<double>& weights = scheme.weights();
   scheme.UpdateStateFromChangeInUnknowns(dz, &state);
@@ -59,9 +59,9 @@ GTEST_TEST(AccelerationNewmarkSchemeTest, AdvanceOneTimeStep) {
   const Vector4<double> q = MakeQ();
   const Vector4<double> qdot = MakeQdot();
   const Vector4<double> qddot = MakeQddot();
-  const FemState<DummyElement> state_0(q, qdot, qddot);
-  FemState<DummyElement> state_n(state_0);
-  FemState<DummyElement> state_np1(state_0);
+  const FemStateImpl<DummyElement> state_0(q, qdot, qddot);
+  FemStateImpl<DummyElement> state_n(state_0);
+  FemStateImpl<DummyElement> state_np1(state_0);
   const int kTimeSteps = 10;
   for (int i = 0; i < kTimeSteps; ++i) {
     scheme.AdvanceOneTimeStep(state_n, qddot, &state_np1);
@@ -87,12 +87,12 @@ GTEST_TEST(AccelerationNewmarkSchemeTest, AdvanceOneTimeStep) {
  are the same. */
 GTEST_TEST(AccelerationNewmarkSchemeTest, EquivalenceWithVelocityNewmark) {
   AccelerationNewmarkScheme<double> acceleration_scheme{kDt, kGamma, kBeta};
-  FemState<DummyElement> state0(MakeQ(), MakeQdot(), MakeQddot());
-  FemState<DummyElement> state_a(state0);
+  FemStateImpl<DummyElement> state0(MakeQ(), MakeQdot(), MakeQddot());
+  FemStateImpl<DummyElement> state_a(state0);
   acceleration_scheme.AdvanceOneTimeStep(state0, MakeQddot(), &state_a);
 
   VelocityNewmarkScheme<double> velocity_scheme{kDt, kGamma, kBeta};
-  FemState<DummyElement> state_v(state0);
+  FemStateImpl<DummyElement> state_v(state0);
   velocity_scheme.AdvanceOneTimeStep(state0, state_a.GetVelocities(), &state_v);
   /* Set a larger error tolerance to accomodate the division by `dt` used in the
    VelocityNewmarkScheme. */

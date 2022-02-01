@@ -138,10 +138,10 @@ class DeformableRigidContactSolverTest : public ::testing::Test {
     diagram_context_ = diagram_->CreateDefaultContext();
   }
 
-  /* Calls DeformableRigidManager::EvalFreeMotionFemStateBase(). */
-  const FemStateBase<double>& EvalFreeMotionFemStateBase(
+  /* Calls DeformableRigidManager::EvalFreeMotionFemState(). */
+  const FemState<double>& EvalFreeMotionFemState(
       const Context<double>& context, DeformableBodyIndex index) const {
-    return deformable_rigid_manager_->EvalFreeMotionFemStateBase(context,
+    return deformable_rigid_manager_->EvalFreeMotionFemState(context,
                                                                  index);
   }
 
@@ -380,8 +380,8 @@ TEST_F(DeformableRigidContactSolverTest, DeformableResults) {
 
   /* Verifies the second documented test. */
   /* The cube is not in contact, so v = v* (dv = 0) and tau = 0. */
-  const FemStateBase<double>& cube_state_star =
-      EvalFreeMotionFemStateBase(plant_context, deformable_cube_);
+  const FemState<double>& cube_state_star =
+      EvalFreeMotionFemState(plant_context, deformable_cube_);
   const VectorXd& cube_v_star = cube_state_star.qdot();
   /* N.B. Deformable dofs are in the order deformable bodies are added. In this
    case the deformable cube was added to the model before the deformable
@@ -393,8 +393,8 @@ TEST_F(DeformableRigidContactSolverTest, DeformableResults) {
   EXPECT_TRUE(CompareMatrices(cube_tau, VectorXd::Zero(3 * kNumCubeVertices)));
 
   /* The octahedron is in contact, and we verify that A⋅Δv = Jcᵀ⋅γ. */
-  const FemStateBase<double>& octahedron_state_star =
-      EvalFreeMotionFemStateBase(plant_context, deformable_octahedron_);
+  const FemState<double>& octahedron_state_star =
+      EvalFreeMotionFemState(plant_context, deformable_octahedron_);
   const VectorXd& octahedron_v_star = octahedron_state_star.qdot();
   const VectorXd& octahedron_v =
       deformable_results.v_next.tail(3 * kNumOctahedronVertices);

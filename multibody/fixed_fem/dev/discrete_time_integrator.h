@@ -1,6 +1,6 @@
 #pragma once
 
-#include "drake/multibody/fixed_fem/dev/fem_state.h"
+#include "drake/multibody/fixed_fem/dev/fem_state_impl.h"
 
 namespace drake {
 namespace multibody {
@@ -48,9 +48,9 @@ class DiscreteTimeIntegrator {
   Vector3<T> weights() const;
 
   /* Extracts the unknown variable `z` from the given FEM `state`. */
-  const VectorX<T>& GetUnknowns(const FemStateBase<T>& state) const;
+  const VectorX<T>& GetUnknowns(const FemState<T>& state) const;
 
-  /* Updates the FemStateBase `state` given the change in the unknown variables.
+  /* Updates the FemState `state` given the change in the unknown variables.
    More specifically, it sets the given `state` to the following values.
 
         q = αₚ (z + dz) + bₚ
@@ -60,7 +60,7 @@ class DiscreteTimeIntegrator {
    @pre state != nullptr.
    @pre dz.size() == state->num_dofs(). */
   void UpdateStateFromChangeInUnknowns(const VectorX<T>& dz,
-                                       FemStateBase<T>* state) const;
+                                       FemState<T>* state) const;
 
   /* Advances `prev_state` by one time step to the `next_state` with the given
    value of the unknown variable z.
@@ -70,9 +70,9 @@ class DiscreteTimeIntegrator {
    @pre next_state != nullptr.
    @pre The sizes of `prev_state`, `unknown_variable`, and `next_state` are
    compatible. */
-  void AdvanceOneTimeStep(const FemStateBase<T>& prev_state,
+  void AdvanceOneTimeStep(const FemState<T>& prev_state,
                           const VectorX<T>& unknown_variable,
-                          FemStateBase<T>* next_state) const;
+                          FemState<T>* next_state) const;
 
  protected:
   DiscreteTimeIntegrator() = default;
@@ -84,18 +84,18 @@ class DiscreteTimeIntegrator {
   /* Derived classes must override this method to implement the NVI
    GetUnknowns(). */
   virtual const VectorX<T>& DoGetUnknowns(
-      const FemStateBase<T>& state) const = 0;
+      const FemState<T>& state) const = 0;
 
   /* Derived classes must override this method to implement the NVI
    UpdateStateFromChangeInUnknowns(). */
   virtual void DoUpdateStateFromChangeInUnknowns(
-      const VectorX<T>& dz, FemStateBase<T>* state) const = 0;
+      const VectorX<T>& dz, FemState<T>* state) const = 0;
 
   /* Derived classes must override this method to implement the NVI
    AdvanceOneTimeStep(). */
-  virtual void DoAdvanceOneTimeStep(const FemStateBase<T>& prev_state,
+  virtual void DoAdvanceOneTimeStep(const FemState<T>& prev_state,
                                     const VectorX<T>& unknowns,
-                                    FemStateBase<T>* next_state) const = 0;
+                                    FemState<T>* next_state) const = 0;
 };
 
 }  // namespace internal

@@ -37,10 +37,10 @@ class DummyModel final : public FemModel<DummyElement> {
 
  private:
   /* Creates an all-zero FEM state for the dummy model. */
-  FemState<DummyElement> DoMakeFemState() const final {
-    return FemState<DummyElement>(VectorX<T>::Zero(kNumDofs),
-                                  VectorX<T>::Zero(kNumDofs),
-                                  VectorX<T>::Zero(kNumDofs));
+  FemStateImpl<DummyElement> DoMakeFemState() const final {
+    return FemStateImpl<DummyElement>(VectorX<T>::Zero(kNumDofs),
+                                      VectorX<T>::Zero(kNumDofs),
+                                      VectorX<T>::Zero(kNumDofs));
   }
 };
 

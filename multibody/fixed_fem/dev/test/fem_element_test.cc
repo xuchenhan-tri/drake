@@ -41,7 +41,7 @@ class FemElementTest : public ::testing::Test {
   /* FemElement under test. */
   DummyElement element_{kZeroIndex, kNodeIndices, kConstitutiveModel,
                         kDampingModel};
-  FemState<DummyElement> state_{q(), v(), a()};
+  FemStateImpl<DummyElement> state_{q(), v(), a()};
 };
 
 TEST_F(FemElementTest, Constructor) {

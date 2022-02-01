@@ -111,50 +111,50 @@ void DeformableRigidManager<T>::DeclareCacheEntries() {
        ++deformable_body_id) {
     const FemModelBase<T>& fem_model =
         deformable_model_->fem_model(deformable_body_id);
-    const std::unique_ptr<const FemStateBase<T>> model_fem_state =
-        fem_model.MakeFemStateBase();
+    const std::unique_ptr<const FemState<T>> model_fem_state_impl =
+        fem_model.MakeFemState();
 
     /* Extracts the q, qdot, and qddot from the given context and copies them
      to the cached fem state. */
-    const auto& fem_state_cache_entry = this->DeclareCacheEntry(
+    const auto& fem_state_impl_cache_entry = this->DeclareCacheEntry(
         fmt::format("FEM state {}", deformable_body_id),
         systems::ValueProducer(
-            *model_fem_state,
-            std::function<void(const systems::Context<T>&, FemStateBase<T>*)>(
-                std::bind(&DeformableRigidManager<T>::CalcFemStateBase, this,
+            *model_fem_state_impl,
+            std::function<void(const systems::Context<T>&, FemState<T>*)>(
+                std::bind(&DeformableRigidManager<T>::CalcFemState, this,
                           std::placeholders::_1, deformable_body_id,
                           std::placeholders::_2))),
         {systems::System<T>::xd_ticket()});
-    fem_state_cache_indexes_.emplace_back(fem_state_cache_entry.cache_index());
+    fem_state_impl_cache_indexes_.emplace_back(fem_state_impl_cache_entry.cache_index());
 
     /* Calculates the free-motion velocity for the deformable body. */
     const auto& free_motion_cache_entry = this->DeclareCacheEntry(
         fmt::format("Free motion FEM state {}", deformable_body_id),
         systems::ValueProducer(
-            *model_fem_state,
-            std::function<void(const systems::Context<T>&, FemStateBase<T>*)>(
+            *model_fem_state_impl,
+            std::function<void(const systems::Context<T>&, FemState<T>*)>(
                 std::bind(
-                    &DeformableRigidManager<T>::CalcFreeMotionFemStateBase,
+                    &DeformableRigidManager<T>::CalcFreeMotionFemState,
                     this, std::placeholders::_1, deformable_body_id,
                     std::placeholders::_2))),
-        {fem_state_cache_entry.ticket()});
+        {fem_state_impl_cache_entry.ticket()});
     free_motion_cache_indexes_.emplace_back(
         free_motion_cache_entry.cache_index());
 
-    const auto& next_fem_state_cache_entry = this->DeclareCacheEntry(
+    const auto& next_fem_state_impl_cache_entry = this->DeclareCacheEntry(
         fmt::format("FEM state for {} at the next time step",
                     deformable_body_id),
         systems::ValueProducer(
-            *model_fem_state,
-            std::function<void(const systems::Context<T>&, FemStateBase<T>*)>{
+            *model_fem_state_impl,
+            std::function<void(const systems::Context<T>&, FemState<T>*)>{
                 [this, deformable_body_id](const systems::Context<T>& context,
-                                           FemStateBase<T>* next_state) {
-                  this->CalcNextFemStateBase(context, deformable_body_id,
+                                           FemState<T>* next_state) {
+                  this->CalcNextFemState(context, deformable_body_id,
                                              next_state);
                 }}),
         {systems::System<T>::all_sources_ticket()});
-    next_fem_state_cache_indexes_.emplace_back(
-        next_fem_state_cache_entry.cache_index());
+    next_fem_state_impl_cache_indexes_.emplace_back(
+        next_fem_state_impl_cache_entry.cache_index());
 
     /* Allocates and calculates the free-motion tangent matrix for the
      deformable body. */
@@ -406,9 +406,9 @@ void DeformableRigidManager<T>::CalcDeformableContactSolverResults(
   int participating_dofs_offset = 0;
   for (DeformableBodyIndex body(0); body < deformable_model_->num_bodies();
        ++body) {
-    const FemStateBase<T>& fem_state_star =
-        EvalFreeMotionFemStateBase(context, body);
-    const VectorX<T>& v_star = fem_state_star.qdot();
+    const FemState<T>& fem_state_impl_star =
+        EvalFreeMotionFemState(context, body);
+    const VectorX<T>& v_star = fem_state_impl_star.qdot();
     const int body_num_dofs = v_star.size();
     const auto& body_contact_data = deformable_contact_data[body];
     if (body_contact_data.num_contact_points() == 0) {
@@ -503,7 +503,7 @@ void DeformableRigidManager<T>::DoCalcDiscreteValues(
     Eigen::VectorBlock<VectorX<T>> next_discrete_value =
         updates->get_mutable_value(discrete_state_indexes[body]);
     const int body_num_dofs = next_discrete_value.size() / 3;
-    const FemStateBase<T>& next_state = EvalNextFemStateBase(context, body);
+    const FemState<T>& next_state = EvalNextFemState(context, body);
     next_discrete_value.head(body_num_dofs) = next_state.q();
     next_discrete_value.segment(body_num_dofs, body_num_dofs) =
         next_state.qdot();
@@ -512,9 +512,9 @@ void DeformableRigidManager<T>::DoCalcDiscreteValues(
 }
 
 template <typename T>
-void DeformableRigidManager<T>::CalcFemStateBase(
+void DeformableRigidManager<T>::CalcFemState(
     const systems::Context<T>& context, DeformableBodyIndex id,
-    FemStateBase<T>* fem_state) const {
+    FemState<T>* fem_state_impl) const {
   const systems::BasicVector<T>& discrete_state =
       context.get_discrete_state().get_vector(
           deformable_model_->discrete_state_indexes()[id]);
@@ -524,28 +524,28 @@ void DeformableRigidManager<T>::CalcFemStateBase(
   const auto& q = discrete_value.head(num_dofs);
   const auto& qdot = discrete_value.segment(num_dofs, num_dofs);
   const auto& qddot = discrete_value.tail(num_dofs);
-  fem_state->SetQ(q);
-  fem_state->SetQdot(qdot);
-  fem_state->SetQddot(qddot);
+  fem_state_impl->SetQ(q);
+  fem_state_impl->SetQdot(qdot);
+  fem_state_impl->SetQddot(qddot);
 }
 
 template <typename T>
-void DeformableRigidManager<T>::CalcFreeMotionFemStateBase(
+void DeformableRigidManager<T>::CalcFreeMotionFemState(
     const systems::Context<T>& context, DeformableBodyIndex id,
-    FemStateBase<T>* fem_state_star) const {
-  const FemStateBase<T>& fem_state = EvalFemStateBase(context, id);
-  // TODO(xuchenhan-tri): FemState needs a SetFrom() method.
-  fem_state_star->SetQ(fem_state.q());
-  fem_state_star->SetQdot(fem_state.qdot());
-  fem_state_star->SetQddot(fem_state.qddot());
+    FemState<T>* fem_state_impl_star) const {
+  const FemState<T>& fem_state_impl = EvalFemState(context, id);
+  // TODO(xuchenhan-tri): FemStateImpl needs a SetFrom() method.
+  fem_state_impl_star->SetQ(fem_state_impl.q());
+  fem_state_impl_star->SetQdot(fem_state_impl.qdot());
+  fem_state_impl_star->SetQddot(fem_state_impl.qddot());
   /* Obtain the contact-free state for the deformable body. */
-  fem_solvers_[id]->AdvanceOneTimeStep(fem_state, fem_state_star);
+  fem_solvers_[id]->AdvanceOneTimeStep(fem_state_impl, fem_state_impl_star);
 }
 
 template <typename T>
-void DeformableRigidManager<T>::CalcNextFemStateBase(
+void DeformableRigidManager<T>::CalcNextFemState(
     const systems::Context<T>& context, DeformableBodyIndex body_index,
-    FemStateBase<T>* fem_state) const {
+    FemState<T>* fem_state_impl) const {
   DRAKE_DEMAND(deformable_model_ != nullptr);
   /* Calculate the discrete state values for the deformable dofs. */
   const auto& deformable_contact_solver_results =
@@ -562,18 +562,18 @@ void DeformableRigidManager<T>::CalcNextFemStateBase(
   const int body_num_dofs = deformable_model_->fem_model(body_index).num_dofs();
   const VectorX<T>& body_velocity =
       deformable_velocities.segment(dofs_offset, body_num_dofs);
-  const FemStateBase<T>& state0 = EvalFemStateBase(context, body_index);
-  velocity_newmark_->AdvanceOneTimeStep(state0, body_velocity, fem_state);
+  const FemState<T>& state0 = EvalFemState(context, body_index);
+  velocity_newmark_->AdvanceOneTimeStep(state0, body_velocity, fem_state_impl);
 }
 
 template <typename T>
 void DeformableRigidManager<T>::CalcFreeMotionTangentMatrix(
     const systems::Context<T>& context, DeformableBodyIndex index,
     EigenSparseMatrix<T>* tangent_matrix) const {
-  const FemStateBase<T>& free_motion_fem_state =
-      EvalFreeMotionFemStateBase(context, index);
+  const FemState<T>& free_motion_fem_state_impl =
+      EvalFreeMotionFemState(context, index);
   const FemModelBase<T>& fem_model = deformable_model_->fem_model(index);
-  fem_model.CalcTangentMatrix(free_motion_fem_state, &(tangent_matrix->data));
+  fem_model.CalcTangentMatrix(free_motion_fem_state_impl, &(tangent_matrix->data));
 }
 
 template <typename T>
@@ -1181,7 +1181,7 @@ void DeformableRigidManager<T>::CalcVelocities(
   for (DeformableBodyIndex deformable_index(0);
        deformable_index < deformable_model_->num_bodies(); ++deformable_index) {
     const VectorX<T>& deformable_v =
-        EvalFemStateBase(context, deformable_index).qdot();
+        EvalFemState(context, deformable_index).qdot();
     v->segment(dofs_offset, deformable_v.size()) = deformable_v;
     dofs_offset += deformable_v.size();
   }
@@ -1201,7 +1201,7 @@ void DeformableRigidManager<T>::CalcFreeMotionVelocities(
   for (DeformableBodyIndex deformable_index(0);
        deformable_index < deformable_model_->num_bodies(); ++deformable_index) {
     const VectorX<T>& deformable_v_star =
-        EvalFreeMotionFemStateBase(context, deformable_index).qdot();
+        EvalFreeMotionFemState(context, deformable_index).qdot();
     v_star->segment(dofs_offset, deformable_v_star.size()) = deformable_v_star;
     dofs_offset += deformable_v_star.size();
   }

@@ -75,7 +75,7 @@ class StretchTest : public ::testing::Test {
     model_.AddVolumetricElementsFromTetMesh(mesh, constitutive_model, kDensity,
                                             damping_model);
     model_.SetGravityVector({0, 0, 0});
-    const std::unique_ptr<FemStateBase<T>> state = model_.MakeFemStateBase();
+    const std::unique_ptr<FemState<T>> state = model_.MakeFemState();
     model_.SetDirichletBoundaryCondition(MakeStretchBc(state->GetPositions()));
   }
 
@@ -117,8 +117,8 @@ class StretchTest : public ::testing::Test {
 /* Tests that FEM solution matches the analytical solution provided in
  doc/stretch_bar_test.pdf. */
 TEST_F(StretchTest, Stretch) {
-  std::unique_ptr<FemStateBase<T>> state0 = model_.MakeFemStateBase();
-  std::unique_ptr<FemStateBase<T>> state = model_.MakeFemStateBase();
+  std::unique_ptr<FemState<T>> state0 = model_.MakeFemState();
+  std::unique_ptr<FemState<T>> state = model_.MakeFemState();
   const auto initial_positions = Eigen::Map<const Matrix3X<T>>(
       state0->GetPositions().data(), 3, model_.num_nodes());
   VectorX<T> expected_positions(state->num_dofs());

@@ -6,7 +6,7 @@
 #include <Eigen/Sparse>
 
 #include "drake/common/eigen_types.h"
-#include "drake/multibody/fixed_fem/dev/fem_state_base.h"
+#include "drake/multibody/fixed_fem/dev/fem_state.h"
 #include "drake/multibody/fixed_fem/dev/petsc_symmetric_block_sparse_matrix.h"
 
 namespace drake {
@@ -49,7 +49,7 @@ class DirichletBoundaryCondition {
   /* Modifies the given `state` to comply with the Dirichlet boundary
    conditions.
    @pre state != nullptr. */
-  void ApplyBoundaryConditionToState(FemStateBase<T>* state) const;
+  void ApplyBoundaryConditionToState(FemState<T>* state) const;
 
   /* Modifies the given tangent matrix that arises from an FEM model without
    BC into the tangent matrix for the same model subject to `this` BC. More

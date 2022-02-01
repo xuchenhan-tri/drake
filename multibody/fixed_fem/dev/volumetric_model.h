@@ -23,7 +23,7 @@ class VolumetricModel : public FemModel<Element> {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(VolumetricModel);
 
-  using State = FemState<Element>;
+  using State = FemStateImpl<Element>;
   using Traits = typename Element::Traits;
   using T = typename Traits::T;
   using ConstitutiveModel = typename Traits::ConstitutiveModel;
@@ -95,7 +95,7 @@ class VolumetricModel : public FemModel<Element> {
 
   /* Calculates the total elastic potential energy (in joules) in this
    VolumetricModel. */
-  T CalcElasticEnergy(const FemState<Element>& state) const {
+  T CalcElasticEnergy(const FemStateImpl<Element>& state) const {
     T energy(0);
     for (ElementIndex i(0); i < this->num_elements(); ++i) {
       const Element& e = this->element(i);
@@ -131,12 +131,12 @@ class VolumetricModel : public FemModel<Element> {
   const VectorX<T>& reference_positions() const { return reference_positions_; }
 
  private:
-  /* Implements FemModel::DoMakeFemState(). Generalized positions are
+  /* Implements FemModel::DoMakeFemStateImpl(). Generalized positions are
    initialized to be reference positions of the input mesh vertices. Velocities
    and accelerations are initialized to 0. */
-  FemState<Element> DoMakeFemState() const final {
+  FemStateImpl<Element> DoMakeFemStateImpl() const final {
     const int num_dofs = reference_positions_.size();
-    return FemState<Element>(reference_positions_, VectorX<T>::Zero(num_dofs),
+    return FemStateImpl<Element>(reference_positions_, VectorX<T>::Zero(num_dofs),
                              VectorX<T>::Zero(num_dofs));
   }
 

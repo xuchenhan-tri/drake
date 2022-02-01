@@ -8,7 +8,7 @@
 #include "drake/multibody/fem/isoparametric_element.h"
 #include "drake/multibody/fem/quadrature.h"
 #include "drake/multibody/fixed_fem/dev/fem_element.h"
-#include "drake/multibody/fixed_fem/dev/fem_state.h"
+#include "drake/multibody/fixed_fem/dev/fem_state_impl.h"
 
 namespace drake {
 namespace multibody {
@@ -244,7 +244,7 @@ class VolumetricElement
 
   /* Calculates the elastic potential energy (in joules) stored in this element
    at the given `state`. */
-  T CalcElasticEnergy(const FemState<ElementType>& state) const {
+  T CalcElasticEnergy(const FemStateImpl<ElementType>& state) const {
     T elastic_energy = 0;
     const Data& data = state.element_data(*this);
     for (int q = 0; q < num_quadrature_points; ++q) {
@@ -269,7 +269,7 @@ class VolumetricElement
    @pre neg_force != nullptr.
    @warning It is the responsibility of the caller to initialize neg_force to
    zero appropriately. */
-  void AddNegativeElasticForce(const FemState<ElementType>& state,
+  void AddNegativeElasticForce(const FemStateImpl<ElementType>& state,
                                EigenPtr<Vector<T, num_dofs>> neg_force) const {
     DRAKE_ASSERT(neg_force != nullptr);
     auto neg_force_matrix = Eigen::Map<Eigen::Matrix<T, 3, num_nodes>>(
@@ -294,7 +294,7 @@ class VolumetricElement
    @pre neg_force != nullptr.
    @warning It is the responsibility of the caller to initialize neg_force to
    zero appropriately. */
-  void AddNegativeDampingForce(const FemState<ElementType>& state,
+  void AddNegativeDampingForce(const FemStateImpl<ElementType>& state,
                                EigenPtr<Vector<T, num_dofs>> neg_force) const {
     DRAKE_ASSERT(neg_force != nullptr);
     Eigen::Matrix<T, num_dofs, num_dofs> damping_matrix =
@@ -344,7 +344,7 @@ class VolumetricElement
    @param[out] K      The scaled force derivative matrix.
    @pre K != nullptr. */
   void AddScaledElasticForceDerivative(
-      const FemState<ElementType>& state, const T& scale,
+      const FemStateImpl<ElementType>& state, const T& scale,
       EigenPtr<Eigen::Matrix<T, num_dofs, num_dofs>> K) const {
     DRAKE_ASSERT(K != nullptr);
     // clang-format off
@@ -376,7 +376,7 @@ class VolumetricElement
   }
 
   /* Implements FemElement::CalcResidual(). */
-  void DoCalcResidual(const FemState<ElementType>& state,
+  void DoCalcResidual(const FemStateImpl<ElementType>& state,
                       EigenPtr<Vector<T, num_dofs>> residual) const {
     /* residual = Ma-fₑ(x)-fᵥ(x, v)-fₑₓₜ, where M is the mass matrix, fₑ(x) is
      the elastic force, fᵥ(x, v) is the damping force and fₑₓₜ is the external
@@ -394,7 +394,7 @@ class VolumetricElement
    matrix. In other words, the contribution of the term ∂fᵥ(x, v)/∂x is ignored
    as it involves complex second derivatives of the elastic force. */
   void DoAddScaledStiffnessMatrix(
-      const FemState<ElementType>& state, const T& scale,
+      const FemStateImpl<ElementType>& state, const T& scale,
       EigenPtr<Eigen::Matrix<T, num_dofs, num_dofs>> K) const {
     /* Negate `scale` since stiffness matrix is the negative force derivative.
      */
@@ -403,7 +403,7 @@ class VolumetricElement
 
   /* Implements FemElement::DoAddScaledDampingMatrix(). */
   void DoAddScaledDampingMatrix(
-      const FemState<ElementType>& state, const T& scale,
+      const FemStateImpl<ElementType>& state, const T& scale,
       EigenPtr<Eigen::Matrix<T, num_dofs, num_dofs>> D) const {
     /* D = αM + βK, where α is the mass damping coefficient and β is the
      stiffness damping coefficient. */
@@ -415,13 +415,13 @@ class VolumetricElement
 
   /* Implements FemElement::DoAddScaledMassMatrix(). */
   void DoAddScaledMassMatrix(
-      const FemState<ElementType>&, const T& scale,
+      const FemStateImpl<ElementType>&, const T& scale,
       EigenPtr<Eigen::Matrix<T, num_dofs, num_dofs>> M) const {
     *M += scale * mass_matrix_;
   }
 
   /* Implements FemElement::ComputeData(). */
-  Data DoComputeData(const FemState<ElementType>& state) const {
+  Data DoComputeData(const FemStateImpl<ElementType>& state) const {
     Data data;
     data.deformation_gradient_data.UpdateData(CalcDeformationGradient(state));
     this->constitutive_model().CalcElasticEnergyDensity(
@@ -436,7 +436,7 @@ class VolumetricElement
   /* Calculates the deformation gradient at all quadrature points in this
    element. */
   std::array<Matrix3<T>, num_quadrature_points> CalcDeformationGradient(
-      const FemState<ElementType>& state) const {
+      const FemStateImpl<ElementType>& state) const {
     std::array<Matrix3<T>, num_quadrature_points> F;
     const Vector<T, num_dofs> element_x =
         this->ExtractElementDofs(this->node_indices(), state.GetPositions());
@@ -496,7 +496,7 @@ class VolumetricElement
 
   /* Computes the gravity force on each node in the element using the stored
    mass and gravity vector. */
-  void AddScaledGravityForce(const FemState<ElementType>& state, const T& scale,
+  void AddScaledGravityForce(const FemStateImpl<ElementType>& state, const T& scale,
                              EigenPtr<Vector<T, num_dofs>> force) const {
     // TODO(xuchenhan-tri): The calculation here is only required whenever the
     //  gravity vector changes. Consider cahcing the gravity force.

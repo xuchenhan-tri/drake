@@ -43,16 +43,16 @@ class AccelerationNewmarkScheme final : public NewmarkScheme<T> {
     return {beta() * dt() * dt(), gamma() * dt(), 1.0};
   }
 
-  const VectorX<T>& DoGetUnknowns(const FemStateBase<T>& state) const final {
+  const VectorX<T>& DoGetUnknowns(const FemState<T>& state) const final {
     return state.GetAccelerations();
   }
 
   void DoUpdateStateFromChangeInUnknowns(const VectorX<T>& dz,
-                                         FemStateBase<T>* state) const final;
+                                         FemState<T>* state) const final;
 
-  void DoAdvanceOneTimeStep(const FemStateBase<T>& prev_state,
+  void DoAdvanceOneTimeStep(const FemState<T>& prev_state,
                             const VectorX<T>& unknown_variable,
-                            FemStateBase<T>* state) const final;
+                            FemState<T>* state) const final;
 };
 
 }  // namespace internal

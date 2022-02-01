@@ -9,7 +9,7 @@
 #include "drake/common/default_scalars.h"
 #include "drake/common/eigen_types.h"
 #include "drake/multibody/fixed_fem/dev/dirichlet_boundary_condition.h"
-#include "drake/multibody/fixed_fem/dev/fem_state_base.h"
+#include "drake/multibody/fixed_fem/dev/fem_state.h"
 #include "drake/multibody/fixed_fem/dev/petsc_symmetric_block_sparse_matrix.h"
 
 namespace drake {
@@ -73,20 +73,20 @@ class FemModelBase {
   /** Creates a default FEM state for this model, where the positions are set to
    the reference positions and the velocity and the accelerations are set to
    zero. */
-  std::unique_ptr<FemStateBase<T>> MakeFemStateBase() const;
+  std::unique_ptr<FemState<T>> MakeFemState() const;
 
   /** Calculates the residual at the given FEM state.
   @pre residual != nullptr.
   @throw std::exception if the FEM state is incompatible with this model.
-  @note Use MakeFemStateBase() to create an FEM state compatible with this
+  @note Use MakeFemState() to create an FEM state compatible with this
   model. */
-  void CalcResidual(const FemStateBase<T>& state,
+  void CalcResidual(const FemState<T>& state,
                     EigenPtr<VectorX<T>> residual) const;
 
   /** Calculates the tangent matrix at the given FEM state. The tangent matrix
    is given by a weight sum of stiffness matrix, damping matrix, and mass
    matrix.
-   @param[in] state            The FemStateBase at which the tangent matrix is
+   @param[in] state            The FemState at which the tangent matrix is
                                evaluated.
    @param[in] weights          The weight used to combine stiffness, damping,
                                and tangent matrices (in that order) into the
@@ -95,15 +95,15 @@ class FemModelBase {
    @pre tangent_matrix != nullptr.
    @pre The size of `tangent_matrix` is `num_dofs()` * `num_dofs()`.
    @throw std::exception if the FEM state is incompatible with this model.
-   @note Use MakeFemStateBase() to create an FEM state compatible with this
+   @note Use MakeFemState() to create an FEM state compatible with this
    model. */
-  void CalcTangentMatrix(const FemStateBase<T>& state,
+  void CalcTangentMatrix(const FemState<T>& state,
                          const Vector3<T>& weights,
                          Eigen::SparseMatrix<T>* tangent_matrix) const;
 
   /* Alternative signature for calculating tangent matrix that writes to a
    PETSc matrix.
-   @param[in] state            The FemStateBase at which the tangent matrix is
+   @param[in] state            The FemState at which the tangent matrix is
                                evaluated.
    @param[in] weights          The weight used to combine stiffness, damping,
                                and tangent matrices (in that order) into the
@@ -112,10 +112,10 @@ class FemModelBase {
    @pre tangent_matrix != nullptr.
    @pre The size of `tangent_matrix` is `num_dofs()` by `num_dofs()`.
    @throw std::exception if the FEM state is incompatible with this model.
-   @note Use MakeFemStateBase() to create an FEM state compatible with this
+   @note Use MakeFemState() to create an FEM state compatible with this
    model. */
   void CalcTangentMatrix(
-      const FemStateBase<T>& state, const Vector3<T>& weights,
+      const FemState<T>& state, const Vector3<T>& weights,
       internal::PetscSymmetricBlockSparseMatrix* tangent_matrix) const;
 
   /** Creates an Eigen::SparseMatrix that has the sparsity pattern of the
@@ -134,7 +134,7 @@ class FemModelBase {
   /** Applies boundary condition set for this %FemModelBase to the input
    `state`. No-op if no boundary condition is set.
    @pre state != nullptr. */
-  void ApplyBoundaryCondition(FemStateBase<T>* state) const;
+  void ApplyBoundaryCondition(FemState<T>* state) const;
 
   // TODO(xuchenhan-tri): Internal object in public method in non-internal
   //  class.
@@ -158,36 +158,36 @@ class FemModelBase {
   void SetGravityVector(const Vector3<T>& gravity);
 
   /** (Internal use only) Throws std::exception to report a mismatch between
-  the concrete types of `this` FemModelBase and the FemStateBase that was
+  the concrete types of `this` FemModelBase and the FemState that was
   passed to API method `func`. */
   virtual void ThrowIfModelStateIncompatible(
-      const char* func, const FemStateBase<T>& state_base) const = 0;
+      const char* func, const FemState<T>& state_base) const = 0;
 
  protected:
   FemModelBase() = default;
 
   /** Derived classes must override this method to provide an implementation for
-    the NVI MakeFemStateBase(). */
-  virtual std::unique_ptr<FemStateBase<T>> DoMakeFemStateBase() const = 0;
+    the NVI MakeFemState(). */
+  virtual std::unique_ptr<FemState<T>> DoMakeFemState() const = 0;
 
   /** Derived classes must override this method to provide an implementation
    for the NVI CalcResidual(). The input `state` is guaranteed to be
    compatible with `this` FEM model. */
-  virtual void DoCalcResidual(const FemStateBase<T>& state,
+  virtual void DoCalcResidual(const FemState<T>& state,
                               EigenPtr<VectorX<T>> residual) const = 0;
 
   /** Derived classes must override this method to provide an implementation for
    the NVI CalcTangentMatrix(). The input `state` is guaranteed to be compatible
    with `this` FEM model. */
   virtual void DoCalcTangentMatrix(
-      const FemStateBase<T>& state, const Vector3<T>& weights,
+      const FemState<T>& state, const Vector3<T>& weights,
       Eigen::SparseMatrix<T>* tangent_matrix) const = 0;
 
   /** Derived classes must override this method to provide an implementation for
    the NVI CalcTangentMatrix(). The input `state` is guaranteed to be compatible
    with `this` FEM model. */
   virtual void DoCalcTangentMatrix(
-      const FemStateBase<T>& state, const Vector3<T>& weights,
+      const FemState<T>& state, const Vector3<T>& weights,
       internal::PetscSymmetricBlockSparseMatrix* tangent_matrix) const = 0;
 
   /** Derived classes must override this method to provide an implementation for

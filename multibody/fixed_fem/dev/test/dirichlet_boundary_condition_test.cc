@@ -20,7 +20,7 @@ using DenseMatrix = Eigen::Matrix<double, kNumDofs, kNumDofs>;
 using Eigen::VectorXd;
 using SparseMatrix = Eigen::SparseMatrix<double>;
 using Element = DummyElement;
-using State = FemState<Element>;
+using State = FemStateImpl<Element>;
 using std::make_unique;
 using std::unique_ptr;
 using std::vector;
@@ -62,7 +62,7 @@ class DirichletBoundaryConditionTest : public ::testing::Test {
     return A;
   }
 
-  /* Makes an arbitrary compatible FemState with appropriate size. */
+  /* Makes an arbitrary compatible FemStateImpl with appropriate size. */
   static State MakeState() {
     State state{Vector<double, kNumDofs>(0.1, 0.2, 0.3, 0.4),
                 Vector<double, kNumDofs>(0.5, 0.6, 0.7, 0.8),

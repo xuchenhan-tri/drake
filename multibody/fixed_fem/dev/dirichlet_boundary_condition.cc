@@ -13,7 +13,7 @@ void DirichletBoundaryCondition<T>::AddBoundaryCondition(
 
 template <class T>
 void DirichletBoundaryCondition<T>::ApplyBoundaryConditionToState(
-    FemStateBase<T>* state) const {
+    FemState<T>* state) const {
   if (index_to_boundary_state_.empty()) return;
   DRAKE_DEMAND(state != nullptr);
   VerifyIndexes(state->num_dofs());

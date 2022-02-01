@@ -196,47 +196,47 @@ class DeformableRigidManager final
   void DoCalcDiscreteValues(const systems::Context<T>& context,
                             systems::DiscreteValues<T>* updates) const final;
 
-  /* Eval version of CalcFemStateBase(). */
-  const FemStateBase<T>& EvalFemStateBase(const systems::Context<T>& context,
+  /* Eval version of CalcFemState(). */
+  const FemState<T>& EvalFemState(const systems::Context<T>& context,
                                           DeformableBodyIndex id) const {
     return this->plant()
-        .get_cache_entry(fem_state_cache_indexes_[id])
-        .template Eval<FemStateBase<T>>(context);
+        .get_cache_entry(fem_state_impl_cache_indexes_[id])
+        .template Eval<FemState<T>>(context);
   }
 
   /* Calculates the FEM state of the deformable body with index `id`. */
-  void CalcFemStateBase(const systems::Context<T>& context,
+  void CalcFemState(const systems::Context<T>& context,
                         DeformableBodyIndex id,
-                        FemStateBase<T>* fem_state) const;
+                        FemState<T>* fem_state_impl) const;
 
-  /* Eval version of CalcFreeMotionFemStateBase(). */
-  const FemStateBase<T>& EvalFreeMotionFemStateBase(
+  /* Eval version of CalcFreeMotionFemState(). */
+  const FemState<T>& EvalFreeMotionFemState(
       const systems::Context<T>& context, DeformableBodyIndex id) const {
     return this->plant()
         .get_cache_entry(free_motion_cache_indexes_[id])
-        .template Eval<FemStateBase<T>>(context);
+        .template Eval<FemState<T>>(context);
   }
 
   /* Calculates the free motion FEM state of the deformable body with index
    `id`. */
-  void CalcFreeMotionFemStateBase(const systems::Context<T>& context,
+  void CalcFreeMotionFemState(const systems::Context<T>& context,
                                   DeformableBodyIndex id,
-                                  FemStateBase<T>* fem_state_star) const;
+                                  FemState<T>* fem_state_impl_star) const;
 
-  /* Eval version of CalcNextFemStateBase(). */
-  const FemStateBase<T>& EvalNextFemStateBase(
+  /* Eval version of CalcNextFemState(). */
+  const FemState<T>& EvalNextFemState(
       const systems::Context<T>& context,
       DeformableBodyIndex body_index) const {
     return this->plant()
-        .get_cache_entry(next_fem_state_cache_indexes_[body_index])
-        .template Eval<FemStateBase<T>>(context);
+        .get_cache_entry(next_fem_state_impl_cache_indexes_[body_index])
+        .template Eval<FemState<T>>(context);
   }
 
   /* Calculates the FEM state at the next time step for the deformable body with
    the given `body_index`. */
-  void CalcNextFemStateBase(const systems::Context<T>& context,
+  void CalcNextFemState(const systems::Context<T>& context,
                             DeformableBodyIndex body_index,
-                            FemStateBase<T>* fem_state) const;
+                            FemState<T>* fem_state_impl) const;
 
   /* Eval version of CalcFreeMotionTangentMatrix(). */
   const Eigen::SparseMatrix<T>& EvalFreeMotionTangentMatrix(
@@ -505,9 +505,9 @@ class DeformableRigidManager final
   /* The deformable models being solved by `this` manager. */
   const DeformableModel<T>* deformable_model_{nullptr};
   /* Cached FEM state quantities. */
-  std::vector<systems::CacheIndex> fem_state_cache_indexes_;
+  std::vector<systems::CacheIndex> fem_state_impl_cache_indexes_;
   std::vector<systems::CacheIndex> free_motion_cache_indexes_;
-  std::vector<systems::CacheIndex> next_fem_state_cache_indexes_;
+  std::vector<systems::CacheIndex> next_fem_state_impl_cache_indexes_;
   std::vector<systems::CacheIndex> tangent_matrix_cache_indexes_;
   std::vector<systems::CacheIndex>
       tangent_matrix_schur_complement_cache_indexes_;

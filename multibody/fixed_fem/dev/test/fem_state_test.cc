@@ -25,7 +25,7 @@ const DampingModel<T> kDampingModel(0.01, 0.02);
 
 using Eigen::VectorXd;
 
-class FemStateTest : public ::testing::Test {
+class FemStateImplTest : public ::testing::Test {
  protected:
   void SetUp() {
     for (ElementIndex element_id : kElementIndices) {
@@ -63,22 +63,22 @@ class FemStateTest : public ::testing::Test {
     }
   }
 
-  /* FemState under test. */
-  FemState<DummyElement> state_{q(), v(), a()};
+  /* FemStateImpl under test. */
+  FemStateImpl<DummyElement> state_{q(), v(), a()};
   std::vector<DummyElement> elements_;
 };
 
 namespace {
 
 /* Verify setters and getters are working properly. */
-TEST_F(FemStateTest, GetStates) {
+TEST_F(FemStateImplTest, GetStates) {
   EXPECT_EQ(state_.num_dofs(), kNumDofs);
   EXPECT_EQ(state_.GetPositions(), q());
   EXPECT_EQ(state_.GetVelocities(), v());
   EXPECT_EQ(state_.GetAccelerations(), a());
 }
 
-TEST_F(FemStateTest, SetStates) {
+TEST_F(FemStateImplTest, SetStates) {
   state_.SetPositions(-1.23 * q());
   state_.SetVelocities(3.14 * v());
   state_.SetAccelerations(-1.29 * a());
@@ -94,7 +94,7 @@ TEST_F(FemStateTest, SetStates) {
 }
 
 /* Test that element_data() retrieves the updated data. */
-TEST_F(FemStateTest, ElementData) {
+TEST_F(FemStateImplTest, ElementData) {
   EXPECT_EQ(state_.element_cache_size(), kNumElements);
   for (int i = 0; i < kNumElements; ++i) {
     EXPECT_EQ(state_.GetPositions()(kNumDofs - 1) +
@@ -104,7 +104,7 @@ TEST_F(FemStateTest, ElementData) {
   }
 }
 
-TEST_F(FemStateTest, MakeElementData) {
+TEST_F(FemStateImplTest, MakeElementData) {
   std::vector<DummyElement> invalid_ordered_elements;
   invalid_ordered_elements.emplace_back(ElementIndex(1), kNodeIndices,
                                         kConstitutiveModel, kDampingModel);
@@ -116,7 +116,7 @@ TEST_F(FemStateTest, MakeElementData) {
 
 /* Tests that element data cache is invalidated when the state changes and that
  the request for the cached data triggers appropriate recalculations. */
-TEST_F(FemStateTest, ElementCache) {
+TEST_F(FemStateImplTest, ElementCache) {
   /* Verify that cache entries are initially invalid and becomes valid after the
    request for data triggers computation. */
   VerifyCacheEntries();

@@ -124,10 +124,10 @@ class DeformableRigidContactSolverTest : public ::testing::Test {
     diagram_ = builder.Build();
   }
 
-  /* Calls DeformableRigidManager::EvalFemStateBase(). */
-  const FemStateBase<double>& EvalFemStateBase(
+  /* Calls DeformableRigidManager::EvalFemState(). */
+  const FemState<double>& EvalFemState(
       const Context<double>& context, DeformableBodyIndex index) const {
-    return deformable_rigid_manager_->EvalFemStateBase(context, index);
+    return deformable_rigid_manager_->EvalFemState(context, index);
   }
 
   /* Calls DeformableRigidManager::EvalDeformableContactSolverResults(). */
@@ -156,8 +156,8 @@ TEST_F(DeformableRigidContactSolverTest, SteadyState) {
   simulator.AdvanceTo(1.0);
 
   /* Verify the system has reached steady state. */
-  const FemStateBase<double>& fem_state =
-      EvalFemStateBase(plant_context, deformable_index_);
+  const FemState<double>& fem_state =
+      EvalFemState(plant_context, deformable_index_);
   constexpr double kSteadyStateThreshold = 2e-3;  // unit: m/s.
   const VectorXd& v = fem_state.qdot();
   EXPECT_TRUE(

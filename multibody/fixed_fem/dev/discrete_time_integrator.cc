@@ -14,13 +14,13 @@ Vector3<T> DiscreteTimeIntegrator<T>::weights() const {
 
 template <typename T>
 const VectorX<T>& DiscreteTimeIntegrator<T>::GetUnknowns(
-    const FemStateBase<T>& state) const {
+    const FemState<T>& state) const {
   return DoGetUnknowns(state);
 }
 
 template <typename T>
 void DiscreteTimeIntegrator<T>::UpdateStateFromChangeInUnknowns(
-    const VectorX<T>& dz, FemStateBase<T>* state) const {
+    const VectorX<T>& dz, FemState<T>* state) const {
   DRAKE_DEMAND(state != nullptr);
   DRAKE_DEMAND(dz.size() == state->num_dofs());
   DoUpdateStateFromChangeInUnknowns(dz, state);
@@ -28,8 +28,8 @@ void DiscreteTimeIntegrator<T>::UpdateStateFromChangeInUnknowns(
 
 template <typename T>
 void DiscreteTimeIntegrator<T>::AdvanceOneTimeStep(
-    const FemStateBase<T>& prev_state, const VectorX<T>& unknown_variable,
-    FemStateBase<T>* next_state) const {
+    const FemState<T>& prev_state, const VectorX<T>& unknown_variable,
+    FemState<T>* next_state) const {
   DRAKE_DEMAND(next_state != nullptr);
   DRAKE_DEMAND(prev_state.num_dofs() == next_state->num_dofs());
   DRAKE_DEMAND(prev_state.num_dofs() == unknown_variable.size());

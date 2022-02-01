@@ -5,7 +5,7 @@
 #include "drake/multibody/fixed_fem/dev/damping_model.h"
 #include "drake/multibody/fixed_fem/dev/element_cache_entry.h"
 #include "drake/multibody/fixed_fem/dev/fem_element.h"
-#include "drake/multibody/fixed_fem/dev/fem_state.h"
+#include "drake/multibody/fixed_fem/dev/fem_state_impl.h"
 #include "drake/multibody/fixed_fem/dev/linear_constitutive_model.h"
 
 namespace drake {
@@ -91,7 +91,7 @@ class DummyElement final : public FemElement<DummyElement, DummyElementTraits> {
   /* Implements FemElement::ComputeData(). Returns a dummy data if `state` is
     empty. Otherwise return the sum of the last entries in each state. */
   typename Traits::Data DoComputeData(
-      const FemState<DummyElement>& state) const {
+      const FemStateImpl<DummyElement>& state) const {
     const int state_dofs = state.num_dofs();
     if (state_dofs == 0) {
       return dummy_data();
@@ -106,7 +106,7 @@ class DummyElement final : public FemElement<DummyElement, DummyElementTraits> {
   /* Implements FemElement::CalcResidual().
    The residual is equal to a dummy nonzero value if the states are all zero.
    Otherwise the residual is zero.*/
-  void DoCalcResidual(const FemState<DummyElement>& state,
+  void DoCalcResidual(const FemStateImpl<DummyElement>& state,
                       EigenPtr<Vector<T, kNumDofs>> residual) const {
     if (state.GetPositions().norm() == 0.0 &&
         state.GetVelocities().norm() == 0.0 &&
@@ -119,21 +119,21 @@ class DummyElement final : public FemElement<DummyElement, DummyElementTraits> {
 
   /* Implements FemElement::AddScaledStiffnessMatrix(). */
   void DoAddScaledStiffnessMatrix(
-      const FemState<DummyElement>&, const T& scale,
+      const FemStateImpl<DummyElement>&, const T& scale,
       EigenPtr<Eigen::Matrix<T, kNumDofs, kNumDofs>> K) const {
     *K += scale * dummy_stiffness_matrix();
   }
 
   /* Implements FemElement::AddScaledDampingMatrix(). */
   void DoAddScaledDampingMatrix(
-      const FemState<DummyElement>&, const T& scale,
+      const FemStateImpl<DummyElement>&, const T& scale,
       EigenPtr<Eigen::Matrix<T, kNumDofs, kNumDofs>> D) const {
     *D += scale * dummy_damping_matrix();
   }
 
   /* Implements FemElement::AddScaledMassMatrix(). */
   void DoAddScaledMassMatrix(
-      const FemState<DummyElement>&, const T& scale,
+      const FemStateImpl<DummyElement>&, const T& scale,
       EigenPtr<Eigen::Matrix<T, kNumDofs, kNumDofs>> M) const {
     *M += scale * dummy_mass_matrix();
   }

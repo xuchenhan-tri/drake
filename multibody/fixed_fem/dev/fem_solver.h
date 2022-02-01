@@ -7,7 +7,7 @@
 #include "drake/common/eigen_types.h"
 #include "drake/multibody/fixed_fem/dev/discrete_time_integrator.h"
 #include "drake/multibody/fixed_fem/dev/fem_model_base.h"
-#include "drake/multibody/fixed_fem/dev/fem_state_base.h"
+#include "drake/multibody/fixed_fem/dev/fem_state.h"
 
 namespace drake {
 namespace multibody {
@@ -53,8 +53,8 @@ class FemSolver {
    incompatible with the FEM model solved by this solver.
    @throw std::exception if the solver doesn't converge after `kMaxIterations`
    Newton-Raphson iterations. */
-  int AdvanceOneTimeStep(const FemStateBase<T>& prev_state,
-                         FemStateBase<T>* next_state) const;
+  int AdvanceOneTimeStep(const FemState<T>& prev_state,
+                         FemState<T>* next_state) const;
 
   /* Returns the FEM model that this solver solves for. */
   const FemModelBase<T>& model() const { return *model_; }
@@ -88,7 +88,7 @@ class FemSolver {
    non-null and is guaranteed to be compatible with the FEM model.
    @param[in, out] state  As input, `state` provides an initial guess of
    the solution. As output, `state` reports the equilibrium state. */
-  int SolveWithInitialGuess(FemStateBase<T>* state) const;
+  int SolveWithInitialGuess(FemState<T>* state) const;
 
   /* Reset the scratch data in this class (tangent matrix, residual, and dz) if
    necessary. */

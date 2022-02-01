@@ -15,7 +15,7 @@
 #include "drake/multibody/fixed_fem/dev/fem_element.h"
 #include "drake/multibody/fixed_fem/dev/fem_indexes.h"
 #include "drake/multibody/fixed_fem/dev/fem_model_base.h"
-#include "drake/multibody/fixed_fem/dev/fem_state.h"
+#include "drake/multibody/fixed_fem/dev/fem_state_impl.h"
 
 namespace drake {
 namespace multibody {
@@ -54,10 +54,10 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
 
   virtual ~FemModel() = default;
 
-  /* Derived classes must override this method to create a default FemState for
+  /* Derived classes must override this method to create a default FemStateImpl for
    this model, which initializes the positions, velocities, and accelerations of
    all nodes in the model. */
-  virtual FemState<Element> DoMakeFemState() const = 0;
+  virtual FemStateImpl<Element> DoMakeFemStateImpl() const = 0;
 
   const Element& element(ElementIndex i) const {
     DRAKE_ASSERT(i.is_valid());
@@ -86,16 +86,16 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
   }
 
  private:
-  /* Implements FemModelBase::MakeFemStateBase(). */
-  std::unique_ptr<FemStateBase<T>> DoMakeFemStateBase() const final {
-    auto state = std::make_unique<FemState<Element>>(DoMakeFemState());
+  /* Implements FemModelBase::MakeFemState(). */
+  std::unique_ptr<FemState<T>> DoMakeFemState() const final {
+    auto state = std::make_unique<FemStateImpl<Element>>(DoMakeFemStateImpl());
     /* Initialize per-element state-dependent data. */
     state->MakeElementData(elements_);
     return state;
   }
 
   /* Helper for DoCalcResidual(). */
-  void CalcResidualForConcreteState(const FemState<Element>& state,
+  void CalcResidualForConcreteState(const FemStateImpl<Element>& state,
                                     EigenPtr<VectorX<T>> residual) const {
     DRAKE_DEMAND(residual != nullptr && residual->size() == this->num_dofs());
     DRAKE_DEMAND(state.element_cache_size() == num_elements());
@@ -123,7 +123,7 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
 
   /* Helper for DoCalcTangentMatrix(). */
   void CalcTangentMatrixForConcreteState(
-      const FemState<Element>& state, const Vector3<T>& weights,
+      const FemStateImpl<Element>& state, const Vector3<T>& weights,
       Eigen::SparseMatrix<T>* tangent_matrix) const {
     DRAKE_DEMAND(tangent_matrix != nullptr &&
                  tangent_matrix->rows() == this->num_dofs() &&
@@ -165,7 +165,7 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
 
   /* Helper for DoCalcTangentMatrix(). */
   void CalcTangentMatrixForConcreteState(
-      const FemState<Element>& state, const Vector3<T>& weights,
+      const FemStateImpl<Element>& state, const Vector3<T>& weights,
       PetscSymmetricBlockSparseMatrix* tangent_matrix) const {
     if constexpr (!std::is_same_v<typename Element::T, double>) {
       throw std::logic_error(
@@ -286,29 +286,29 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
     return tangent_matrix;
   }
 
-  /* Implements FemModelBase::CalcResidual() by casting the FemStateBase
+  /* Implements FemModelBase::CalcResidual() by casting the FemState
    to its concrete type. */
-  void DoCalcResidual(const FemStateBase<T>& state,
+  void DoCalcResidual(const FemState<T>& state,
                       EigenPtr<VectorX<T>> residual) const final {
-    const FemState<Element>& concrete_state = cast_to_concrete_state(state);
+    const FemStateImpl<Element>& concrete_state = cast_to_concrete_state(state);
     CalcResidualForConcreteState(concrete_state, residual);
   }
 
   /* Implements FemModelBase::CalcTangentMatrix() by casting the
-   FemStateBase to its concrete type. */
-  void DoCalcTangentMatrix(const FemStateBase<T>& state,
+   FemState to its concrete type. */
+  void DoCalcTangentMatrix(const FemState<T>& state,
                            const Vector3<T>& weights,
                            Eigen::SparseMatrix<T>* tangent_matrix) const final {
-    const FemState<Element>& concrete_state = cast_to_concrete_state(state);
+    const FemStateImpl<Element>& concrete_state = cast_to_concrete_state(state);
     CalcTangentMatrixForConcreteState(concrete_state, weights, tangent_matrix);
   }
 
   /* Implements FemModelBase::CalcTangentMatrix() by casting the
-   FemStateBase to its concrete type. */
+   FemState to its concrete type. */
   void DoCalcTangentMatrix(
-      const FemStateBase<T>& state, const Vector3<T>& weights,
+      const FemState<T>& state, const Vector3<T>& weights,
       PetscSymmetricBlockSparseMatrix* tangent_matrix) const final {
-    const FemState<Element>& concrete_state = cast_to_concrete_state(state);
+    const FemStateImpl<Element>& concrete_state = cast_to_concrete_state(state);
     CalcTangentMatrixForConcreteState(concrete_state, weights, tangent_matrix);
   }
 
@@ -320,30 +320,30 @@ class FemModel : public FemModelBase<typename Element::Traits::T> {
     }
   }
 
-  /* Statically cast the given FemStateBase to the FemState compatible
+  /* Statically cast the given FemState to the FemStateImpl compatible
    with `this` FemModel.
    @pre The given `abstract_state` is compatible with the `this` FemModel. */
-  const FemState<Element>& cast_to_concrete_state(
-      const FemStateBase<T>& abstract_state) const {
+  const FemStateImpl<Element>& cast_to_concrete_state(
+      const FemState<T>& abstract_state) const {
     const auto& concrete_state =
-        static_cast<const FemState<Element>&>(abstract_state);
+        static_cast<const FemStateImpl<Element>&>(abstract_state);
     return concrete_state;
   }
 
   /* Implements FemModelBase::ThrowIfModelStateIncompatible(). */
   void ThrowIfModelStateIncompatible(
-      const char* func, const FemStateBase<T>& abstract_state) const final {
+      const char* func, const FemState<T>& abstract_state) const final {
     const auto* concrete_state_ptr =
-        dynamic_cast<const FemState<Element>*>(&abstract_state);
+        dynamic_cast<const FemStateImpl<Element>*>(&abstract_state);
     if (concrete_state_ptr == nullptr) {
       throw std::logic_error(
           std::string(func) +
-          "(): The type of the FemState is incompatible with the type of the "
+          "(): The type of the FemStateImpl is incompatible with the type of the "
           "FemModel.");
     }
     if (concrete_state_ptr->num_dofs() != this->num_dofs()) {
       throw std::logic_error(
-          fmt::format("{}(): The size of the FemState ({}) is incompatible "
+          fmt::format("{}(): The size of the FemStateImpl ({}) is incompatible "
                       "with the size of the FemModel ({}).",
                       func, concrete_state_ptr->num_dofs(), this->num_dofs()));
     }
