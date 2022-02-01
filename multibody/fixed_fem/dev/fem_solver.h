@@ -26,6 +26,10 @@ class FemSolver {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(FemSolver);
 
+  /* Max number of Newton-Raphson iterations the solver takes before it gives
+   up. */
+  static constexpr int kMaxIterations = 100;
+
   /* Constructs a new FemSolver that solves the given `model` with the
    `integrator` provided to advance time.
    @note The `model` and `integrator` pointers persist in `this` FemSolver and
@@ -41,12 +45,16 @@ class FemSolver {
                            time step.
    @param[out] next_state  The state of the FEM model evaluated at the next time
                            step.
+   @returns the number of Newton-Raphson iterations the solver takes to
+   converge.
    @pre next_state != nullptr.
    @pre prev_state.num_dofs() == next_state->dofs().
    @throw std::exception if the input `prev_state` or `next_state` is
-   incompatible with the FEM model solved by this solver. */
-  void AdvanceOneTimeStep(const FemStateBase<T>& prev_state,
-                          FemStateBase<T>* next_state) const;
+   incompatible with the FEM model solved by this solver.
+   @throw std::exception if the solver doesn't converge after `kMaxIterations`
+   Newton-Raphson iterations. */
+  int AdvanceOneTimeStep(const FemStateBase<T>& prev_state,
+                         FemStateBase<T>* next_state) const;
 
   /* Returns the FEM model that this solver solves for. */
   const FemModelBase<T>& model() const { return *model_; }
@@ -55,32 +63,23 @@ class FemSolver {
   const DiscreteTimeIntegrator<T>& integrator() const { return *integrator_; }
 
   /* Sets the relative tolerance, unitless. The Newton-Raphson iterations are
-   considered as converged if ‖dz‖ < `tolerance`⋅‖z‖ where z is the unknown
-   variable _or_ if the absolute tolerance criterion is satisfied (See
-   set_absolute_tolerance()). The default value is 1e-6. */
+   considered as converged if the norm of the residual is smaller than the
+   relative tolerance times the norm of the residual at the start of the
+   Newton-Raphson iterations. The default value is 1e-4. */
   void set_relative_tolerance(const T& tolerance) {
     relative_tolerance_ = tolerance;
   }
 
   const T& relative_tolerance() const { return relative_tolerance_; }
 
-  /* Sets the absolute tolerance which has the same unit as the unknown
-   variable z. The Newton-Raphson iterations are considered as converged if the
-   change in the state is smaller than the absolute tolerance _or_ if the
-   relative tolerance criterion is satisfied (See set_relative_tolerance()). The
-   default value is 1e-3. */
+  /* Sets the absolute tolerance with unit N. The Newton-Raphson iterations are
+   considered as converged if the norm of the residual is smaller than the
+   absolute tolerance. The default value is 1e-6. */
   void set_absolute_tolerance(const T& tolerance) {
     absolute_tolerance_ = tolerance;
   }
 
   const T& absolute_tolerance() const { return absolute_tolerance_; }
-
-  /* Sets the relative tolerance for the linear solver used in the
-   Newton-Raphson iterations if the linear solver is iterative. The default
-   (unitless) tolerance is 1e-4. No-op if the linear solver is direct. */
-  void set_linear_solve_tolerance(const T& tolerance);
-
-  const T& linear_solve_tolerance() const { return linear_solve_tolerance_; }
 
  private:
   /* Uses a Newton-Raphson solver to solve for the equilibrium state that
@@ -94,6 +93,11 @@ class FemSolver {
   /* Reset the scratch data in this class (tangent matrix, residual, and dz) if
    necessary. */
   void ResetScratchDataIfNecessary() const;
+
+  /* Updates the relative tolerance for the linear solver used in the
+   Newton-Raphson iterations based on the residual norm if the linear solver is
+   iterative. No-op if the linear solver is direct. */
+  void set_linear_solve_tolerance(const T& residual_norm) const;
 
   /* The FEM model being solved by `this` solver. */
   const FemModelBase<T>* model_;
@@ -113,18 +117,9 @@ class FemSolver {
   /* A scratch vector to store the solution to A * dz = -b, where A is the
    tangent matrix. */
   mutable VectorX<T> dz_;
-  /* The relative tolerance for determining the convergence of the Newton
-   solver, unitless. */
-  T relative_tolerance_{1e-6};
-  /* The absolute tolerance for determining the convergence of the Newton
-   solver. It has the same unit as the unknown variable z. */
-  T absolute_tolerance_{1e-3};
-  /* The relative tolerance when solving for A * dz = -b, where A is the tangent
-   matrix. */
-  T linear_solve_tolerance_{1e-4};
-  /* Max number of Newton-Raphson iterations the solver takes before it gives
-   up. */
-  static constexpr int kMaxIterations_ = 100;
+
+  T relative_tolerance_{1e-4};
+  T absolute_tolerance_{1e-6};
 };
 
 }  // namespace internal

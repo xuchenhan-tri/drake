@@ -26,12 +26,13 @@ class DummyModel final : public FemModel<DummyElement> {
   /* Creates a dummy FEM model with a single element. */
   DummyModel() {
     const ElementIndex element_index(0);
-    const std::array node_indices = {NodeIndex(0), NodeIndex(1)};
+    const std::array node_indices = {NodeIndex(0), NodeIndex(1), NodeIndex(2),
+                                     NodeIndex(3)};
     const ConstitutiveModel constitutive_model(1e7, 0.49);
     const DampingModel<T> damping_model(kMassDamping, kStiffnessDamping);
     this->AddElement(element_index, node_indices, constitutive_model,
                      damping_model);
-    increment_num_nodes(2);
+    increment_num_nodes(4);
   }
 
  private:

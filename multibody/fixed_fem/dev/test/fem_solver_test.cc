@@ -14,6 +14,7 @@ namespace internal {
 namespace test {
 namespace {
 
+constexpr double kEps = 4.0 * std::numeric_limits<double>::epsilon();
 /* Parameters for the Newmark-beta integration scheme. */
 constexpr double kDt = 0.01;
 constexpr double kGamma = 0.5;
@@ -28,25 +29,31 @@ class FemSolverTest : public ::testing::Test {
 
 TEST_F(FemSolverTest, Tolerancse) {
   /* Default values. */
-  EXPECT_EQ(solver_.relative_tolerance(), 1e-6);
-  EXPECT_EQ(solver_.absolute_tolerance(), 1e-3);
-  EXPECT_EQ(solver_.linear_solve_tolerance(), 1e-4);
+  EXPECT_EQ(solver_.relative_tolerance(), 1e-4);
+  EXPECT_EQ(solver_.absolute_tolerance(), 1e-6);
   /* Test Setters. */
-  constexpr double kEps = 1e-8;
-  solver_.set_relative_tolerance(kEps);
-  solver_.set_absolute_tolerance(kEps);
-  solver_.set_linear_solve_tolerance(kEps);
-  EXPECT_EQ(solver_.relative_tolerance(), kEps);
-  EXPECT_EQ(solver_.absolute_tolerance(), kEps);
-  EXPECT_EQ(solver_.linear_solve_tolerance(), kEps);
+  constexpr double kTol = 1e-8;
+  solver_.set_relative_tolerance(kTol);
+  solver_.set_absolute_tolerance(kTol);
+  EXPECT_EQ(solver_.relative_tolerance(), kTol);
+  EXPECT_EQ(solver_.absolute_tolerance(), kTol);
 }
 
+/* Tests that the behavior of FemSolver::AdvanceOneTimeStep agrees with analytic
+ results. The dummy model has a single dummy element which has a nonzero
+ residual at zero state and zero residual everywhere else. The dummy element
+ also has constant stiffness, damping, and mass matrix (aka they are
+ state-independent). As a result, we expect AdvanceOneTimeStep to converge after
+ exactly one Newton iteration, and the unknown variable z (acceleration in this
+ case) should satisfy A*z = -b, where A is the constant tangent matrix and b is
+ the nonzero residual evaluated at the zero state. */
 TEST_F(FemSolverTest, AdvanceOneTimeStep) {
   std::unique_ptr<FemStateBase<double>> state0 = model_.MakeFemStateBase();
   std::unique_ptr<FemStateBase<double>> state = model_.MakeFemStateBase();
   std::unique_ptr<FemStateBase<double>> expected_state =
       model_.MakeFemStateBase();
-  solver_.AdvanceOneTimeStep(*state0, state.get());
+  const int num_iterations = solver_.AdvanceOneTimeStep(*state0, state.get());
+  EXPECT_EQ(num_iterations, 1);
 
   /* The expected result from AdvanceOneTimeStep(). */
   Eigen::SparseMatrix<double> tangent_matrix =
@@ -58,8 +65,12 @@ TEST_F(FemSolverTest, AdvanceOneTimeStep) {
   cg.compute(tangent_matrix);
   const VectorX<double> dz = cg.solve(-residual);
   integrator_.UpdateStateFromChangeInUnknowns(dz, expected_state.get());
-  EXPECT_TRUE(
-      CompareMatrices(expected_state->GetPositions(), state->GetPositions()));
+  EXPECT_TRUE(CompareMatrices(expected_state->GetPositions(),
+                              state->GetPositions(), kEps));
+  EXPECT_TRUE(CompareMatrices(expected_state->GetAccelerations(),
+                              state->GetAccelerations(), kEps));
+  EXPECT_TRUE(CompareMatrices(expected_state->GetVelocities(),
+                              state->GetVelocities(), kEps));
 }
 
 }  // namespace

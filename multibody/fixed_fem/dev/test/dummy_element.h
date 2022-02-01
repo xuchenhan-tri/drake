@@ -22,10 +22,10 @@ struct DummyElementTraits {
     double value{0};
   };
   static constexpr int num_quadrature_points = 1;
-  static constexpr int num_nodes = 2;
-  static constexpr int num_natural_dimension = 3;
-  static constexpr int kSpatialDimension = 4;
-  static constexpr int num_dofs = 6;
+  static constexpr int num_natural_dimension = 2;
+  static constexpr int kSpatialDimension = 3;
+  static constexpr int num_nodes = 4;
+  static constexpr int num_dofs = 12;
   using ConstitutiveModel = LinearConstitutiveModel<T, num_quadrature_points>;
 };
 
