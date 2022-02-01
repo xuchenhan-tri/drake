@@ -793,20 +793,6 @@ drake_cc_googletest(
 )
 
 drake_cc_googletest(
-    name = "volumetric_model_test",
-    deps = [
-        ":volumetric_element",
-        ":volumetric_model",
-        ":linear_constitutive_model",
-        "//common/test_utilities:eigen_matrix_compare",
-        "//geometry/proximity:make_box_mesh",
-        "//math:gradient",
-        "//multibody/fem:linear_simplex_element",
-        "//multibody/fem:simplex_gaussian_quadrature",
-    ],
-)
-
-drake_cc_googletest(
     name = "eigen_conjugate_gradient_solver_test",
     deps = [
         ":eigen_conjugate_gradient_solver",
@@ -980,6 +966,20 @@ drake_cc_googletest(
         ":dummy_element",
         ":velocity_newmark_scheme",
         "//common/test_utilities:eigen_matrix_compare",
+    ],
+)
+
+drake_cc_googletest(
+    name = "volumetric_model_test",
+    deps = [
+        ":volumetric_element",
+        ":volumetric_model",
+        ":linear_constitutive_model",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//geometry/proximity:make_box_mesh",
+        "//math:gradient",
+        "//multibody/fem:linear_simplex_element",
+        "//multibody/fem:simplex_gaussian_quadrature",
     ],
 )
 

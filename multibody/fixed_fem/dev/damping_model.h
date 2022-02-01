@@ -5,6 +5,7 @@
 namespace drake {
 namespace multibody {
 namespace fem {
+
 /** A simple viscous Rayleigh damping model. The resulting damping matrix is a
 nonnegative linear combination of mass and stiffness matrices. Namely, D = αM +
 βK where α and β are nonnegative. The damping ratio ξ for a given frequency of
@@ -14,7 +15,7 @@ mode while the damping ratio contributed by the mass term αM is inversely
 proportional to the frequency. Furthermore, one should note that the mass
 proportional damping damps rigid body motions and should therefore be kept small
 in general.
-@tparam_nonsymbolic_scalar T */
+@tparam_nonsymbolic_scalar. */
 template <typename T>
 class DampingModel {
  public:
@@ -38,6 +39,7 @@ class DampingModel {
   T mass_coeff_;
   T stiffness_coeff_;
 };
+
 }  // namespace fem
 }  // namespace multibody
 }  // namespace drake

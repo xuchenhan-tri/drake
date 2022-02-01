@@ -18,8 +18,7 @@ class FemStateBase {
 
   virtual ~FemStateBase() = default;
 
-  /** @name State getters. Throw an exception if the state doesn't exist.
-   @{ */
+  /** @name State getters. @{ */
   const VectorX<T>& GetPositions() const { return q_; }
 
   const VectorX<T>& GetVelocities() const { return v_; }
