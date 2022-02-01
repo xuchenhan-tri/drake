@@ -303,8 +303,9 @@ class VolumetricElement
     /* Note that the damping force fᵥ = -D * v, where D is the damping matrix.
      As we are accumulating the negative damping force here, the `+=` sign
      should be used. */
-    *neg_force += damping_matrix *
-                  this->ExtractElementDofs(this->node_indices(), state.qdot());
+    *neg_force +=
+        damping_matrix *
+        this->ExtractElementDofs(this->node_indices(), state.GetVelocities());
   }
 
   /* The matrix calculated here is the same as the stiffness matrix
@@ -380,8 +381,9 @@ class VolumetricElement
     /* residual = Ma-fₑ(x)-fᵥ(x, v)-fₑₓₜ, where M is the mass matrix, fₑ(x) is
      the elastic force, fᵥ(x, v) is the damping force and fₑₓₜ is the external
      force. */
-    *residual += mass_matrix_ *
-                 this->ExtractElementDofs(this->node_indices(), state.qddot());
+    *residual +=
+        mass_matrix_ * this->ExtractElementDofs(this->node_indices(),
+                                                state.GetAccelerations());
     this->AddNegativeElasticForce(state, residual);
     AddNegativeDampingForce(state, residual);
     this->AddScaledExternalForce(state, -1.0, residual);
@@ -437,7 +439,7 @@ class VolumetricElement
       const FemState<ElementType>& state) const {
     std::array<Matrix3<T>, num_quadrature_points> F;
     const Vector<T, num_dofs> element_x =
-        this->ExtractElementDofs(this->node_indices(), state.q());
+        this->ExtractElementDofs(this->node_indices(), state.GetPositions());
     const auto& element_x_reshaped =
         Eigen::Map<const Eigen::Matrix<T, 3, num_nodes>>(element_x.data(), 3,
                                                          num_nodes);

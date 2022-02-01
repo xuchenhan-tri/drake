@@ -85,6 +85,7 @@ int FemSolver<T>::SolveWithInitialGuess(FemStateBase<T>* state) const {
       eigen_tangent_matrix_solver_.compute(tangent_matrix_eigen_);
       dz_ = eigen_tangent_matrix_solver_.solve(-b_);
     }
+    std::cout << dz_.norm() << std::endl;
     integrator_->UpdateStateFromChangeInUnknowns(dz_, state);
     model_->CalcResidual(*state, &b_);
     residual_norm = b_.norm();
