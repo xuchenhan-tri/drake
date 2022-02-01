@@ -85,7 +85,7 @@ GTEST_TEST(AccelerationNewmarkSchemeTest, AdvanceOneTimeStep) {
  `VelocityNewmarkScheme` by advancing one time step with each integration
  scheme using the same initial state and verifying that the resulting new states
  are the same. */
-GTEST_TEST(VelocityNewmarkSchemeTest, EquivalenceWithAccelerationNewmark) {
+GTEST_TEST(AccelerationNewmarkSchemeTest, EquivalenceWithVelocityNewmark) {
   AccelerationNewmarkScheme<double> acceleration_scheme{kDt, kGamma, kBeta};
   FemState<DummyElement> state0(MakeQ(), MakeQdot(), MakeQddot());
   FemState<DummyElement> state_a(state0);
