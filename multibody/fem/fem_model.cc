@@ -5,13 +5,18 @@ namespace multibody {
 namespace fem {
 
 template <typename T>
-std::unique_ptr<FemState<T>> FemModel<T>::MakeFemState() const {
+FemState<T> FemModel<T>::MakeFemState() const {
   return DoMakeFemState();
 }
 
 template <typename T>
+std::unique_ptr<ElementData<T>> FemModel<T>::MakeElementData() const {
+  return DoMakeElementData();
+}
+
+template <typename T>
 void FemModel<T>::CalcResidual(const FemState<T>& state,
-                                   EigenPtr<VectorX<T>> residual) const {
+                               EigenPtr<VectorX<T>> residual) const {
   DRAKE_DEMAND(residual != nullptr);
   ThrowIfModelStateIncompatible(__func__, state);
   DoCalcResidual(state, residual);

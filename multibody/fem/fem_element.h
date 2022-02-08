@@ -70,10 +70,11 @@ class FemElement {
 
   /* Computes the per-element, state-dependent data associated with this
    `DerivedElement` given the `state`. */
-  Data ComputeData(const FemStateImpl<DerivedElement>& state) const {
+  Data ComputeData(const FemState<>& state) const {
     return static_cast<const DerivedElement*>(this)->DoComputeData(state);
   }
 
+  // TODO(xuchenhan-tri): This needs to take an additional argument.
   /* Calculates the tangent matrix for the element by combining the stiffness
    matrix, damping matrix, and the mass matrix according to the given `weights`.
   */
@@ -87,6 +88,7 @@ class FemElement {
     AddScaledMassMatrix(state, weights(2), tangent_matrix);
   }
 
+  // TODO(xuchenhan-tri): This needs to take an additional argument.
   /* Calculates the element residual of this element evaluated at the input
    state.
    @param[in]  state     The FEM state at which to evaluate the residual.

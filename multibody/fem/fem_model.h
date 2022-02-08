@@ -9,6 +9,7 @@
 #include "drake/common/default_scalars.h"
 #include "drake/common/eigen_types.h"
 #include "drake/multibody/fem/dirichlet_boundary_condition.h"
+#include "drake/multibody/fem/element_data.h"
 #include "drake/multibody/fem/fem_state.h"
 #include "drake/multibody/fem/petsc_symmetric_block_sparse_matrix.h"
 
@@ -72,8 +73,13 @@ class FemModel {
   /** Creates a default FEM state for this model, where the positions are set to
    the reference positions and the velocity and the accelerations are set to
    zero. */
-  std::unique_ptr<FemState<T>> MakeFemState() const;
+  FemState<T> MakeFemState() const;
 
+  /** Creates a default FEM ElementData that matches the size of this model. */
+  std::unique_ptr<ElementData<T>> MakeElementData() const;
+
+  // TODO(xuchenhan-tri): This needs to take an additional argument for
+  // ElementData, or takes FemDataManager instead.
   /** Calculates the residual at the given FEM state.
   @pre residual != nullptr.
   @throw std::exception if the FEM state is incompatible with this model.
@@ -82,6 +88,8 @@ class FemModel {
   void CalcResidual(const FemState<T>& state,
                     EigenPtr<VectorX<T>> residual) const;
 
+  // TODO(xuchenhan-tri): This needs to take an additional argument for
+  // ElementData, or takes FemDataManager instead.
   /** Calculates the tangent matrix at the given FEM state. The tangent matrix
    is given by a weight sum of stiffness matrix, damping matrix, and mass
    matrix.
@@ -96,10 +104,11 @@ class FemModel {
    @throw std::exception if the FEM state is incompatible with this model.
    @note Use MakeFemState() to create an FEM state compatible with this
    model. */
-  void CalcTangentMatrix(const FemState<T>& state,
-                         const Vector3<T>& weights,
+  void CalcTangentMatrix(const FemState<T>& state, const Vector3<T>& weights,
                          Eigen::SparseMatrix<T>* tangent_matrix) const;
 
+  // TODO(xuchenhan-tri): This needs to take an additional argument for
+  // ElementData, or takes FemDataManager instead.
   /* Alternative signature for calculating tangent matrix that writes to a
    PETSc matrix.
    @param[in] state            The FemState at which the tangent matrix is
@@ -156,6 +165,15 @@ class FemModel {
    */
   void SetGravityVector(const Vector3<T>& gravity);
 
+  /** Calculates the per-element data given the FEM state. */
+  void CalcElementData(const FemState<T>& state,
+                       ElementData<T>* element_data) const {
+    DRAKE_DEMAND(element_data != nullptr);
+    DRAKE_DEMAND(state.num_dofs() == element_data->size());
+    DRAKE_DEMAND(state.num_dofs() == this->num_dofs());
+    DoCalcElementData(state, element_data);
+  }
+
   /** (Internal use only) Throws std::exception to report a mismatch between
   the concrete types of `this` FemModel and the FemState that was
   passed to API method `func`. */
@@ -167,14 +185,22 @@ class FemModel {
 
   /** Derived classes must override this method to provide an implementation for
     the NVI MakeFemState(). */
-  virtual std::unique_ptr<FemState<T>> DoMakeFemState() const = 0;
+  virtual FemState<T> DoMakeFemState() const = 0;
 
+  /** Derived classes must override this method to provide an implementation for
+    the NVI MakeElementData(). */
+  virtual std::unique_ptr<ElementData<T>> DoMakeElementData() const = 0;
+
+  // TODO(xuchenhan-tri): This needs to take an additional argument for
+  // ElementData, or takes FemDataManager instead.
   /** Derived classes must override this method to provide an implementation
    for the NVI CalcResidual(). The input `state` is guaranteed to be
    compatible with `this` FEM model. */
   virtual void DoCalcResidual(const FemState<T>& state,
                               EigenPtr<VectorX<T>> residual) const = 0;
 
+  // TODO(xuchenhan-tri): This needs to take an additional argument for
+  // ElementData, or takes FemDataManager instead.
   /** Derived classes must override this method to provide an implementation for
    the NVI CalcTangentMatrix(). The input `state` is guaranteed to be compatible
    with `this` FEM model. */
@@ -182,6 +208,8 @@ class FemModel {
       const FemState<T>& state, const Vector3<T>& weights,
       Eigen::SparseMatrix<T>* tangent_matrix) const = 0;
 
+  // TODO(xuchenhan-tri): This needs to take an additional argument for
+  // ElementData, or takes FemDataManager instead.
   /** Derived classes must override this method to provide an implementation for
    the NVI CalcTangentMatrix(). The input `state` is guaranteed to be compatible
    with `this` FEM model. */
@@ -201,6 +229,11 @@ class FemModel {
   /** Derived classes must override this method to set the gravity vector for
    all existing elements in the model. */
   virtual void DoSetGravityVector(const Vector3<T>& gravity) = 0;
+
+  /** Derived classes must override this method to calculate per element data in
+   the model from the state. */
+  virtual void DoCalcElementData(const FemState<T>& state,
+                                 ElementData<T>* element_data) const = 0;
 
   /** Derived classes must invoke this method to update the number of nodes in
    the model when they add more nodes to the FEM model. */
