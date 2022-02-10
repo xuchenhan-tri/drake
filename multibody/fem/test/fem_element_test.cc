@@ -12,6 +12,7 @@ namespace test {
 namespace {
 
 using T = DummyElementTraits::T;
+using Data = DummyElementTraits::Data;
 const ElementIndex kZeroIndex = ElementIndex(0);
 const std::array<NodeIndex, DummyElementTraits::num_nodes> kNodeIndices = {
     {NodeIndex(0), NodeIndex(1), NodeIndex(2), NodeIndex(3)}};
@@ -41,7 +42,8 @@ class FemElementTest : public ::testing::Test {
   /* FemElement under test. */
   DummyElement element_{kZeroIndex, kNodeIndices, kConstitutiveModel,
                         kDampingModel};
-  FemStateImpl<DummyElement> state_{q(), v(), a()};
+  FemState<T> state_{q(), v(), a()};
+  Data data_{};
 };
 
 TEST_F(FemElementTest, Constructor) {
@@ -55,14 +57,14 @@ TEST_F(FemElementTest, Constructor) {
  FemElement whose implementation returns/adds a specific value. */
 TEST_F(FemElementTest, Residual) {
   Vector<T, DummyElementTraits::num_dofs> residual;
-  element_.CalcResidual(state_, &residual);
+  element_.CalcResidual(state_, data_, &residual);
   const Vector<T, kNumDofs> zero_vector = Vector<T, kNumDofs>::Zero();
   EXPECT_EQ(residual, zero_vector);
 
   state_.SetPositions(zero_vector);
   state_.SetVelocities(zero_vector);
   state_.SetAccelerations(zero_vector);
-  element_.CalcResidual(state_, &residual);
+  element_.CalcResidual(state_, data_, &residual);
   EXPECT_EQ(residual, element_.dummy_residual());
 }
 
@@ -71,7 +73,7 @@ TEST_F(FemElementTest, StiffnessMatrix) {
       K;
   K.setZero();
   const T scale = 3.14;
-  element_.AddScaledStiffnessMatrix(state_, scale, &K);
+  element_.AddScaledStiffnessMatrix(state_, data_, scale, &K);
   EXPECT_EQ(K, scale * element_.dummy_stiffness_matrix());
 }
 
@@ -80,7 +82,7 @@ TEST_F(FemElementTest, DampingMatrix) {
       D;
   D.setZero();
   const T scale = 3.14;
-  element_.AddScaledDampingMatrix(state_, scale, &D);
+  element_.AddScaledDampingMatrix(state_, data_, scale, &D);
   EXPECT_EQ(D, scale * element_.dummy_damping_matrix());
 }
 
@@ -90,7 +92,7 @@ TEST_F(FemElementTest, MassMatrix) {
       M;
   M.setZero();
   const T scale = 3.14;
-  element_.AddScaledMassMatrix(state_, scale, &M);
+  element_.AddScaledMassMatrix(state_, data_, scale, &M);
   EXPECT_EQ(M, scale * element_.dummy_mass_matrix());
 }
 

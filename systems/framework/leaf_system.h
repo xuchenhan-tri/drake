@@ -90,15 +90,20 @@ class LeafSystem : public System<T> {
   std::unique_ptr<DiscreteValues<T>> AllocateDiscreteVariables() const final;
 
   std::multimap<int, int> GetDirectFeedthroughs() const final;
+  
+  // Hack to build FemModel
+  using SystemBase::DeclareCacheEntry;
 
- protected:
-  // Promote so we don't need "this->" in defaults which show up in Doxygen.
-  using SystemBase::all_sources_ticket;
-
+  /* Temp hack. Need to inherit from leafsystem to define a system that can
+   declare cache entries. */
   /** Default constructor that declares no inputs, outputs, state, parameters,
   events, nor scalar-type conversion support (AutoDiff, etc.).  To enable
   AutoDiff support, use the SystemScalarConverter-based constructor. */
   LeafSystem();
+
+ protected:
+  // Promote so we don't need "this->" in defaults which show up in Doxygen.
+  using SystemBase::all_sources_ticket;
 
   /** Constructor that declares no inputs, outputs, state, parameters, or
   events, but allows subclasses to declare scalar-type conversion support

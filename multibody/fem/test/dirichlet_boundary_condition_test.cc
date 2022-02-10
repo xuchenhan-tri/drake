@@ -20,7 +20,7 @@ using DenseMatrix = Eigen::Matrix<double, kNumDofs, kNumDofs>;
 using Eigen::VectorXd;
 using SparseMatrix = Eigen::SparseMatrix<double>;
 using Element = DummyElement;
-using State = FemStateImpl<Element>;
+using State = FemState<DummyElement::T>;
 using std::make_unique;
 using std::unique_ptr;
 using std::vector;

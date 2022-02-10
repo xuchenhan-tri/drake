@@ -10,6 +10,7 @@
 #include "drake/common/eigen_types.h"
 #include "drake/multibody/fem/dirichlet_boundary_condition.h"
 #include "drake/multibody/fem/element_data.h"
+#include "drake/multibody/fem/fem_data_manager.h"
 #include "drake/multibody/fem/fem_state.h"
 #include "drake/multibody/fem/petsc_symmetric_block_sparse_matrix.h"
 
@@ -70,30 +71,57 @@ class FemModel {
   /** The number of FEM elements in this model. */
   virtual int num_elements() const = 0;
 
-  /** Creates a default FEM state for this model, where the positions are set to
-   the reference positions and the velocity and the accelerations are set to
-   zero. */
-  FemState<T> MakeFemState() const;
+  /* Creates a default FemData compatible with this model. */
+  FemDataInfo<T> AllocateFemData(systems::LeafSystem<T>* system) const {
+    std::set<systems::DependencyTicket> element_data_dependency_tickets;
+    /* FEM state. */
+    const FemState<T> model_state = MakeFemState();
+    const auto& scratch_state_cache_entry = system->DeclareCacheEntry(
+        "FEM scratch state",
+        systems::ValueProducer(
+            model_state,
+            std::function<void(const systems::Context<T>&,
+                               FemState<T>*)>{[](const systems::Context<T>&,
+                                                 FemState<T>*) {
+              throw std::logic_error(
+                  "The Calc() method should never be invoked for FemState.");
+            }}),
+        {systems::SystemBase::nothing_ticket()});
+    auto scratch_state_index = scratch_state_cache_entry.cache_index();
+    element_data_dependency_tickets.insert(scratch_state_cache_entry.ticket());
+    /* FEM element data. */
+    const std::unique_ptr<const ElementData<T>> model_element_data =
+        MakeElementData();
+    const auto& element_data_cache_entry = system->DeclareCacheEntry(
+        "FEM state dependent element data",
+        systems::ValueProducer(
+            *model_element_data,
+            std::function<void(const systems::Context<T>&, ElementData<T>*)>{
+                [system, scratch_state_index, this](
+                    const systems::Context<T>& context,
+                    ElementData<T>* element_data) {
+                  const FemState<T>& fem_state =
+                      system->get_cache_entry(scratch_state_index)
+                          .template GetKnownUpToDate<FemState<T>>(context);
+                  this->CalcElementData(fem_state, element_data);
+                }}),
+        element_data_dependency_tickets);
+    auto element_data_index = element_data_cache_entry.cache_index();
+    return {system, this, num_dofs(), scratch_state_index, element_data_index};
+  }
 
-  /** Creates a default FEM ElementData that matches the size of this model. */
-  std::unique_ptr<ElementData<T>> MakeElementData() const;
-
-  // TODO(xuchenhan-tri): This needs to take an additional argument for
-  // ElementData, or takes FemDataManager instead.
   /** Calculates the residual at the given FEM state.
   @pre residual != nullptr.
   @throw std::exception if the FEM state is incompatible with this model.
   @note Use MakeFemState() to create an FEM state compatible with this
   model. */
-  void CalcResidual(const FemState<T>& state,
+  void CalcResidual(const FemDataManager<T>& fem_data,
                     EigenPtr<VectorX<T>> residual) const;
 
-  // TODO(xuchenhan-tri): This needs to take an additional argument for
-  // ElementData, or takes FemDataManager instead.
   /** Calculates the tangent matrix at the given FEM state. The tangent matrix
    is given by a weight sum of stiffness matrix, damping matrix, and mass
    matrix.
-   @param[in] state            The FemState at which the tangent matrix is
+   @param[in] state            The FemDataManager at which the tangent matrix is
                                evaluated.
    @param[in] weights          The weight used to combine stiffness, damping,
                                and tangent matrices (in that order) into the
@@ -102,16 +130,15 @@ class FemModel {
    @pre tangent_matrix != nullptr.
    @pre The size of `tangent_matrix` is `num_dofs()` * `num_dofs()`.
    @throw std::exception if the FEM state is incompatible with this model.
-   @note Use MakeFemState() to create an FEM state compatible with this
+   @note Use MakeFemData() to create an FEM state compatible with this
    model. */
-  void CalcTangentMatrix(const FemState<T>& state, const Vector3<T>& weights,
+  void CalcTangentMatrix(const FemDataManager<T>& fem_data,
+                         const Vector3<T>& weights,
                          Eigen::SparseMatrix<T>* tangent_matrix) const;
 
-  // TODO(xuchenhan-tri): This needs to take an additional argument for
-  // ElementData, or takes FemDataManager instead.
   /* Alternative signature for calculating tangent matrix that writes to a
    PETSc matrix.
-   @param[in] state            The FemState at which the tangent matrix is
+   @param[in] state            The FemDataManager at which the tangent matrix is
                                evaluated.
    @param[in] weights          The weight used to combine stiffness, damping,
                                and tangent matrices (in that order) into the
@@ -120,10 +147,10 @@ class FemModel {
    @pre tangent_matrix != nullptr.
    @pre The size of `tangent_matrix` is `num_dofs()` by `num_dofs()`.
    @throw std::exception if the FEM state is incompatible with this model.
-   @note Use MakeFemState() to create an FEM state compatible with this
+   @note Use AllocateFemData() to create an FEM state compatible with this
    model. */
   void CalcTangentMatrix(
-      const FemState<T>& state, const Vector3<T>& weights,
+      const FemDataManager<T>& fem_data, const Vector3<T>& weights,
       internal::PetscSymmetricBlockSparseMatrix* tangent_matrix) const;
 
   /** Creates an Eigen::SparseMatrix that has the sparsity pattern of the
@@ -165,56 +192,55 @@ class FemModel {
    */
   void SetGravityVector(const Vector3<T>& gravity);
 
-  /** Calculates the per-element data given the FEM state. */
-  void CalcElementData(const FemState<T>& state,
-                       ElementData<T>* element_data) const {
-    DRAKE_DEMAND(element_data != nullptr);
-    DRAKE_DEMAND(state.num_dofs() == element_data->size());
-    DRAKE_DEMAND(state.num_dofs() == this->num_dofs());
-    DoCalcElementData(state, element_data);
-  }
-
   /** (Internal use only) Throws std::exception to report a mismatch between
   the concrete types of `this` FemModel and the FemState that was
   passed to API method `func`. */
-  virtual void ThrowIfModelStateIncompatible(
-      const char* func, const FemState<T>& state_base) const = 0;
+  void ThrowIfModelStateIncompatible(const char* func,
+                                     const FemDataManager<T>& fem_data) const {
+    if (fem_data.model() != this) {
+      throw std::logic_error(std::string(func) +
+                             "(): The FEM data and model are not compatible");
+    }
+  }
 
  protected:
   FemModel() = default;
 
-  /** Derived classes must override this method to provide an implementation for
-    the NVI MakeFemState(). */
-  virtual FemState<T> DoMakeFemState() const = 0;
+  /** Creates a default FEM state for this model, where the positions are set to
+   the reference positions and the velocity and the accelerations are set to
+   zero. */
+  virtual FemState<T> MakeFemState() const = 0;
 
-  /** Derived classes must override this method to provide an implementation for
-    the NVI MakeElementData(). */
-  virtual std::unique_ptr<ElementData<T>> DoMakeElementData() const = 0;
+  /** Creates a default FEM ElementData that matches the size of this model. */
+  virtual std::unique_ptr<ElementData<T>> MakeElementData() const = 0;
 
-  // TODO(xuchenhan-tri): This needs to take an additional argument for
-  // ElementData, or takes FemDataManager instead.
+  /* Calculates the per-element data given the FEM state. */
+  void CalcElementData(const FemState<T>& state,
+                       ElementData<T>* element_data) const {
+    DRAKE_DEMAND(element_data != nullptr);
+    DRAKE_DEMAND(element_data->size() == this->num_elements());
+    DRAKE_DEMAND(state.num_dofs() == this->num_dofs());
+    DoCalcElementData(state, element_data);
+  }
+
   /** Derived classes must override this method to provide an implementation
    for the NVI CalcResidual(). The input `state` is guaranteed to be
    compatible with `this` FEM model. */
-  virtual void DoCalcResidual(const FemState<T>& state,
+  virtual void DoCalcResidual(const FemDataManager<T>& fem_data,
                               EigenPtr<VectorX<T>> residual) const = 0;
 
-  // TODO(xuchenhan-tri): This needs to take an additional argument for
-  // ElementData, or takes FemDataManager instead.
   /** Derived classes must override this method to provide an implementation for
    the NVI CalcTangentMatrix(). The input `state` is guaranteed to be compatible
    with `this` FEM model. */
   virtual void DoCalcTangentMatrix(
-      const FemState<T>& state, const Vector3<T>& weights,
+      const FemDataManager<T>& fem_data, const Vector3<T>& weights,
       Eigen::SparseMatrix<T>* tangent_matrix) const = 0;
 
-  // TODO(xuchenhan-tri): This needs to take an additional argument for
-  // ElementData, or takes FemDataManager instead.
   /** Derived classes must override this method to provide an implementation for
    the NVI CalcTangentMatrix(). The input `state` is guaranteed to be compatible
    with `this` FEM model. */
   virtual void DoCalcTangentMatrix(
-      const FemState<T>& state, const Vector3<T>& weights,
+      const FemDataManager<T>& fem_data, const Vector3<T>& weights,
       internal::PetscSymmetricBlockSparseMatrix* tangent_matrix) const = 0;
 
   /** Derived classes must override this method to provide an implementation for

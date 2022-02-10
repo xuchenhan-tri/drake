@@ -14,6 +14,7 @@ namespace {
 
 using Eigen::Vector4d;
 using test::DummyElement;
+using T = DummyElement::T;
 
 const double kDt = 1e-3;
 const double kGamma = 0.6;
@@ -39,8 +40,8 @@ GTEST_TEST(VelocityNewmarkSchemeTest, Weights) {
  the weights. */
 GTEST_TEST(VelocityNewmarkSchemeTest, UpdateStateFromChangeInUnknowns) {
   VelocityNewmarkScheme<double> scheme{kDt, kGamma, kBeta};
-  FemStateImpl<DummyElement> state0(MakeQ(), MakeQdot(), MakeQddot());
-  FemStateImpl<DummyElement> state(state0);
+  FemState<T> state0(MakeQ(), MakeQdot(), MakeQddot());
+  FemState<T> state(state0);
   const Vector4<double> dz(1.234, 4.567, 7.890, 0.123);
   const Vector3<double>& weights = scheme.weights();
   scheme.UpdateStateFromChangeInUnknowns(dz, &state);
@@ -60,9 +61,9 @@ GTEST_TEST(VelocityNewmarkSchemeTest, AdvanceOneTimeStep) {
   const Vector4d q = MakeQ();
   Vector4d qdot = MakeQdot();
   const Vector4d qddot = MakeQddot();
-  const FemStateImpl<DummyElement> state_0(q, qdot, qddot);
-  FemStateImpl<DummyElement> state_n(state_0);
-  FemStateImpl<DummyElement> state_np1(state_0);
+  const FemState<T> state_0(q, qdot, qddot);
+  FemState<T> state_n(state_0);
+  FemState<T> state_np1(state_0);
   const int kTimeSteps = 10;
   for (int i = 0; i < kTimeSteps; ++i) {
     qdot += kDt * qddot;
@@ -90,12 +91,12 @@ GTEST_TEST(VelocityNewmarkSchemeTest, AdvanceOneTimeStep) {
  are the same. */
 GTEST_TEST(VelocityNewmarkSchemeTest, EquivalenceWithAccelerationNewmark) {
   VelocityNewmarkScheme<double> velocity_scheme{kDt, kGamma, kBeta};
-  FemStateImpl<DummyElement> state0(MakeQ(), MakeQdot(), MakeQddot());
-  FemStateImpl<DummyElement> state_v(state0);
+  FemState<T> state0(MakeQ(), MakeQdot(), MakeQddot());
+  FemState<T> state_v(state0);
   velocity_scheme.AdvanceOneTimeStep(state0, MakeQdot(), &state_v);
 
   AccelerationNewmarkScheme<double> acceleration_scheme{kDt, kGamma, kBeta};
-  FemStateImpl<DummyElement> state_a(state0);
+  FemState<T> state_a(state0);
   acceleration_scheme.AdvanceOneTimeStep(state0, state_v.GetAccelerations(),
                                          &state_a);
   EXPECT_TRUE(CompareMatrices(state_v.GetAccelerations(),

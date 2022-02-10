@@ -15,14 +15,16 @@ FemSolver<T>::FemSolver(const FemModel<T>* model,
 }
 
 template <typename T>
-int FemSolver<T>::AdvanceOneTimeStep(const FemState<T>& prev_state,
-                                     FemState<T>* next_state) const {
+int FemSolver<T>::AdvanceOneTimeStep(const FemDataManager<T>& prev_state,
+                                     FemDataManager<T>* next_state) const {
   DRAKE_DEMAND(next_state != nullptr);
   model_->ThrowIfModelStateIncompatible(__func__, prev_state);
   model_->ThrowIfModelStateIncompatible(__func__, *next_state);
   /* Make initial guess of the unknown variable that it stays the same. */
-  const VectorX<T>& unknown_variable = integrator_->GetUnknowns(prev_state);
-  integrator_->AdvanceOneTimeStep(prev_state, unknown_variable, next_state);
+  const VectorX<T>& unknown_variable =
+      integrator_->GetUnknowns(prev_state.GetFemState());
+  integrator_->AdvanceOneTimeStep(prev_state.GetFemState(), unknown_variable,
+                                  &(next_state->GetMutableFemState()));
   /* Run Newton-Raphson iterations. */
   return SolveWithInitialGuess(next_state);
 }
@@ -50,10 +52,14 @@ void FemSolver<T>::set_linear_solve_tolerance(const T& residual_norm) const {
 }
 
 template <typename T>
-int FemSolver<T>::SolveWithInitialGuess(FemState<T>* state) const {
+int FemSolver<T>::SolveWithInitialGuess(FemDataManager<T>* state) const {
   /* Make sure the scratch quantities are of the correct sizes. */
   ResetScratchDataIfNecessary();
-  model_->ApplyBoundaryCondition(state);
+
+  /* GetMutableFemState() marks the mutable state cache entry out of date and
+   invalidates all downstream dependents. Then ApplyBoundaryCondition() sets the
+   mutable state to our first guess. */
+  model_->ApplyBoundaryCondition(&state->GetMutableFemState());
   model_->CalcResidual(*state, &b_);
   T residual_norm = b_.norm();
   T initial_residual_norm = residual_norm;
@@ -85,7 +91,10 @@ int FemSolver<T>::SolveWithInitialGuess(FemState<T>* state) const {
       eigen_tangent_matrix_solver_.compute(tangent_matrix_eigen_);
       dz_ = eigen_tangent_matrix_solver_.solve(-b_);
     }
-    integrator_->UpdateStateFromChangeInUnknowns(dz_, state);
+    /* GetMutableFemState() marks out of date and invalidates downstream
+     UpdateStateFromChangeInUnknowns() sets state to the next estimate. */
+    integrator_->UpdateStateFromChangeInUnknowns(dz_,
+                                                 &state->GetMutableFemState());
     model_->CalcResidual(*state, &b_);
     residual_norm = b_.norm();
     ++iter;

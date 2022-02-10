@@ -6,8 +6,9 @@
 #include "drake/common/eigen_types.h"
 #include "drake/multibody/fem/constitutive_model.h"
 #include "drake/multibody/fem/damping_model.h"
+#include "drake/multibody/fem/element_data.h"
 #include "drake/multibody/fem/fem_indexes.h"
-#include "drake/multibody/fem/fem_state_impl.h"
+#include "drake/multibody/fem/fem_state.h"
 
 namespace drake {
 namespace multibody {
@@ -70,36 +71,35 @@ class FemElement {
 
   /* Computes the per-element, state-dependent data associated with this
    `DerivedElement` given the `state`. */
-  Data ComputeData(const FemState<>& state) const {
+  Data ComputeData(const FemState<T>& state) const {
     return static_cast<const DerivedElement*>(this)->DoComputeData(state);
   }
 
-  // TODO(xuchenhan-tri): This needs to take an additional argument.
   /* Calculates the tangent matrix for the element by combining the stiffness
    matrix, damping matrix, and the mass matrix according to the given `weights`.
   */
   void CalcTangentMatrix(
-      const FemStateImpl<DerivedElement>& state, const Vector3<T>& weights,
+      const FemState<T>& state, const Data& data, const Vector3<T>& weights,
       EigenPtr<Eigen::Matrix<T, num_dofs, num_dofs>> tangent_matrix) const {
     DRAKE_DEMAND(tangent_matrix != nullptr);
     tangent_matrix->setZero();
-    AddScaledStiffnessMatrix(state, weights(0), tangent_matrix);
-    AddScaledDampingMatrix(state, weights(1), tangent_matrix);
-    AddScaledMassMatrix(state, weights(2), tangent_matrix);
+    AddScaledStiffnessMatrix(state, data, weights(0), tangent_matrix);
+    AddScaledDampingMatrix(state, data, weights(1), tangent_matrix);
+    AddScaledMassMatrix(state, data, weights(2), tangent_matrix);
   }
 
-  // TODO(xuchenhan-tri): This needs to take an additional argument.
   /* Calculates the element residual of this element evaluated at the input
    state.
    @param[in]  state     The FEM state at which to evaluate the residual.
    @param[out] residual  A vector of residual of size `num_dofs`. All
                          values in `residual` will be overwritten.
    @pre residual != nullptr */
-  void CalcResidual(const FemStateImpl<DerivedElement>& state,
+  void CalcResidual(const FemState<T>& state, const Data& data,
                     EigenPtr<Vector<T, num_dofs>> residual) const {
     DRAKE_ASSERT(residual != nullptr);
     residual->setZero();
-    static_cast<const DerivedElement*>(this)->DoCalcResidual(state, residual);
+    static_cast<const DerivedElement*>(this)->DoCalcResidual(state, data,
+                                                             residual);
   }
 
   /* Accumulates the stiffness matrix (the derivative, or an approximation
@@ -111,11 +111,11 @@ class FemElement {
                       which the scaled stiffness matrix will be added.
    @pre K != nullptr */
   void AddScaledStiffnessMatrix(
-      const FemStateImpl<DerivedElement>& state, const T& scale,
+      const FemState<T>& state, const Data& data, const T& scale,
       EigenPtr<Eigen::Matrix<T, num_dofs, num_dofs>> K) const {
     DRAKE_ASSERT(K != nullptr);
     static_cast<const DerivedElement*>(this)->DoAddScaledStiffnessMatrix(
-        state, scale, K);
+        state, data, scale, K);
   }
 
   /* Accumulates the damping matrix (the derivative of the residual with
@@ -127,11 +127,11 @@ class FemElement {
                       scaled damping matrix will be added.
    @pre D != nullptr */
   void AddScaledDampingMatrix(
-      const FemStateImpl<DerivedElement>& state, const T& scale,
+      const FemState<T>& state, const Data& data, const T& scale,
       EigenPtr<Eigen::Matrix<T, num_dofs, num_dofs>> D) const {
     DRAKE_ASSERT(D != nullptr);
     static_cast<const DerivedElement*>(this)->DoAddScaledDampingMatrix(
-        state, scale, D);
+        state, data, scale, D);
   }
 
   /* Accumulates the mass matrix (the derivative of the residual with respect
@@ -143,10 +143,10 @@ class FemElement {
                       scaled mass matrix will be added.
    @pre M != nullptr */
   void AddScaledMassMatrix(
-      const FemStateImpl<DerivedElement>& state, const T& scale,
+      const FemState<T>& state, const Data& data, const T& scale,
       EigenPtr<Eigen::Matrix<T, num_dofs, num_dofs>> M) const {
     DRAKE_ASSERT(M != nullptr);
-    static_cast<const DerivedElement*>(this)->DoAddScaledMassMatrix(state,
+    static_cast<const DerivedElement*>(this)->DoAddScaledMassMatrix(state, data,
                                                                     scale, M);
   }
 
@@ -204,19 +204,19 @@ class FemElement {
    `state` scaled by `scale` into the output parameter `external_force`.
    @pre external_force != nullptr. */
   void AddScaledExternalForce(
-      const FemStateImpl<DerivedElement>& state, const T& scale,
+      const FemState<T>& state, const Data& data, const T& scale,
       EigenPtr<Vector<T, num_dofs>> external_force) const {
     DRAKE_ASSERT(external_force != nullptr);
     // The gravity force is always accounted for in the external forces.
-    AddScaledGravityForce(state, scale, external_force);
+    AddScaledGravityForce(state, data, scale, external_force);
     // Add element specific external forces.
-    DoAddScaledExternalForce(state, scale, external_force);
+    DoAddScaledExternalForce(state, data, scale, external_force);
   }
 
   /* `DerivedElement` must provide an implementation for `DoComputeData()`.
    @throw std::exception if `DerivedElement` does not provide an
    implementation for `DoComputeData()`. */
-  Data DoComputeData(const FemStateImpl<DerivedElement>& state) const {
+  Data DoComputeData(const FemState<T>& state) const {
     ThrowIfNotImplemented(__func__);
   }
 
@@ -227,7 +227,7 @@ class FemElement {
    this.
    @throw std::exception if `DerivedElement` does not provide an implementation
    for `DoCalcResidual()`. */
-  void DoCalcResidual(const FemStateImpl<DerivedElement>& state,
+  void DoCalcResidual(const FemState<T>& state, const Data& data,
                       EigenPtr<Vector<T, num_dofs>> residual) const {
     ThrowIfNotImplemented(__func__);
   }
@@ -239,7 +239,7 @@ class FemElement {
    @throw std::exception if `DerivedElement` does not provide an implementation
    for `DoAddScaledStiffnessMatrix()`. */
   void DoAddScaledStiffnessMatrix(
-      const FemStateImpl<DerivedElement>& state, const T& scale,
+      const FemState<T>& state, const Data& data, const T& scale,
       EigenPtr<Eigen::Matrix<T, num_dofs, num_dofs>> K) const {
     ThrowIfNotImplemented(__func__);
   }
@@ -251,7 +251,7 @@ class FemElement {
    @throw std::exception if `DerivedElement` does not provide an implementation
    for `DoAddScaledDampingMatrix()`. */
   void DoAddScaledDampingMatrix(
-      const FemStateImpl<DerivedElement>& state, const T& scale,
+      const FemState<T>& state, const Data& data, const T& scale,
       EigenPtr<Eigen::Matrix<T, num_dofs, num_dofs>> D) const {
     ThrowIfNotImplemented(__func__);
   }
@@ -263,7 +263,7 @@ class FemElement {
    @throw std::exception if `DerivedElement` does not provide an implementation
    for `DoAddScaledMassMatrix()`. */
   void DoAddScaledMassMatrix(
-      const FemStateImpl<DerivedElement>& state, const T& scale,
+      const FemState<T>& state, const Data& data, const T& scale,
       EigenPtr<Eigen::Matrix<T, num_dofs, num_dofs>> M) const {
     ThrowIfNotImplemented(__func__);
   }
@@ -272,18 +272,18 @@ class FemElement {
    external
    forces specific to the derived element. Default implementation is no-op. */
   void DoAddScaledExternalForce(
-      const FemStateImpl<DerivedElement>& state, const T& scale,
+      const FemState<T>& state, const Data& data, const T& scale,
       EigenPtr<Vector<T, num_dofs>> external_force) const {}
 
   /* Adds the gravity force acting on each node in the element scaled by
    `scale` into `force`. Derived elements may choose to override this method
    to provide a more efficient implementation for specific elements. */
-  void AddScaledGravityForce(const FemStateImpl<DerivedElement>& state,
+  void AddScaledGravityForce(const FemState<T>& state, const Data& data,
                              const T& scale,
                              EigenPtr<Vector<T, num_dofs>> force) const {
     Eigen::Matrix<T, num_dofs, num_dofs> mass_matrix =
         Eigen::Matrix<T, num_dofs, num_dofs>::Zero();
-    AddScaledMassMatrix(state, 1, &mass_matrix);
+    AddScaledMassMatrix(state, data, 1, &mass_matrix);
     constexpr int kDim = 3;
     // TODO(xuchenhan-tri): stacked_gravity can be cached.
     Vector<T, num_dofs> stacked_gravity;

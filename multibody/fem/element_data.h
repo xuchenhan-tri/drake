@@ -1,5 +1,7 @@
 #pragma once
 
+#include <memory>
+
 #include "drake/common/drake_copyable.h"
 
 namespace drake {
@@ -11,13 +13,16 @@ namespace fem {
 template <typename T>
 class ElementData {
  public:
-  DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(FemState);
+  virtual ~ElementData() = default;
 
   /* Returns the number of elements that this ElementData has data for. */
-  virtual size() const = 0;
+  virtual int size() const = 0;
+
+  virtual std::unique_ptr<ElementData<T>> Clone() const = 0;
 
  protected:
   ElementData() = default;
+  DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(ElementData);
 };
 
 }  // namespace fem

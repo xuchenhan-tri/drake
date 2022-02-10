@@ -5,17 +5,7 @@ namespace multibody {
 namespace fem {
 
 template <typename T>
-FemState<T> FemModel<T>::MakeFemState() const {
-  return DoMakeFemState();
-}
-
-template <typename T>
-std::unique_ptr<ElementData<T>> FemModel<T>::MakeElementData() const {
-  return DoMakeElementData();
-}
-
-template <typename T>
-void FemModel<T>::CalcResidual(const FemState<T>& state,
+void FemModel<T>::CalcResidual(const FemDataManager<T>& state,
                                EigenPtr<VectorX<T>> residual) const {
   DRAKE_DEMAND(residual != nullptr);
   ThrowIfModelStateIncompatible(__func__, state);
@@ -25,7 +15,7 @@ void FemModel<T>::CalcResidual(const FemState<T>& state,
 
 template <typename T>
 void FemModel<T>::CalcTangentMatrix(
-    const FemState<T>& state, const Vector3<T>& weights,
+    const FemDataManager<T>& state, const Vector3<T>& weights,
     Eigen::SparseMatrix<T>* tangent_matrix) const {
   DRAKE_DEMAND(tangent_matrix != nullptr);
   DRAKE_DEMAND(tangent_matrix->rows() == num_dofs());
@@ -37,7 +27,7 @@ void FemModel<T>::CalcTangentMatrix(
 
 template <typename T>
 void FemModel<T>::CalcTangentMatrix(
-    const FemState<T>& state, const Vector3<T>& weights,
+    const FemDataManager<T>& state, const Vector3<T>& weights,
     internal::PetscSymmetricBlockSparseMatrix* tangent_matrix) const {
   DRAKE_DEMAND(tangent_matrix != nullptr);
   DRAKE_DEMAND(tangent_matrix->rows() == num_dofs());
@@ -61,7 +51,6 @@ FemModel<T>::MakePetscSymmetricBlockSparseTangentMatrix() const {
 template <typename T>
 void FemModel<T>::ApplyBoundaryCondition(FemState<T>* state) const {
   DRAKE_DEMAND(state != nullptr);
-  ThrowIfModelStateIncompatible(__func__, *state);
   dirichlet_bc_.ApplyBoundaryConditionToState(state);
 }
 

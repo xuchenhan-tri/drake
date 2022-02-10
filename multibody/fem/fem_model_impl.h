@@ -12,10 +12,11 @@
 #include <Eigen/Sparse>
 
 #include "drake/common/eigen_types.h"
+#include "drake/multibody/fem/element_data.h"
+#include "drake/multibody/fem/element_data_impl.h"
 #include "drake/multibody/fem/fem_element.h"
 #include "drake/multibody/fem/fem_indexes.h"
 #include "drake/multibody/fem/fem_model.h"
-#include "drake/multibody/fem/fem_state_impl.h"
 
 namespace drake {
 namespace multibody {
@@ -81,18 +82,17 @@ class FemModelImpl : public FemModel<typename Element::Traits::T> {
   }
 
  private:
-  /* Implements FemModel::DoMakeElementData(). Generalized positions are
-   initialized to be reference positions of the input mesh vertices. Velocities
-   and accelerations are initialized to 0. */
-  std::unique_ptr<ElementData<T>> DoMakeFemState() const final {
+  /* Implements FemModel::MakeElementData(). */
+  std::unique_ptr<ElementData<T>> MakeElementData() const final {
     return std::make_unique<ElementDataImpl<Element>>(num_elements());
   }
 
   /* Helper for DoCalcResidual(). */
-  void CalcResidualForConcreteState(const FemStateImpl<Element>& state,
-                                    EigenPtr<VectorX<T>> residual) const {
+  void CalcResidualForConcreteData(const FemState<T>& state,
+                                   const ElementDataImpl<Element>& element_data,
+                                   EigenPtr<VectorX<T>> residual) const {
     DRAKE_DEMAND(residual != nullptr && residual->size() == this->num_dofs());
-    DRAKE_DEMAND(state.element_cache_size() == num_elements());
+    DRAKE_DEMAND(element_data.size() == num_elements());
     /* The values are accumulated in the residual, so it is important to clear
      the old data. */
     residual->setZero();
@@ -104,7 +104,8 @@ class FemModelImpl : public FemModel<typename Element::Traits::T> {
      element. */
     Vector<T, kNumDofs> element_residual;
     for (ElementIndex e(0); e < num_elements(); ++e) {
-      elements_[e].CalcResidual(state, &element_residual);
+      elements_[e].CalcResidual(state, element_data.get_data(e),
+                                &element_residual);
       const std::array<NodeIndex, kNumNodes>& element_node_indices =
           elements_[e].node_indices();
       for (int i = 0; i < kNumNodes; ++i) {
@@ -116,13 +117,13 @@ class FemModelImpl : public FemModel<typename Element::Traits::T> {
   }
 
   /* Helper for DoCalcTangentMatrix(). */
-  void CalcTangentMatrixForConcreteState(
-      const FemStateImpl<Element>& state, const Vector3<T>& weights,
-      Eigen::SparseMatrix<T>* tangent_matrix) const {
+  void CalcTangentMatrixForConcreteData(
+      const FemState<T>& state, const ElementDataImpl<Element>& element_data,
+      const Vector3<T>& weights, Eigen::SparseMatrix<T>* tangent_matrix) const {
     DRAKE_DEMAND(tangent_matrix != nullptr &&
                  tangent_matrix->rows() == this->num_dofs() &&
                  tangent_matrix->cols() == this->num_dofs());
-    DRAKE_DEMAND(state.element_cache_size() == num_elements());
+    DRAKE_DEMAND(element_data.size() == num_elements());
     /* The values are accumulated in the tangent_matrix, so it is important to
      clear the old data. */
     using Iterator = typename Eigen::SparseMatrix<T>::InnerIterator;
@@ -140,7 +141,8 @@ class FemModelImpl : public FemModel<typename Element::Traits::T> {
     Eigen::Matrix<T, kNumDofs, kNumDofs> element_tangent_matrix;
     for (ElementIndex e(0); e < num_elements(); ++e) {
       element_tangent_matrix.setZero();
-      elements_[e].CalcTangentMatrix(state, weights, &element_tangent_matrix);
+      elements_[e].CalcTangentMatrix(state, element_data.get_data(e), weights,
+                                     &element_tangent_matrix);
       const std::array<NodeIndex, kNumNodes>& element_node_indices =
           elements_[e].node_indices();
       for (int a = 0; a < kNumNodes; ++a) {
@@ -158,20 +160,21 @@ class FemModelImpl : public FemModel<typename Element::Traits::T> {
   }
 
   /* Helper for DoCalcTangentMatrix(). */
-  void CalcTangentMatrixForConcreteState(
-      const FemStateImpl<Element>& state, const Vector3<T>& weights,
+  void CalcTangentMatrixForConcreteData(
+      const FemState<T>& state, const ElementDataImpl<Element>& element_data,
+      const Vector3<T>& weights,
       PetscSymmetricBlockSparseMatrix* tangent_matrix) const {
     if constexpr (!std::is_same_v<typename Element::T, double>) {
       throw std::logic_error(
           "The PetscSymmetricBlockSparseMatrix overload of "
-          "FemModelImpl::CalcTangentMatrixForConcreteState() only supports "
+          "FemModelImpl::CalcTangentMatrixForConcreteData() only supports "
           "scalar "
           "type `double`.");
     } else {
       DRAKE_DEMAND(tangent_matrix != nullptr &&
                    tangent_matrix->rows() == this->num_dofs() &&
                    tangent_matrix->cols() == this->num_dofs());
-      DRAKE_DEMAND(state.element_cache_size() == num_elements());
+      DRAKE_DEMAND(element_data.size() == num_elements());
 
       /* The values are accumulated in the tangent_matrix, so it is important to
        clear the old data. */
@@ -186,7 +189,8 @@ class FemModelImpl : public FemModel<typename Element::Traits::T> {
       Vector<int, kNumNodes> block_indices;
       Eigen::Matrix<T, kNumDofs, kNumDofs> element_tangent_matrix;
       for (ElementIndex e(0); e < num_elements(); ++e) {
-        elements_[e].CalcTangentMatrix(state, weights, &element_tangent_matrix);
+        elements_[e].CalcTangentMatrix(state, element_data.get_data(e), weights,
+                                       &element_tangent_matrix);
         const std::array<NodeIndex, kNumNodes>& element_node_indices =
             elements_[e].node_indices();
         // TODO(xuchenhan-tri): Avoid this index copy.
@@ -283,27 +287,36 @@ class FemModelImpl : public FemModel<typename Element::Traits::T> {
 
   /* Implements FemModel::CalcResidual() by casting the FemState
    to its concrete type. */
-  void DoCalcResidual(const FemState<T>& state,
+  void DoCalcResidual(const FemDataManager<T>& fem_data,
                       EigenPtr<VectorX<T>> residual) const final {
-    const FemStateImpl<Element>& concrete_state = cast_to_concrete_state(state);
-    CalcResidualForConcreteState(concrete_state, residual);
+    const FemState<T>& state = fem_data.GetFemState();
+    const ElementData<T>& element_data = fem_data.EvalElementData();
+    CalcResidualForConcreteData(
+        state, cast_to_concrete_element_data(element_data), residual);
   }
 
   /* Implements FemModel::CalcTangentMatrix() by casting the
    FemState to its concrete type. */
-  void DoCalcTangentMatrix(const FemState<T>& state, const Vector3<T>& weights,
+  void DoCalcTangentMatrix(const FemDataManager<T>& fem_data,
+                           const Vector3<T>& weights,
                            Eigen::SparseMatrix<T>* tangent_matrix) const final {
-    const FemStateImpl<Element>& concrete_state = cast_to_concrete_state(state);
-    CalcTangentMatrixForConcreteState(concrete_state, weights, tangent_matrix);
+    const FemState<T>& state = fem_data.GetFemState();
+    const ElementData<T>& element_data = fem_data.EvalElementData();
+    CalcTangentMatrixForConcreteData(
+        state, cast_to_concrete_element_data(element_data), weights,
+        tangent_matrix);
   }
 
   /* Implements FemModel::CalcTangentMatrix() by casting the
    FemState to its concrete type. */
   void DoCalcTangentMatrix(
-      const FemState<T>& state, const Vector3<T>& weights,
+      const FemDataManager<T>& fem_data, const Vector3<T>& weights,
       PetscSymmetricBlockSparseMatrix* tangent_matrix) const final {
-    const FemStateImpl<Element>& concrete_state = cast_to_concrete_state(state);
-    CalcTangentMatrixForConcreteState(concrete_state, weights, tangent_matrix);
+    const FemState<T>& state = fem_data.GetFemState();
+    const ElementData<T>& element_data = fem_data.EvalElementData();
+    CalcTangentMatrixForConcreteData(
+        state, cast_to_concrete_element_data(element_data), weights,
+        tangent_matrix);
   }
 
   /* Implements FemModel::SetGravityVector(). */
@@ -318,39 +331,18 @@ class FemModelImpl : public FemModel<typename Element::Traits::T> {
                          ElementData<T>* element_data) const final {
     auto* concrete_data = static_cast<ElementDataImpl<Element>*>(element_data);
     for (int i = 0; i < static_cast<int>(elements_.size()); ++i) {
-      concrete_data->set_data(element_[i].ComputeData(state));
+      concrete_data->set_data(i, elements_[i].ComputeData(state));
     }
   }
 
-  // TODO(xuchenhan-tri): This needs to become cast_to_concrete_element_data.
-  /* Statically cast the given FemState to the FemStateImpl compatible
+  /* Statically cast the given ElementData to the ElementDataImpl compatible
    with `this` FemModelImpl.
-   @pre The given `abstract_state` is compatible with the `this` FemModelImpl.
-  */
-  const FemStateImpl<Element>& cast_to_concrete_state(
-      const FemState<T>& abstract_state) const {
-    const auto& concrete_state =
-        static_cast<const FemStateImpl<Element>&>(abstract_state);
-    return concrete_state;
-  }
-
-  /* Implements FemModel::ThrowIfModelStateIncompatible(). */
-  void ThrowIfModelStateIncompatible(
-      const char* func, const FemState<T>& abstract_state) const final {
-    const auto* concrete_state_ptr =
-        dynamic_cast<const FemStateImpl<Element>*>(&abstract_state);
-    if (concrete_state_ptr == nullptr) {
-      throw std::logic_error(std::string(func) +
-                             "(): The type of the FemStateImpl is incompatible "
-                             "with the type of the "
-                             "FemModelImpl.");
-    }
-    if (concrete_state_ptr->num_dofs() != this->num_dofs()) {
-      throw std::logic_error(
-          fmt::format("{}(): The size of the FemStateImpl ({}) is incompatible "
-                      "with the size of the FemModelImpl ({}).",
-                      func, concrete_state_ptr->num_dofs(), this->num_dofs()));
-    }
+   @pre The given `abstract_data` is compatible with the `this` FemModelImpl. */
+  const ElementDataImpl<Element>& cast_to_concrete_element_data(
+      const ElementData<T>& abstract_data) const {
+    const auto& concrete_data =
+        static_cast<const ElementDataImpl<Element>&>(abstract_data);
+    return concrete_data;
   }
 
   /* FemElements owned by this model. */

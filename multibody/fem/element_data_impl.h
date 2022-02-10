@@ -1,6 +1,11 @@
 #pragma once
 
+#include <memory>
+#include <utility>
+#include <vector>
+
 #include "drake/common/drake_copyable.h"
+#include "drake/multibody/fem/element_data.h"
 
 namespace drake {
 namespace multibody {
@@ -21,22 +26,26 @@ class ElementDataImpl : public ElementData<typename Element::T> {
 
   DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(ElementDataImpl);
 
-  ElementData(int num_elements) : element_data_(num_elements) {}
+  explicit ElementDataImpl(int num_elements) : element_data_(num_elements) {}
 
   int size() const final { return element_data_.size(); }
+
+  std::unique_ptr<ElementData<T>> Clone() const final {
+    return std::make_unique<ElementDataImpl<Element>>(*this);
+  }
 
   void set_data(int index, Data data) {
     DRAKE_ASSERT(0 <= index && index < size());
     element_data_[index] = std::move(data);
   }
 
-  const Data& get_data(int index) {
+  const Data& get_data(int index) const {
     DRAKE_ASSERT(0 <= index && index < size());
     return element_data_[index];
   }
 
  private:
-  std::vector<Element::Traits::Data> element_data_;
+  std::vector<Data> element_data_;
 };
 
 }  // namespace internal

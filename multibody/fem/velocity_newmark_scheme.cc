@@ -24,12 +24,14 @@ void VelocityNewmarkScheme<T>::DoAdvanceOneTimeStep(
   const VectorX<T>& vn = prev_state.GetVelocities();
   const VectorX<T>& xn = prev_state.GetPositions();
   const VectorX<T>& v = unknown_variable;
-  state->SetAccelerations(one_over_dt_gamma_ * (v - vn) -
-                          (1.0 - gamma()) / gamma() * an);
-  state->SetVelocities(v);
+  /* Update x, a, v in that order to ensure we handle the case where
+   &prev_state == state. */
   state->SetPositions(
       xn + dt() * (beta_over_gamma_ * v + (1.0 - beta_over_gamma_) * vn) +
       dt() * dt() * (0.5 - beta_over_gamma_) * an);
+  state->SetAccelerations(one_over_dt_gamma_ * (v - vn) -
+                          (1.0 - gamma()) / gamma() * an);
+  state->SetVelocities(v);
 }
 
 }  // namespace internal

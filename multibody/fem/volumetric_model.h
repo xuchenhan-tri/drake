@@ -5,9 +5,10 @@
 #include <utility>
 
 #include "drake/geometry/proximity/volume_mesh.h"
-#include "drake/multibody/fem/acceleration_newmark_scheme.h"
 #include "drake/multibody/fem/damping_model.h"
+#include "drake/multibody/fem/element_data_impl.h"
 #include "drake/multibody/fem/fem_model_impl.h"
+#include "drake/multibody/fem/fem_state.h"
 #include "drake/multibody/fem/volumetric_element.h"
 
 namespace drake {
@@ -23,7 +24,6 @@ class VolumetricModel : public FemModelImpl<Element> {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(VolumetricModel);
 
-  using State = FemStateImpl<Element>;
   using Traits = typename Element::Traits;
   using T = typename Traits::T;
   using ConstitutiveModel = typename Traits::ConstitutiveModel;
@@ -95,11 +95,12 @@ class VolumetricModel : public FemModelImpl<Element> {
 
   /* Calculates the total elastic potential energy (in joules) in this
    VolumetricModel. */
-  T CalcElasticEnergy(const FemStateImpl<Element>& state) const {
+  T CalcElasticEnergy(const FemState<T>& state,
+                      const ElementDataImpl<Element>& element_data) const {
     T energy(0);
     for (ElementIndex i(0); i < this->num_elements(); ++i) {
       const Element& e = this->element(i);
-      energy += e.CalcElasticEnergy(state);
+      energy += e.CalcElasticEnergy(state, element_data.get_data(e));
     }
     return energy;
   }
@@ -131,10 +132,10 @@ class VolumetricModel : public FemModelImpl<Element> {
   const VectorX<T>& reference_positions() const { return reference_positions_; }
 
  private:
-  /* Implements FemModel::DoMakeFemState(). Generalized positions are
+  /* Implements FemModel::MakeFemState(). Generalized positions are
    initialized to be reference positions of the input mesh vertices. Velocities
    and accelerations are initialized to 0. */
-  FemState<T> DoMakeFemState() const final {
+  FemState<T> MakeFemState() const final {
     const int num_dofs = reference_positions_.size();
     return FemState<T>(reference_positions_, VectorX<T>::Zero(num_dofs),
                        VectorX<T>::Zero(num_dofs));
