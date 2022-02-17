@@ -1,6 +1,7 @@
 #pragma once
 
 #include "drake/common/type_safe_index.h"
+#include "drake/common/identifier.h"
 
 namespace drake {
 namespace multibody {
@@ -10,7 +11,7 @@ namespace fem {
 using ElementIndex = TypeSafeIndex<class ElementTag>;
 
 /** Index used to identify FEM models. */
-using ModelIndex = TypeSafeIndex<class ModelTag>;
+using ModelId = Identifier<class ModelTag>;
 
 /** Index used to identify node by index among FEM nodes. */
 using NodeIndex = TypeSafeIndex<class NodeTag>;

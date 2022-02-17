@@ -1,6 +1,6 @@
 #pragma once
 
-#include "drake/multibody/fem/fem_state.h"
+#include "drake/multibody/fem/fem_data.h"
 
 namespace drake {
 namespace multibody {

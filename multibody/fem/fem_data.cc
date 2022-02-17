@@ -26,17 +26,17 @@ const VectorX<T>& FemData<T>::GetAccelerations() const {
 }
 
 template <typename T>
-void FemData<T>::SetPositions(const VectorX<T>& q) {
+void FemData<T>::SetPositions(const Eigen::Ref<const VectorX<T>>& q) {
   context_->SetDiscreteState(info_.fem_position_index, q);
 }
 
 template <typename T>
-void FemData<T>::SetVelocities(const VectorX<T>& v) {
+void FemData<T>::SetVelocities(const Eigen::Ref<const VectorX<T>>& v) {
   context_->SetDiscreteState(info_.fem_velocity_index, v);
 }
 
 template <typename T>
-void FemData<T>::SetAccelerations(const VectorX<T>& a) {
+void FemData<T>::SetAccelerations(const Eigen::Ref<const VectorX<T>>& a) {
   context_->SetDiscreteState(info_.fem_acceleration_index, a);
 }
 

@@ -19,7 +19,7 @@ struct FemDataInfo {
   FemDataInfo() = default;
 
   const systems::LeafSystem<T>* system{nullptr};
-  ModelIndex model_index;
+  ModelId model_id;
   systems::DiscreteStateIndex fem_position_index;
   systems::DiscreteStateIndex fem_velocity_index;
   systems::DiscreteStateIndex fem_acceleration_index;
@@ -52,17 +52,17 @@ class FemData {
   const VectorX<T>& GetVelocities() const;
   const VectorX<T>& GetAccelerations() const;
 
-  void SetPositions(const VectorX<T>& q);
-  void SetVelocities(const VectorX<T>& v);
-  void SetAccelerations(const VectorX<T>& a);
+  void SetPositions(const Eigen::Ref<const VectorX<T>>& q);
+  void SetVelocities(const Eigen::Ref<const VectorX<T>>& v);
+  void SetAccelerations(const Eigen::Ref<const VectorX<T>>& a);
 
   int num_dofs() const {
     return context_->get_discrete_state(info_.fem_position_index).size();
   }
 
-  /* Return the index of the FEM model that creates and consumes the
+  /* Return the identifier of the FEM model that creates and consumes the
    state and cache entries of `this` FemData. */
-  ModelIndex model_index() const { return info_.model_index; }
+  ModelId model_id() const { return info_.model_id; }
 
  private:
   FemDataInfo<T> info_;

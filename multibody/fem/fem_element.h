@@ -71,8 +71,9 @@ class FemElement {
 
   /* Computes the per-element, state-dependent data associated with this
    `DerivedElement` given the `state`. */
-  Data ComputeData(const Matrix3X<T>& state) const {
-    return static_cast<const DerivedElement*>(this)->DoComputeData(state);
+  Data ComputeData(const VectorX<T>& q, const VectorX<T>& v,
+                   const VectorX<T>& a) const {
+    return static_cast<const DerivedElement*>(this)->DoComputeData(q, v, a);
   }
 
   /* Calculates the tangent matrix for the element by combining the stiffness
@@ -215,7 +216,8 @@ class FemElement {
   /* `DerivedElement` must provide an implementation for `DoComputeData()`.
    @throw std::exception if `DerivedElement` does not provide an
    implementation for `DoComputeData()`. */
-  Data DoComputeData(const Matrix3X<T>& state) const {
+  Data DoComputeData(const VectorX<T>& q, const VectorX<T>& v,
+                     const VectorX<T>& a) const {
     ThrowIfNotImplemented(__func__);
   }
 

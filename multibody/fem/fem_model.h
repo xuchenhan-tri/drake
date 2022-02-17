@@ -72,10 +72,15 @@ class FemModel {
   virtual int num_elements() const = 0;
 
   /** Creates a default FemData compatible with this model. */
-  std::unique_ptr<FemData<T>> MakeFemData() const {
+  FemData<T> MakeFemData() const {
     /* FEM state. */
-    const DiscreteStateIndex fem_state_index =
-        system_.DeclareDiscreteState(MakeFemState());
+    const Matrix3X<T> model_state = MakeFemState();
+    const DiscreteStateIndex q_index =
+        system_.DeclareDiscreteState(model_state.row(0));
+    const DiscreteStateIndex v_index =
+        system_.DeclareDiscreteState(model_state.row(1));
+    const DiscreteStateIndex a_index =
+        system_.DeclareDiscreteState(model_state.row(2));
     /* FEM element data. */
     const std::unique_ptr<const ElementData<T>> model_element_data =
         MakeElementData();
@@ -84,15 +89,23 @@ class FemModel {
         systems::ValueProducer(
             *model_element_data,
             std::function<void(const systems::Context<T>&, ElementData<T>*)>{
-                [fem_state_index, this](const systems::Context<T>& context,
-                                        ElementData<T>* element_data) {
-                  const FemState<T>& fem_state =
-                      context.get_discrete_state(fem_state_index);
-                  this->CalcElementData(fem_state, element_data);
+                [q_index, v_index, a_index, this](
+                    const systems::Context<T>& context,
+                    ElementData<T>* element_data) {
+                  const VectorX<T>& q =
+                      context.get_discrete_state(q_index).value();
+                  const VectorX<T>& v =
+                      context.get_discrete_state(v_index).value();
+                  const VectorX<T>& a =
+                      context.get_discrete_state(a_index).value();
+                  this->CalcElementData(q, v, a, element_data);
                 }}),
-        {system_.discrete_state_ticket(fem_state_index)});
+        {system_.discrete_state_ticket(q_index),
+         system_.discrete_state_ticket(v_index),
+         system_.discrete_state_ticket(a_index)});
     auto element_data_index = element_data_cache_entry.cache_index();
-    return {&system_, this, fem_state_index, element_data_index};
+    return FemData<T>(
+        {&system_, model_id_, q_index, v_index, a_index, element_data_index});
   }
 
   /** Calculates the residual at the given FEM state.
@@ -117,8 +130,7 @@ class FemModel {
    @throw std::exception if the FEM state is incompatible with this model.
    @note Use MakeFemData() to create an FEM state compatible with this
    model. */
-  void CalcTangentMatrix(const FemData<T>& fem_data,
-                         const Vector3<T>& weights,
+  void CalcTangentMatrix(const FemData<T>& fem_data, const Vector3<T>& weights,
                          Eigen::SparseMatrix<T>* tangent_matrix) const;
 
   /* Alternative signature for calculating tangent matrix that writes to a
@@ -189,7 +201,7 @@ class FemModel {
   }
 
  protected:
-  FemModel() = default;
+  FemModel() : model_id_(ModelId::get_new_id()) {}
 
   /** Creates a default FEM state for this model, where the positions are set to
    the reference positions and the velocity and the accelerations are set to
@@ -259,6 +271,7 @@ class FemModel {
   };
   CachingSystem<T> system_;
 
+  ModelId model_id_;
   /* The total number of nodes in the system. */
   int num_nodes_{0};
   /* The Dirichlet boundary condition that the model is subject to. */

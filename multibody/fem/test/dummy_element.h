@@ -55,12 +55,10 @@ class DummyElement final : public FemElement<DummyElement, DummyElementTraits> {
     const auto& element_data_cache_entry = system_.DeclareCacheEntry(
         "FEM state dependent element data",
         systems::ValueProducer(model_data, systems::ValueProducer::NoopCalc),
-        {system_.discrete_state_ticket(q_index),
-         system_.discrete_state_ticket(v_index),
-         system_.discrete_state_ticket(a_index)});
+        {systems::SystemBase::nothing_ticket()});
     auto element_data_index = element_data_cache_entry.cache_index();
-    fem_data_info_ = {&system_, ModelIndex(0), q_index,
-                      v_index,  a_index,       element_data_index};
+    fem_data_info_ = {&system_, ModelId::get_new_id(), q_index, v_index,
+                      a_index,  element_data_index};
   }
 
   /* Provides a fixed return value for CalcResidual(). */
@@ -99,9 +97,7 @@ class DummyElement final : public FemElement<DummyElement, DummyElementTraits> {
   /* Provides a fixed value for the `Data` for `ComputeData()`. */
   static typename Traits::Data dummy_data() { return {1.732}; }
 
-  const FemDataInfo<T>& fem_data_info() const {
-    return fem_data_info_;
-  }
+  const FemDataInfo<T>& fem_data_info() const { return fem_data_info_; }
 
  private:
   /* A system that can publicly declare cache entries. Used to manage the
@@ -118,15 +114,16 @@ class DummyElement final : public FemElement<DummyElement, DummyElementTraits> {
 
   /* Implements FemElement::ComputeData(). Returns a dummy data if `state` is
     empty. Otherwise return the sum of the last entries in each state. */
-  typename Traits::Data DoComputeData(const Matrix3X<T>& state) const {
-    const int state_dofs = state.cols();
+  typename Traits::Data DoComputeData(const VectorX<T>& q, const VectorX<T>& v,
+                                      const VectorX<T>& a) const {
+    const int state_dofs = q.size();
     if (state_dofs == 0) {
       return dummy_data();
     }
     typename Traits::Data data;
-    data.value = state(0, state_dofs - 1);
-    data.value += state(1, state_dofs - 1);
-    data.value += state(2, state_dofs - 1);
+    data.value = q(state_dofs - 1);
+    data.value += v(state_dofs - 1);
+    data.value += a(state_dofs - 1);
     return data;
   }
 
