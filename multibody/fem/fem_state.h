@@ -3,6 +3,7 @@
 #include <memory>
 
 #include "drake/common/default_scalars.h"
+#include "drake/systems/framework/basic_vector.h"
 
 namespace drake {
 namespace multibody {
@@ -12,18 +13,27 @@ namespace fem {
  velocities, and accelerations associated with each node.
  @tparam_nonsymbolic_scalar */
 template <typename T>
-class FemState {
+class FemState : systems::BasicVector<T> {
  public:
-  DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(FemState);
+  DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(FemState)
 
-  virtual ~FemState() = default;
+  /** Constructs an %FemState with prescribed generalized positions,
+   velocities, and accelerations.
+   @param[in] q  The prescribed generalized positions.
+   @param[in] v  The prescribed generalized velocities.
+   @param[in] a  The prescribed generalized accelerations.
+   @pre q.size() == v.size().
+   @pre q.size() == a.size(). */
+  FemState(const Eigen::Ref<const VectorX<T>>& q,
+           const Eigen::Ref<const VectorX<T>>& v,
+           const Eigen::Ref<const VectorX<T>>& a);
+
+  ~FemState() = default;
 
   /** @name State getters. @{ */
-  const VectorX<T>& GetPositions() const { return q_; }
-
-  const VectorX<T>& GetVelocities() const { return v_; }
-
-  const VectorX<T>& GetAccelerations() const { return a_; }
+  const VectorX<T>& GetPositions() const;
+  const VectorX<T>& GetVelocities() const;
+  const VectorX<T>& GetAccelerations() const;
   /** @} */
 
   /** @name State setters.
@@ -38,30 +48,13 @@ class FemState {
   /** @} */
 
   /* Returns the number of generalized positions in the state. */
-  int num_dofs() const { return q_.size(); }
-
-  /** Constructs an %FemState with prescribed generalized positions,
-   velocities, and accelerations.
-   @param[in] q  The prescribed generalized positions.
-   @param[in] v  The prescribed generalized velocities.
-   @param[in] a  The prescribed generalized accelerations.
-   @pre q.size() == v.size().
-   @pre q.size() == a.size(). */
-  FemState(const Eigen::Ref<const VectorX<T>>& q,
-           const Eigen::Ref<const VectorX<T>>& v,
-           const Eigen::Ref<const VectorX<T>>& a)
-      : q_(q), v_(v), a_(a) {
-    DRAKE_DEMAND(q_.size() == v_.size());
-    DRAKE_DEMAND(q_.size() == a_.size());
-  }
+  int num_dofs() const { return num_dofs_; }
 
  private:
-  /* Generalized positions. */
-  VectorX<T> q_{};
-  /* Generalized velocities. */
-  VectorX<T> v_{};
-  /* Generalized accelerations. */
-  VectorX<T> a_{};
+  int num_dofs_{0};
+  const Eigen::Ref<const VectorX<T>>& q_;
+  const Eigen::Ref<const VectorX<T>>& v_;
+  const Eigen::Ref<const VectorX<T>>& a_;
 };
 
 }  // namespace fem

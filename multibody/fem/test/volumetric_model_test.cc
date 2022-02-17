@@ -102,14 +102,14 @@ class VolumetricModelTest : public ::testing::Test {
    In addition, set up autodiff derivatives for accelerations if the scalar type
    is AutoDiffXd. */
   template <typename FemModelType>
-  std::unique_ptr<FemDataManager<typename FemModelType::T>> MakeDeformedFemData(
+  std::unique_ptr<FemData<typename FemModelType::T>> MakeDeformedFemData(
       const FemModelType& fem_model) {
     using T = typename FemModelType::T;
     const int num_dofs = fem_model.num_dofs();
     if constexpr (std::is_same_v<T, AutoDiffXd>) {
       const auto fem_data_info = fem_model.AllocateFemData(&autodiff_system_);
       autodiff_context_ = autodiff_system_.CreateDefaultContext();
-      auto fem_data = std::make_unique<FemDataManager<AutoDiffXd>>(
+      auto fem_data = std::make_unique<FemData<AutoDiffXd>>(
           fem_data_info, autodiff_context_.get());
       /* Perturb a. */
       const VectorX<double> perturbed_a =
@@ -127,7 +127,7 @@ class VolumetricModelTest : public ::testing::Test {
     } else {
       const auto fem_data_info = fem_model.AllocateFemData(&double_system_);
       double_context_ = double_system_.CreateDefaultContext();
-      auto fem_data = std::make_unique<FemDataManager<double>>(
+      auto fem_data = std::make_unique<FemData<double>>(
           fem_data_info, double_context_.get());
       /* Perturb a. */
       const VectorX<double> perturbed_a =
@@ -162,7 +162,7 @@ TEST_F(VolumetricModelTest, Geometry) {
 TEST_F(VolumetricModelTest, TangentMatrixIsResidualDerivative) {
   using T = AutoDiffXd;
 
-  std::unique_ptr<FemDataManager<AutoDiffXd>> fem_data =
+  std::unique_ptr<FemData<AutoDiffXd>> fem_data =
       MakeDeformedFemData(model_);
   VectorX<T> residual(fem_data->num_dofs());
   model_.CalcResidual(*fem_data, &residual);
@@ -190,7 +190,7 @@ TEST_F(VolumetricModelTest, TangentMatrixIsResidualDerivative) {
 /* Verifies that the tangent matrix calculated as PETSc matrix is the same as
  that calculated as Eigen::SparseMatrix. */
 TEST_F(VolumetricModelTest, TangentMatrixParity) {
-  std::unique_ptr<FemDataManager<AutoDiffXd>> fem_data =
+  std::unique_ptr<FemData<AutoDiffXd>> fem_data =
       MakeDeformedFemData(model_);
   Eigen::SparseMatrix<AutoDiffXd> eigen_tangent_matrix =
       model_.MakeEigenSparseTangentMatrix();
@@ -202,7 +202,7 @@ TEST_F(VolumetricModelTest, TangentMatrixParity) {
 
   VolumetricModel<DoubleElement> double_model;
   AddBoxToModel(&double_model);
-  std::unique_ptr<FemDataManager<double>> double_data =
+  std::unique_ptr<FemData<double>> double_data =
       MakeDeformedFemData(double_model);
   const AccelerationNewmarkScheme<double> double_integrator_{kDt, kGamma,
                                                              kBeta};
@@ -226,7 +226,7 @@ TEST_F(VolumetricModelTest, MultipleMesh) {
   /* Each cube is split into 6 tetrahedra. */
   EXPECT_EQ(model_.num_elements(), 2 * kNumElements);
 
-  const std::unique_ptr<FemDataManager<AutoDiffXd>> fem_data =
+  const std::unique_ptr<FemData<AutoDiffXd>> fem_data =
       MakeDeformedFemData(model_);
   EXPECT_EQ(fem_data->num_dofs(), 2 * kNumDofs);
 }

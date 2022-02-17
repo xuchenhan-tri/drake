@@ -26,7 +26,7 @@ drake_cc_package_library(
         ":discrete_time_integrator",
         ":element_cache_entry",
         ":element_data",
-        ":fem_data_manager",
+        ":fem_data",
         ":fem_element",
         ":fem_indexes",
         ":fem_model",
@@ -195,12 +195,12 @@ drake_cc_library(
 )
 
 drake_cc_library(
-    name = "fem_data_manager",
+    name = "fem_data",
     srcs = [
-        "fem_data_manager.cc",
+        "fem_data.cc",
     ],
     hdrs = [
-        "fem_data_manager.h",
+        "fem_data.h",
     ],
     deps = [
         ":fem_state",
@@ -249,7 +249,7 @@ drake_cc_library(
     deps = [
         ":dirichlet_boundary_condition",
         ":element_data",
-        ":fem_data_manager",
+        ":fem_data",
         ":fem_element",
         ":fem_indexes",
         ":fem_state",
@@ -284,6 +284,7 @@ drake_cc_library(
     ],
     deps = [
         "//common:default_scalars",
+        "//systems/framework:vector",
     ],
 )
 
@@ -632,16 +633,13 @@ drake_cc_googletest(
     ],
 )
 
-# drake_cc_googletest(
-#     name = "fem_state_test",
-#     deps = [
-#         ":dummy_element",
-#         ":element_cache_entry",
-#         ":fem_element",
-#         ":fem_state",
-#         "//common/test_utilities:expect_throws_message",
-#     ],
-# )
+drake_cc_googletest(
+    name = "fem_state_test",
+    deps = [
+        ":fem_state",
+        "//common/test_utilities:expect_throws_message",
+    ],
+)
 
 drake_cc_googletest(
     name = "isoparametric_element_test",

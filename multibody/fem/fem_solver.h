@@ -53,8 +53,8 @@ class FemSolver {
    incompatible with the FEM model solved by this solver.
    @throw std::exception if the solver doesn't converge after `kMaxIterations`
    Newton-Raphson iterations. */
-  int AdvanceOneTimeStep(const FemDataManager<T>& prev_state,
-                         FemDataManager<T>* next_state) const;
+  int AdvanceOneTimeStep(const FemData<T>& prev_state,
+                         FemData<T>* next_state) const;
 
   /* Returns the FEM model that this solver solves for. */
   const FemModel<T>& model() const { return *model_; }
@@ -88,7 +88,7 @@ class FemSolver {
    non-null and is guaranteed to be compatible with the FEM model.
    @param[in, out] state  As input, `state` provides an initial guess of
    the solution. As output, `state` reports the equilibrium state. */
-  int SolveWithInitialGuess(FemDataManager<T>* state) const;
+  int SolveWithInitialGuess(FemData<T>* state) const;
 
   /* Reset the scratch data in this class (tangent matrix, residual, and dz) if
    necessary. */

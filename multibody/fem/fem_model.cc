@@ -5,7 +5,7 @@ namespace multibody {
 namespace fem {
 
 template <typename T>
-void FemModel<T>::CalcResidual(const FemDataManager<T>& state,
+void FemModel<T>::CalcResidual(const FemData<T>& state,
                                EigenPtr<VectorX<T>> residual) const {
   DRAKE_DEMAND(residual != nullptr);
   ThrowIfModelStateIncompatible(__func__, state);
@@ -15,7 +15,7 @@ void FemModel<T>::CalcResidual(const FemDataManager<T>& state,
 
 template <typename T>
 void FemModel<T>::CalcTangentMatrix(
-    const FemDataManager<T>& state, const Vector3<T>& weights,
+    const FemData<T>& state, const Vector3<T>& weights,
     Eigen::SparseMatrix<T>* tangent_matrix) const {
   DRAKE_DEMAND(tangent_matrix != nullptr);
   DRAKE_DEMAND(tangent_matrix->rows() == num_dofs());
@@ -27,7 +27,7 @@ void FemModel<T>::CalcTangentMatrix(
 
 template <typename T>
 void FemModel<T>::CalcTangentMatrix(
-    const FemDataManager<T>& state, const Vector3<T>& weights,
+    const FemData<T>& state, const Vector3<T>& weights,
     internal::PetscSymmetricBlockSparseMatrix* tangent_matrix) const {
   DRAKE_DEMAND(tangent_matrix != nullptr);
   DRAKE_DEMAND(tangent_matrix->rows() == num_dofs());

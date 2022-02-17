@@ -287,7 +287,7 @@ class FemModelImpl : public FemModel<typename Element::Traits::T> {
 
   /* Implements FemModel::CalcResidual() by casting the FemState
    to its concrete type. */
-  void DoCalcResidual(const FemDataManager<T>& fem_data,
+  void DoCalcResidual(const FemData<T>& fem_data,
                       EigenPtr<VectorX<T>> residual) const final {
     const FemState<T>& state = fem_data.GetFemState();
     const ElementData<T>& element_data = fem_data.EvalElementData();
@@ -297,7 +297,7 @@ class FemModelImpl : public FemModel<typename Element::Traits::T> {
 
   /* Implements FemModel::CalcTangentMatrix() by casting the
    FemState to its concrete type. */
-  void DoCalcTangentMatrix(const FemDataManager<T>& fem_data,
+  void DoCalcTangentMatrix(const FemData<T>& fem_data,
                            const Vector3<T>& weights,
                            Eigen::SparseMatrix<T>* tangent_matrix) const final {
     const FemState<T>& state = fem_data.GetFemState();
@@ -310,7 +310,7 @@ class FemModelImpl : public FemModel<typename Element::Traits::T> {
   /* Implements FemModel::CalcTangentMatrix() by casting the
    FemState to its concrete type. */
   void DoCalcTangentMatrix(
-      const FemDataManager<T>& fem_data, const Vector3<T>& weights,
+      const FemData<T>& fem_data, const Vector3<T>& weights,
       PetscSymmetricBlockSparseMatrix* tangent_matrix) const final {
     const FemState<T>& state = fem_data.GetFemState();
     const ElementData<T>& element_data = fem_data.EvalElementData();

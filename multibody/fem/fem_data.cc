@@ -1,4 +1,4 @@
-#include "drake/multibody/fem/fem_data_manager.h"
+#include "drake/multibody/fem/fem_data.h"
 
 namespace drake {
 namespace multibody {

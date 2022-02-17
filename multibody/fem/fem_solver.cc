@@ -15,8 +15,8 @@ FemSolver<T>::FemSolver(const FemModel<T>* model,
 }
 
 template <typename T>
-int FemSolver<T>::AdvanceOneTimeStep(const FemDataManager<T>& prev_state,
-                                     FemDataManager<T>* next_state) const {
+int FemSolver<T>::AdvanceOneTimeStep(const FemData<T>& prev_state,
+                                     FemData<T>* next_state) const {
   DRAKE_DEMAND(next_state != nullptr);
   model_->ThrowIfModelStateIncompatible(__func__, prev_state);
   model_->ThrowIfModelStateIncompatible(__func__, *next_state);
@@ -52,7 +52,7 @@ void FemSolver<T>::set_linear_solve_tolerance(const T& residual_norm) const {
 }
 
 template <typename T>
-int FemSolver<T>::SolveWithInitialGuess(FemDataManager<T>* state) const {
+int FemSolver<T>::SolveWithInitialGuess(FemData<T>* state) const {
   /* Make sure the scratch quantities are of the correct sizes. */
   ResetScratchDataIfNecessary();
 
