@@ -43,7 +43,25 @@ class DummyElement final : public FemElement<DummyElement, DummyElementTraits> {
                const std::array<NodeIndex, Traits::num_nodes>& node_indices,
                const ConstitutiveModel& constitutive_model,
                const DampingModel<T>& damping_model)
-      : Base(element_index, node_indices, constitutive_model, damping_model) {}
+      : Base(element_index, node_indices, constitutive_model, damping_model) {
+    using systems::DiscreteStateIndex;
+    // Declare data for this dummy element in the private system owned by this
+    // element.
+    const DiscreteStateIndex q_index = system_.DeclareDiscreteState(kNumDofs);
+    const DiscreteStateIndex v_index = system_.DeclareDiscreteState(kNumDofs);
+    const DiscreteStateIndex a_index = system_.DeclareDiscreteState(kNumDofs);
+    /* FEM element data. */
+    ElementDataImpl<Data> model_data(1);
+    const auto& element_data_cache_entry = system_.DeclareCacheEntry(
+        "FEM state dependent element data",
+        systems::ValueProducer(model_data, systems::ValueProducer::NoopCalc),
+        {system_.discrete_state_ticket(q_index),
+         system_.discrete_state_ticket(v_index),
+         system_.discrete_state_ticket(a_index)});
+    auto element_data_index = element_data_cache_entry.cache_index();
+    fem_data_info_ = {&system_, ModelIndex(0), q_index,
+                      v_index,  a_index,       element_data_index};
+  }
 
   /* Provides a fixed return value for CalcResidual(). */
   static Vector<T, kNumDofs> dummy_residual() {
@@ -81,33 +99,45 @@ class DummyElement final : public FemElement<DummyElement, DummyElementTraits> {
   /* Provides a fixed value for the `Data` for `ComputeData()`. */
   static typename Traits::Data dummy_data() { return {1.732}; }
 
+  const FemDataInfo<T>& fem_data_info() const {
+    return fem_data_info_;
+  }
+
  private:
+  /* A system that can publicly declare cache entries. Used to manage the
+   FemData created and consumed by this FEM model. */
+  class CachingSystem : public systems::LeafSystem<T> {
+   public:
+    using LeafSystem::DeclareDiscreteState;
+    using SystemBase::DeclareCacheEntry;
+  };
+
   /* Friend the base class so that the interface in the CRTP base class can
    access the private implementations of this class. */
   friend Base;
 
   /* Implements FemElement::ComputeData(). Returns a dummy data if `state` is
     empty. Otherwise return the sum of the last entries in each state. */
-  typename Traits::Data DoComputeData(const FemState<T>& state) const {
-    const int state_dofs = state.num_dofs();
+  typename Traits::Data DoComputeData(const Matrix3X<T>& state) const {
+    const int state_dofs = state.cols();
     if (state_dofs == 0) {
       return dummy_data();
     }
     typename Traits::Data data;
-    data.value = state.GetPositions()(state_dofs - 1);
-    data.value += state.GetVelocities()(state_dofs - 1);
-    data.value += state.GetAccelerations()(state_dofs - 1);
+    data.value = state(0, state_dofs - 1);
+    data.value += state(1, state_dofs - 1);
+    data.value += state(2, state_dofs - 1);
     return data;
   }
 
   /* Implements FemElement::CalcResidual().
    The residual is equal to a dummy nonzero value if the states are all zero.
    Otherwise the residual is zero.*/
-  void DoCalcResidual(const FemState<T>& state, const Data&,
+  void DoCalcResidual(const FemData<T>& data,
                       EigenPtr<Vector<T, kNumDofs>> residual) const {
-    if (state.GetPositions().norm() == 0.0 &&
-        state.GetVelocities().norm() == 0.0 &&
-        state.GetAccelerations().norm() == 0.00) {
+    if (data.GetPositions().norm() == 0.0 &&
+        data.GetVelocities().norm() == 0.0 &&
+        data.GetAccelerations().norm() == 0.0) {
       *residual = dummy_residual();
     } else {
       residual->setZero();
@@ -116,24 +146,27 @@ class DummyElement final : public FemElement<DummyElement, DummyElementTraits> {
 
   /* Implements FemElement::AddScaledStiffnessMatrix(). */
   void DoAddScaledStiffnessMatrix(
-      const FemState<T>&, const Data&, const T& scale,
+      const FemData<T>&, const T& scale,
       EigenPtr<Eigen::Matrix<T, kNumDofs, kNumDofs>> K) const {
     *K += scale * dummy_stiffness_matrix();
   }
 
   /* Implements FemElement::AddScaledDampingMatrix(). */
   void DoAddScaledDampingMatrix(
-      const FemState<T>&, const Data&, const T& scale,
+      const FemData<T>&, const T& scale,
       EigenPtr<Eigen::Matrix<T, kNumDofs, kNumDofs>> D) const {
     *D += scale * dummy_damping_matrix();
   }
 
   /* Implements FemElement::AddScaledMassMatrix(). */
   void DoAddScaledMassMatrix(
-      const FemState<T>&, const Data&, const T& scale,
+      const FemData<T>&, const T& scale,
       EigenPtr<Eigen::Matrix<T, kNumDofs, kNumDofs>> M) const {
     *M += scale * dummy_mass_matrix();
   }
+
+  CachingSystem system_;
+  FemDataInfo<T> fem_data_info_;
 };
 
 }  // namespace test

@@ -31,7 +31,6 @@ drake_cc_package_library(
         ":fem_indexes",
         ":fem_model",
         ":fem_solver",
-        ":fem_state",
         ":isoparametric_element",
         ":linear_constitutive_model",
         ":linear_constitutive_model_data",
@@ -152,7 +151,7 @@ drake_cc_library(
     ],
     deps = [
         ":fem_indexes",
-        ":fem_state",
+        ":fem_data",
         ":petsc_symmetric_block_sparse_matrix",
         "//common:essential",
     ],
@@ -167,7 +166,7 @@ drake_cc_library(
         "discrete_time_integrator.h",
     ],
     deps = [
-        ":fem_state",
+        ":fem_data",
         "//common:unused",
     ],
 )
@@ -209,7 +208,7 @@ drake_cc_library(
         ":damping_model",
         ":element_data",
         ":fem_indexes",
-        ":fem_state",
+        ":fem_data",
         "//common:essential",
         "//multibody/fem:constitutive_model",
     ],
@@ -241,7 +240,6 @@ drake_cc_library(
         ":fem_data",
         ":fem_element",
         ":fem_indexes",
-        ":fem_state",
         ":petsc_symmetric_block_sparse_matrix",
         "//common:default_scalars",
         "//common:essential",
@@ -260,20 +258,6 @@ drake_cc_library(
         ":discrete_time_integrator",
         ":fem_model",
         "//common:essential",
-    ],
-)
-
-drake_cc_library(
-    name = "fem_state",
-    srcs = [
-        "fem_state.cc",
-    ],
-    hdrs = [
-        "fem_state.h",
-    ],
-    deps = [
-        "//common:default_scalars",
-        "//systems/framework:vector",
     ],
 )
 
@@ -566,7 +550,7 @@ drake_cc_googletest(
     deps = [
         ":dirichlet_boundary_condition",
         ":dummy_element",
-        ":fem_state",
+        ":fem_data",
         "//common/test_utilities:eigen_matrix_compare",
         "//common/test_utilities:expect_throws_message",
     ],
@@ -581,7 +565,7 @@ drake_cc_library(
         ":damping_model",
         ":element_data",
         ":fem_element",
-        ":fem_state",
+        ":fem_data",
         ":linear_constitutive_model",
     ],
 )
@@ -618,14 +602,6 @@ drake_cc_googletest(
         ":dummy_model",
         ":fem_solver",
         "//common/test_utilities:eigen_matrix_compare",
-        "//common/test_utilities:expect_throws_message",
-    ],
-)
-
-drake_cc_googletest(
-    name = "fem_state_test",
-    deps = [
-        ":fem_state",
         "//common/test_utilities:expect_throws_message",
     ],
 )

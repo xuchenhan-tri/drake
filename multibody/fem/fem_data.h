@@ -15,12 +15,15 @@ namespace fem {
  FemData. */
 template <typename T>
 struct FemDataInfo {
-  const systems::LeafSystem<T>* system;
-  const FemModelIndex model_index;
-  const systems::DiscreteStateIndex fem_position_index;
-  const systems::DiscreteStateIndex fem_velocity_index;
-  const systems::DiscreteStateIndex fem_acceleration_index;
-  const systems::CacheIndex element_data_index;
+  DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(FemDataInfo)
+  FemDataInfo() = default;
+
+  const systems::LeafSystem<T>* system{nullptr};
+  ModelIndex model_index;
+  systems::DiscreteStateIndex fem_position_index;
+  systems::DiscreteStateIndex fem_velocity_index;
+  systems::DiscreteStateIndex fem_acceleration_index;
+  systems::CacheIndex element_data_index;
 };
 
 /* FemData provides access to private workspace FEM state and per-element
@@ -54,12 +57,12 @@ class FemData {
   void SetAccelerations(const VectorX<T>& a);
 
   int num_dofs() const {
-    return get_discrete_state(info_.fem_position_index).size();
+    return context_->get_discrete_state(info_.fem_position_index).size();
   }
 
   /* Return the index of the FEM model that creates and consumes the
    state and cache entries of `this` FemData. */
-  FemModelIndex model_index() const { return info_.model_index; }
+  ModelIndex model_index() const { return info_.model_index; }
 
  private:
   FemDataInfo<T> info_;

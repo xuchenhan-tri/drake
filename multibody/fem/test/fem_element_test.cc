@@ -39,11 +39,17 @@ class FemElementTest : public ::testing::Test {
     return a;
   }
 
+  void SetUp() override {
+    fem_data_ = std::make_unique<FemData<T>>(element_.fem_data_info());
+    fem_data_->SetPositions(q());
+    fem_data_->SetVelocities(v());
+    fem_data_->SetAccelerations(a());
+  }
+
   /* FemElement under test. */
   DummyElement element_{kZeroIndex, kNodeIndices, kConstitutiveModel,
                         kDampingModel};
-  FemState<T> state_{q(), v(), a()};
-  Data data_{};
+  std::unique_ptr<FemData<T>> fem_data_;
 };
 
 TEST_F(FemElementTest, Constructor) {
@@ -57,14 +63,14 @@ TEST_F(FemElementTest, Constructor) {
  FemElement whose implementation returns/adds a specific value. */
 TEST_F(FemElementTest, Residual) {
   Vector<T, DummyElementTraits::num_dofs> residual;
-  element_.CalcResidual(state_, data_, &residual);
+  element_.CalcResidual(*fem_data_, &residual);
   const Vector<T, kNumDofs> zero_vector = Vector<T, kNumDofs>::Zero();
   EXPECT_EQ(residual, zero_vector);
 
-  state_.SetPositions(zero_vector);
-  state_.SetVelocities(zero_vector);
-  state_.SetAccelerations(zero_vector);
-  element_.CalcResidual(state_, data_, &residual);
+  fem_data_->SetPositions(zero_vector);
+  fem_data_->SetVelocities(zero_vector);
+  fem_data_->SetAccelerations(zero_vector);
+  element_.CalcResidual(*fem_data_, &residual);
   EXPECT_EQ(residual, element_.dummy_residual());
 }
 
@@ -73,7 +79,7 @@ TEST_F(FemElementTest, StiffnessMatrix) {
       K;
   K.setZero();
   const T scale = 3.14;
-  element_.AddScaledStiffnessMatrix(state_, data_, scale, &K);
+  element_.AddScaledStiffnessMatrix(*fem_data_, scale, &K);
   EXPECT_EQ(K, scale * element_.dummy_stiffness_matrix());
 }
 
@@ -82,7 +88,7 @@ TEST_F(FemElementTest, DampingMatrix) {
       D;
   D.setZero();
   const T scale = 3.14;
-  element_.AddScaledDampingMatrix(state_, data_, scale, &D);
+  element_.AddScaledDampingMatrix(*fem_data_, scale, &D);
   EXPECT_EQ(D, scale * element_.dummy_damping_matrix());
 }
 
@@ -92,7 +98,7 @@ TEST_F(FemElementTest, MassMatrix) {
       M;
   M.setZero();
   const T scale = 3.14;
-  element_.AddScaledMassMatrix(state_, data_, scale, &M);
+  element_.AddScaledMassMatrix(*fem_data_, scale, &M);
   EXPECT_EQ(M, scale * element_.dummy_mass_matrix());
 }
 
