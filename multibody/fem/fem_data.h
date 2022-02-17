@@ -1,16 +1,13 @@
 #pragma once
 
-#include "drake/multibody/fem/element_data.h"
-#include "drake/multibody/fem/fem_state.h"
+#include "drake/multibody/fem/element_data_impl.h"
+#include "drake/multibody/fem/fem_indexes.h"
 #include "drake/systems/framework/context.h"
 #include "drake/systems/framework/leaf_system.h"
 
 namespace drake {
 namespace multibody {
 namespace fem {
-
-template <typename T>
-class FemModel;
 
 /* Contains system-side information required to construct a FemData.
  stored in a system. Typically, one would declare system resources via
@@ -19,8 +16,10 @@ class FemModel;
 template <typename T>
 struct FemDataInfo {
   const systems::LeafSystem<T>* system;
-  const FemModel<T>* model;
-  const systems::DiscreteStateIndex fem_state_index;
+  const FemModelIndex model_index;
+  const systems::DiscreteStateIndex fem_position_index;
+  const systems::DiscreteStateIndex fem_velocity_index;
+  const systems::DiscreteStateIndex fem_acceleration_index;
   const systems::CacheIndex element_data_index;
 };
 
@@ -33,56 +32,34 @@ class FemData {
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(FemData);
 
   /* Creates an FemData described by the given information. */
-  FemData(const FemDataInfo& data_info) : info_(data_info) {
-    context_ = info_.system.CreateDefaultContext();
-  }
+  FemData(const FemDataInfo<T>& data_info);
 
-  /* Returns the FEM state in `this` FemData. */
-  const FemState<T>& GetFemState() const {
-    context_->get_discrete_state(info_.fem_state_index);
-  }
-
-  /* Returns the mutable FEM state in `this` FemData. */
-  FemState<T>& GetFemState() const {
-    context_->get_mutable_discrete_state(info_.fem_state_index);
-  }
-
-  /* Returns per element data in `this` FemData. */
-  const ElementData<T>& EvalElementData() const {
-    return info_.system->get_cache_entry(info_.element_data_index)
-        .template Eval<ElementData<T>>(*context_);
+  /* Returns per element data in `this` FemData.
+  @throws std::exception if the value doesn't actually have type V. */
+  template <typename DataType>
+  const DataType& EvalElementData(ElementIndex element_index) const {
+    const auto& element_data =
+        info_.system->get_cache_entry(info_.element_data_index)
+            .template Eval<internal::ElementDataImpl<DataType>>(*context_);
+    return element_data.get_data(element_index);
   }
 
   /* Sugar to get/set a part of the FEM state (q, v, or a). */
-  const VectorX<T>& GetPositions() const {
-    return GetFemState().GetPositions();
+  const VectorX<T>& GetPositions() const;
+  const VectorX<T>& GetVelocities() const;
+  const VectorX<T>& GetAccelerations() const;
+
+  void SetPositions(const VectorX<T>& q);
+  void SetVelocities(const VectorX<T>& v);
+  void SetAccelerations(const VectorX<T>& a);
+
+  int num_dofs() const {
+    return get_discrete_state(info_.fem_position_index).size();
   }
 
-  const VectorX<T>& GetVelocities() const {
-    return GetFemState().GetVelocities();
-  }
-
-  const VectorX<T>& GetAccelerations() const {
-    return GetFemState().GetAccelerations();
-  }
-
-  void SetPositions(const VectorX<T>& q) {
-    GetMutableFemState().SetPositions(q);
-  }
-
-  void SetVelocities(const VectorX<T>& v) {
-    GetMutableFemState().SetVelocities(v);
-  }
-
-  void SetAccelerations(const VectorX<T>& a) {
-    GetMutableFemState().SetAccelerations(a);
-  }
-
-  int num_dofs() const { return GetFemState().num_dofs(); }
-
-  /* (Internal) Return the model that creates and consumes the state and cache
-   entries of `this` FemData. */
-  const FemModel<T>* model() const { return info_.model; }
+  /* Return the index of the FEM model that creates and consumes the
+   state and cache entries of `this` FemData. */
+  FemModelIndex model_index() const { return info_.model_index; }
 
  private:
   FemDataInfo<T> info_;

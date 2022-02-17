@@ -184,17 +184,6 @@ drake_cc_library(
 )
 
 drake_cc_library(
-    name = "element_cache_entry",
-    hdrs = [
-        "element_cache_entry.h",
-    ],
-    deps = [
-        ":fem_indexes",
-        "//common:essential",
-    ],
-)
-
-drake_cc_library(
     name = "fem_data",
     srcs = [
         "fem_data.cc",
@@ -203,8 +192,8 @@ drake_cc_library(
         "fem_data.h",
     ],
     deps = [
-        ":fem_state",
         ":element_data",
+        ":fem_indexes",
         "//common:essential",
         "//systems/framework:context",
         "//systems/framework:leaf_system",

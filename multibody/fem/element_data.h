@@ -10,7 +10,6 @@ namespace fem {
 
 /** Abstract class for per element FEM data.
  @tparam_nonsymbolic_scalar */
-template <typename T>
 class ElementData {
  public:
   virtual ~ElementData() = default;
@@ -18,7 +17,7 @@ class ElementData {
   /* Returns the number of elements that this ElementData has data for. */
   virtual int size() const = 0;
 
-  virtual std::unique_ptr<ElementData<T>> Clone() const = 0;
+  virtual std::unique_ptr<ElementData> Clone() const = 0;
 
  protected:
   ElementData() = default;
