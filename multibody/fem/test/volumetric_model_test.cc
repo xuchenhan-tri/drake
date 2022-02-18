@@ -6,7 +6,7 @@
 #include "drake/geometry/proximity/make_box_mesh.h"
 #include "drake/math/autodiff_gradient.h"
 #include "drake/multibody/fem/acceleration_newmark_scheme.h"
-#include "drake/multibody/fem/fem_state.h"
+#include "drake/multibody/fem/fem_data.h"
 #include "drake/multibody/fem/linear_constitutive_model.h"
 #include "drake/multibody/fem/linear_simplex_element.h"
 #include "drake/multibody/fem/simplex_gaussian_quadrature.h"
@@ -97,55 +97,45 @@ class VolumetricModelTest : public ::testing::Test {
     return delta;
   }
 
-  /* Returns an arbitrary FEM state whose generalized positions are different
+  /* Returns an arbitrary FEM data whose generalized positions are different
    from reference positions and whose velocities and acclerations are nonzero.
    In addition, set up autodiff derivatives for accelerations if the scalar type
    is AutoDiffXd. */
   template <typename FemModelType>
-  std::unique_ptr<FemData<typename FemModelType::T>> MakeDeformedFemData(
+  FemData<typename FemModelType::T> MakeDeformedFemData(
       const FemModelType& fem_model) {
     using T = typename FemModelType::T;
     const int num_dofs = fem_model.num_dofs();
     if constexpr (std::is_same_v<T, AutoDiffXd>) {
-      const auto fem_data_info = fem_model.AllocateFemData(&autodiff_system_);
-      autodiff_context_ = autodiff_system_.CreateDefaultContext();
-      auto fem_data = std::make_unique<FemData<AutoDiffXd>>(
-          fem_data_info, autodiff_context_.get());
+      const FemData<T> reference_fem_data = fem_model.MakeFemData();
+      FemData<T> deformed_fem_data = fem_model.MakeFemData();
       /* Perturb a. */
       const VectorX<double> perturbed_a =
-          math::ExtractValue(fem_data->GetAccelerations()) +
+          math::ExtractValue(reference_fem_data.GetAccelerations()) +
           perturbation(num_dofs);
       /* Set up AutodiffXd derivatives. */
       VectorX<AutoDiffXd> perturbed_a_autodiff(num_dofs);
       math::InitializeAutoDiff(perturbed_a, &perturbed_a_autodiff);
-      /* It's important to set up the `deformed_state` with AdvanceOneTimeStep()
-       so that the derivatives such as dq/da are set up. */
-      integrator_.AdvanceOneTimeStep(fem_data->GetFemState(),
-                                     perturbed_a_autodiff,
-                                     &fem_data->GetMutableFemState());
-      return fem_data;
+      /* It's important to set up the `deformed_fem_data` with
+       AdvanceOneTimeStep() so that the derivatives such as dq/da are set up. */
+      integrator_.AdvanceOneTimeStep(reference_fem_data, perturbed_a_autodiff,
+                                     &deformed_fem_data);
+      return deformed_fem_data;
     } else {
-      const auto fem_data_info = fem_model.AllocateFemData(&double_system_);
-      double_context_ = double_system_.CreateDefaultContext();
-      auto fem_data = std::make_unique<FemData<double>>(
-          fem_data_info, double_context_.get());
+      const FemData<T> reference_fem_data = fem_model.MakeFemData();
+      FemData<T> deformed_fem_data = fem_model.MakeFemData();
       /* Perturb a. */
       const VectorX<double> perturbed_a =
-          fem_data->GetAccelerations() + perturbation(num_dofs);
+          reference_fem_data.GetAccelerations() + perturbation(num_dofs);
       const AccelerationNewmarkScheme<double> double_integrator(kDt, kGamma,
                                                                 kBeta);
-      double_integrator.AdvanceOneTimeStep(fem_data->GetFemState(), perturbed_a,
-                                           &fem_data->GetMutableFemState());
-      return fem_data;
+      double_integrator.AdvanceOneTimeStep(reference_fem_data, perturbed_a,
+                                           &deformed_fem_data);
+      return deformed_fem_data;
     }
     DRAKE_UNREACHABLE();
   }
 
-  /* The system and context that allocates and stores FEM data. */
-  systems::LeafSystem<double> double_system_{};
-  systems::LeafSystem<AutoDiffXd> autodiff_system_{};
-  std::unique_ptr<systems::Context<double>> double_context_{nullptr};
-  std::unique_ptr<systems::Context<AutoDiffXd>> autodiff_context_{nullptr};
   /* The model under test. */
   VolumetricModel<AutoDiffElement> model_{};
   AccelerationNewmarkScheme<AutoDiffXd> integrator_{kDt, kGamma, kBeta};
@@ -162,13 +152,12 @@ TEST_F(VolumetricModelTest, Geometry) {
 TEST_F(VolumetricModelTest, TangentMatrixIsResidualDerivative) {
   using T = AutoDiffXd;
 
-  std::unique_ptr<FemData<AutoDiffXd>> fem_data =
-      MakeDeformedFemData(model_);
-  VectorX<T> residual(fem_data->num_dofs());
-  model_.CalcResidual(*fem_data, &residual);
+  const FemData<T> fem_data = MakeDeformedFemData(model_);
+  VectorX<T> residual(fem_data.num_dofs());
+  model_.CalcResidual(fem_data, &residual);
 
   Eigen::SparseMatrix<T> tangent_matrix = model_.MakeEigenSparseTangentMatrix();
-  model_.CalcTangentMatrix(*fem_data, integrator_.weights(), &tangent_matrix);
+  model_.CalcTangentMatrix(fem_data, integrator_.weights(), &tangent_matrix);
 
   /* In the discretization of the unit cube by 6 tetrahedra, there are 19 edges,
    and 8 nodes, creating 19*2 + 8 blocks of 3-by-3 nonzero entries. Hence the
@@ -177,7 +166,7 @@ TEST_F(VolumetricModelTest, TangentMatrixIsResidualDerivative) {
   EXPECT_EQ(tangent_matrix.nonZeros(), nnz);
 
   const MatrixX<T> dense_tangent_matrix(tangent_matrix);
-  for (int i = 0; i < fem_data->num_dofs(); ++i) {
+  for (int i = 0; i < fem_data.num_dofs(); ++i) {
     /* The tangent matrix should be the derivative of the residual. Notice that
      here we are comparing a VectorX<double> and the value of a
      VectorX<AutoDiffXd>. */
@@ -190,11 +179,10 @@ TEST_F(VolumetricModelTest, TangentMatrixIsResidualDerivative) {
 /* Verifies that the tangent matrix calculated as PETSc matrix is the same as
  that calculated as Eigen::SparseMatrix. */
 TEST_F(VolumetricModelTest, TangentMatrixParity) {
-  std::unique_ptr<FemData<AutoDiffXd>> fem_data =
-      MakeDeformedFemData(model_);
+  const FemData<AutoDiffXd> fem_data = MakeDeformedFemData(model_);
   Eigen::SparseMatrix<AutoDiffXd> eigen_tangent_matrix =
       model_.MakeEigenSparseTangentMatrix();
-  model_.CalcTangentMatrix(*fem_data, integrator_.weights(),
+  model_.CalcTangentMatrix(fem_data, integrator_.weights(),
                            &eigen_tangent_matrix);
   const MatrixX<AutoDiffXd> eigen_dense_autodiff_matrix = eigen_tangent_matrix;
   const MatrixXd eigen_dense_matrix =
@@ -202,14 +190,13 @@ TEST_F(VolumetricModelTest, TangentMatrixParity) {
 
   VolumetricModel<DoubleElement> double_model;
   AddBoxToModel(&double_model);
-  std::unique_ptr<FemData<double>> double_data =
-      MakeDeformedFemData(double_model);
+  const FemData<double> double_fem_data = MakeDeformedFemData(double_model);
   const AccelerationNewmarkScheme<double> double_integrator_{kDt, kGamma,
                                                              kBeta};
   std::unique_ptr<internal::PetscSymmetricBlockSparseMatrix>
       petsc_tangent_matrix =
           double_model.MakePetscSymmetricBlockSparseTangentMatrix();
-  double_model.CalcTangentMatrix(*double_data, double_integrator_.weights(),
+  double_model.CalcTangentMatrix(double_fem_data, double_integrator_.weights(),
                                  petsc_tangent_matrix.get());
   petsc_tangent_matrix->AssembleIfNecessary();
   const MatrixXd petsc_dense_matrix = petsc_tangent_matrix->MakeDenseMatrix();
@@ -226,9 +213,8 @@ TEST_F(VolumetricModelTest, MultipleMesh) {
   /* Each cube is split into 6 tetrahedra. */
   EXPECT_EQ(model_.num_elements(), 2 * kNumElements);
 
-  const std::unique_ptr<FemData<AutoDiffXd>> fem_data =
-      MakeDeformedFemData(model_);
-  EXPECT_EQ(fem_data->num_dofs(), 2 * kNumDofs);
+  const FemData<AutoDiffXd> fem_data = MakeDeformedFemData(model_);
+  EXPECT_EQ(fem_data.num_dofs(), 2 * kNumDofs);
 }
 
 }  // namespace

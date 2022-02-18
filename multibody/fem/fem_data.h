@@ -4,6 +4,7 @@
 #include "drake/multibody/fem/fem_indexes.h"
 #include "drake/systems/framework/context.h"
 #include "drake/systems/framework/leaf_system.h"
+#include "drake/common/copyable_unique_ptr.h"
 
 namespace drake {
 namespace multibody {
@@ -32,7 +33,7 @@ struct FemDataInfo {
 template <typename T>
 class FemData {
  public:
-  DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(FemData);
+  DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(FemData);
 
   /* Creates an FemData described by the given information. */
   FemData(const FemDataInfo<T>& data_info);
@@ -66,7 +67,7 @@ class FemData {
 
  private:
   FemDataInfo<T> info_;
-  std::unique_ptr<systems::Context<T>> context_{nullptr};
+  copyable_unique_ptr<systems::Context<T>> context_{nullptr};
 };
 
 }  // namespace fem

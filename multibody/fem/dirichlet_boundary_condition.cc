@@ -13,21 +13,21 @@ void DirichletBoundaryCondition<T>::AddBoundaryCondition(
 
 template <class T>
 void DirichletBoundaryCondition<T>::ApplyBoundaryConditionToState(
-    FemState<T>* state) const {
+    FemData<T>* fem_data) const {
   if (index_to_boundary_state_.empty()) return;
-  DRAKE_DEMAND(state != nullptr);
-  VerifyIndexes(state->num_dofs());
-  VectorX<T> q = state->GetPositions();
-  VectorX<T> v = state->GetVelocities();
-  VectorX<T> a = state->GetAccelerations();
+  DRAKE_DEMAND(fem_data != nullptr);
+  VerifyIndexes(fem_data->num_dofs());
+  VectorX<T> q = fem_data->GetPositions();
+  VectorX<T> v = fem_data->GetVelocities();
+  VectorX<T> a = fem_data->GetAccelerations();
   for (const auto& [dof_index, boundary_state] : index_to_boundary_state_) {
     q(dof_index) = boundary_state(0);
     v(dof_index) = boundary_state(1);
     a(dof_index) = boundary_state(2);
   }
-  state->SetPositions(q);
-  state->SetVelocities(v);
-  state->SetAccelerations(a);
+  fem_data->SetPositions(q);
+  fem_data->SetVelocities(v);
+  fem_data->SetAccelerations(a);
 }
 
 template <class T>

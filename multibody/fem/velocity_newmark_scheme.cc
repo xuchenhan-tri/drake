@@ -7,31 +7,31 @@ namespace internal {
 
 template <typename T>
 void VelocityNewmarkScheme<T>::DoUpdateStateFromChangeInUnknowns(
-    const VectorX<T>& dz, FemState<T>* state) const {
-  const VectorX<T>& a = state->GetAccelerations();
-  const VectorX<T>& v = state->GetVelocities();
-  const VectorX<T>& x = state->GetPositions();
-  state->SetAccelerations(a + one_over_dt_gamma_ * dz);
-  state->SetVelocities(v + dz);
-  state->SetPositions(x + dt() * beta_over_gamma_ * dz);
+    const VectorX<T>& dz, FemData<T>* fem_data) const {
+  const VectorX<T>& a = fem_data->GetAccelerations();
+  const VectorX<T>& v = fem_data->GetVelocities();
+  const VectorX<T>& x = fem_data->GetPositions();
+  fem_data->SetAccelerations(a + one_over_dt_gamma_ * dz);
+  fem_data->SetVelocities(v + dz);
+  fem_data->SetPositions(x + dt() * beta_over_gamma_ * dz);
 }
 
 template <typename T>
 void VelocityNewmarkScheme<T>::DoAdvanceOneTimeStep(
-    const FemState<T>& prev_state, const VectorX<T>& unknown_variable,
-    FemState<T>* state) const {
-  const VectorX<T>& an = prev_state.GetAccelerations();
-  const VectorX<T>& vn = prev_state.GetVelocities();
-  const VectorX<T>& xn = prev_state.GetPositions();
+    const FemData<T>& prev_fem_data, const VectorX<T>& unknown_variable,
+    FemData<T>* next_fem_data) const {
+  const VectorX<T>& an = prev_fem_data.GetAccelerations();
+  const VectorX<T>& vn = prev_fem_data.GetVelocities();
+  const VectorX<T>& xn = prev_fem_data.GetPositions();
   const VectorX<T>& v = unknown_variable;
   /* Update x, a, v in that order to ensure we handle the case where
-   &prev_state == state. */
-  state->SetPositions(
+   &prev_fem_data == fem_data. */
+  next_fem_data->SetPositions(
       xn + dt() * (beta_over_gamma_ * v + (1.0 - beta_over_gamma_) * vn) +
       dt() * dt() * (0.5 - beta_over_gamma_) * an);
-  state->SetAccelerations(one_over_dt_gamma_ * (v - vn) -
-                          (1.0 - gamma()) / gamma() * an);
-  state->SetVelocities(v);
+  next_fem_data->SetAccelerations(one_over_dt_gamma_ * (v - vn) -
+                                  (1.0 - gamma()) / gamma() * an);
+  next_fem_data->SetVelocities(v);
 }
 
 }  // namespace internal

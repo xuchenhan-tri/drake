@@ -14,26 +14,26 @@ Vector3<T> DiscreteTimeIntegrator<T>::weights() const {
 
 template <typename T>
 const VectorX<T>& DiscreteTimeIntegrator<T>::GetUnknowns(
-    const FemState<T>& state) const {
-  return DoGetUnknowns(state);
+    const FemData<T>& fem_data) const {
+  return DoGetUnknowns(fem_data);
 }
 
 template <typename T>
 void DiscreteTimeIntegrator<T>::UpdateStateFromChangeInUnknowns(
-    const VectorX<T>& dz, FemState<T>* state) const {
-  DRAKE_DEMAND(state != nullptr);
-  DRAKE_DEMAND(dz.size() == state->num_dofs());
-  DoUpdateStateFromChangeInUnknowns(dz, state);
+    const VectorX<T>& dz, FemData<T>* fem_data) const {
+  DRAKE_DEMAND(fem_data != nullptr);
+  DRAKE_DEMAND(dz.size() == fem_data->num_dofs());
+  DoUpdateStateFromChangeInUnknowns(dz, fem_data);
 }
 
 template <typename T>
 void DiscreteTimeIntegrator<T>::AdvanceOneTimeStep(
-    const FemState<T>& prev_state, const VectorX<T>& unknown_variable,
-    FemState<T>* next_state) const {
-  DRAKE_DEMAND(next_state != nullptr);
-  DRAKE_DEMAND(prev_state.num_dofs() == next_state->num_dofs());
-  DRAKE_DEMAND(prev_state.num_dofs() == unknown_variable.size());
-  DoAdvanceOneTimeStep(prev_state, unknown_variable, next_state);
+    const FemData<T>& prev_fem_data, const VectorX<T>& unknown_variable,
+    FemData<T>* next_fem_data) const {
+  DRAKE_DEMAND(next_fem_data != nullptr);
+  DRAKE_DEMAND(prev_fem_data.num_dofs() == next_fem_data->num_dofs());
+  DRAKE_DEMAND(prev_fem_data.num_dofs() == unknown_variable.size());
+  DoAdvanceOneTimeStep(prev_fem_data, unknown_variable, next_fem_data);
 }
 
 }  // namespace internal

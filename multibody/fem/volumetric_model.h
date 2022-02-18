@@ -7,8 +7,8 @@
 #include "drake/geometry/proximity/volume_mesh.h"
 #include "drake/multibody/fem/damping_model.h"
 #include "drake/multibody/fem/element_data_impl.h"
+#include "drake/multibody/fem/fem_data.h"
 #include "drake/multibody/fem/fem_model_impl.h"
-#include "drake/multibody/fem/fem_state.h"
 #include "drake/multibody/fem/volumetric_element.h"
 
 namespace drake {
@@ -95,12 +95,11 @@ class VolumetricModel : public FemModelImpl<Element> {
 
   /* Calculates the total elastic potential energy (in joules) in this
    VolumetricModel. */
-  T CalcElasticEnergy(const FemState<T>& state,
-                      const ElementDataImpl<Element>& element_data) const {
+  T CalcElasticEnergy(const FemData<T>& fem_data) const {
     T energy(0);
     for (ElementIndex i(0); i < this->num_elements(); ++i) {
       const Element& e = this->element(i);
-      energy += e.CalcElasticEnergy(state, element_data.get_data(e));
+      energy += e.CalcElasticEnergy(fem_data);
     }
     return energy;
   }
@@ -128,17 +127,56 @@ class VolumetricModel : public FemModelImpl<Element> {
     return num_existing_nodes;
   }
 
-  /* Returns the reference positions of all nodes in the model. */
-  const VectorX<T>& reference_positions() const { return reference_positions_; }
-
  private:
-  /* Implements FemModel::MakeFemState(). Generalized positions are
-   initialized to be reference positions of the input mesh vertices. Velocities
-   and accelerations are initialized to 0. */
-  FemState<T> MakeFemState() const final {
-    const int num_dofs = reference_positions_.size();
-    return FemState<T>(reference_positions_, VectorX<T>::Zero(num_dofs),
-                       VectorX<T>::Zero(num_dofs));
+  using Data = typename Element::Data;
+  using FemModel<T>::CachingSystem;
+
+  /* Implements FemModel::MakeReferencePositions(). The reference positions are
+   the positions of the input mesh vertices. */
+  VectorX<T> MakeReferencePositions() const final {
+    return reference_positions_;
+  }
+
+  void CalcElementData(const Eigen::Ref<const VectorX<T>>& q,
+                       const Eigen::Ref<const VectorX<T>>& v,
+                       const Eigen::Ref<const VectorX<T>>& a,
+                       ElementDataImpl<Data>* element_data) const {
+    DRAKE_DEMAND(element_data != nullptr);
+    DRAKE_DEMAND(element_data->size() == this->num_elements());
+    DRAKE_DEMAND(q.size() == this->num_dofs());
+    DRAKE_DEMAND(v.size() == this->num_dofs());
+    DRAKE_DEMAND(a.size() == this->num_dofs());
+    for (ElementIndex i(0); i < this->num_elements(); ++i) {
+      element_data->set_data(i, this->element(i).ComputeData(q, v, a));
+    }
+  }
+
+  systems::CacheIndex DeclareElementData(
+      systems::DiscreteStateIndex q_index, systems::DiscreteStateIndex v_index,
+      systems::DiscreteStateIndex a_index) const final {
+    const ElementDataImpl<Data> model_element_data(this->num_elements());
+    auto& system = this->get_mutable_caching_system();
+    const auto& element_data_cache_entry = system.DeclareCacheEntry(
+        "FEM state dependent element data",
+        systems::ValueProducer(
+            model_element_data,
+            std::function<void(const systems::Context<T>&,
+                               ElementDataImpl<Data>*)>{
+                [q_index, v_index, a_index, this](
+                    const systems::Context<T>& context,
+                    ElementDataImpl<Data>* element_data) {
+                  const VectorX<T>& q =
+                      context.get_discrete_state(q_index).value();
+                  const VectorX<T>& v =
+                      context.get_discrete_state(v_index).value();
+                  const VectorX<T>& a =
+                      context.get_discrete_state(a_index).value();
+                  this->CalcElementData(q, v, a, element_data);
+                }}),
+        {system.discrete_state_ticket(q_index),
+         system.discrete_state_ticket(v_index),
+         system.discrete_state_ticket(a_index)});
+    return element_data_cache_entry.cache_index();
   }
 
   VectorX<T> reference_positions_{};

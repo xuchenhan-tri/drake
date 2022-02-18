@@ -5,35 +5,35 @@ namespace multibody {
 namespace fem {
 
 template <typename T>
-void FemModel<T>::CalcResidual(const FemData<T>& state,
+void FemModel<T>::CalcResidual(const FemData<T>& fem_data,
                                EigenPtr<VectorX<T>> residual) const {
   DRAKE_DEMAND(residual != nullptr);
-  ThrowIfModelStateIncompatible(__func__, state);
-  DoCalcResidual(state, residual);
+  ThrowIfModelDataIncompatible(__func__, fem_data);
+  DoCalcResidual(fem_data, residual);
   dirichlet_bc_.ApplyBoundaryConditionToResidual(residual);
 }
 
 template <typename T>
 void FemModel<T>::CalcTangentMatrix(
-    const FemData<T>& state, const Vector3<T>& weights,
+    const FemData<T>& fem_data, const Vector3<T>& weights,
     Eigen::SparseMatrix<T>* tangent_matrix) const {
   DRAKE_DEMAND(tangent_matrix != nullptr);
   DRAKE_DEMAND(tangent_matrix->rows() == num_dofs());
   DRAKE_DEMAND(tangent_matrix->cols() == num_dofs());
-  ThrowIfModelStateIncompatible(__func__, state);
-  DoCalcTangentMatrix(state, weights, tangent_matrix);
+  ThrowIfModelDataIncompatible(__func__, fem_data);
+  DoCalcTangentMatrix(fem_data, weights, tangent_matrix);
   dirichlet_bc_.ApplyBoundaryConditionToTangentMatrix(tangent_matrix);
 }
 
 template <typename T>
 void FemModel<T>::CalcTangentMatrix(
-    const FemData<T>& state, const Vector3<T>& weights,
+    const FemData<T>& fem_data, const Vector3<T>& weights,
     internal::PetscSymmetricBlockSparseMatrix* tangent_matrix) const {
   DRAKE_DEMAND(tangent_matrix != nullptr);
   DRAKE_DEMAND(tangent_matrix->rows() == num_dofs());
   DRAKE_DEMAND(tangent_matrix->cols() == num_dofs());
-  ThrowIfModelStateIncompatible(__func__, state);
-  DoCalcTangentMatrix(state, weights, tangent_matrix);
+  ThrowIfModelDataIncompatible(__func__, fem_data);
+  DoCalcTangentMatrix(fem_data, weights, tangent_matrix);
   dirichlet_bc_.ApplyBoundaryConditionToTangentMatrix(tangent_matrix);
 }
 
@@ -49,9 +49,9 @@ FemModel<T>::MakePetscSymmetricBlockSparseTangentMatrix() const {
 }
 
 template <typename T>
-void FemModel<T>::ApplyBoundaryCondition(FemState<T>* state) const {
-  DRAKE_DEMAND(state != nullptr);
-  dirichlet_bc_.ApplyBoundaryConditionToState(state);
+void FemModel<T>::ApplyBoundaryCondition(FemData<T>* fem_data) const {
+  DRAKE_DEMAND(fem_data != nullptr);
+  dirichlet_bc_.ApplyBoundaryConditionToState(fem_data);
 }
 
 template <typename T>

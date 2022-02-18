@@ -47,32 +47,33 @@ class DiscreteTimeIntegrator {
    matrix (see FemModel::CalcTangentMatrix). */
   Vector3<T> weights() const;
 
-  /* Extracts the unknown variable `z` from the given FEM `state`. */
-  const VectorX<T>& GetUnknowns(const FemState<T>& state) const;
+  /* Extracts the unknown variable `z` from the given `fem_data`. */
+  const VectorX<T>& GetUnknowns(const FemData<T>& fem_data) const;
 
-  /* Updates the FemState `state` given the change in the unknown variables.
-   More specifically, it sets the given `state` to the following values.
+  /* Updates the `fem_data` given the change in the unknown variables.
+   More specifically, it sets the state in the the given `fem_data` to the
+   following values.
 
         q = αₚ (z + dz) + bₚ
         v = αᵥ (z + dz) + bᵥ
         a = αₐ (z + dz) + bₐ
 
-   @pre state != nullptr.
-   @pre dz.size() == state->num_dofs(). */
+   @pre fem_data != nullptr.
+   @pre dz.size() == fem_data->num_dofs(). */
   void UpdateStateFromChangeInUnknowns(const VectorX<T>& dz,
-                                       FemState<T>* state) const;
+                                       FemData<T>* fem_data) const;
 
-  /* Advances `prev_state` by one time step to the `next_state` with the given
-   value of the unknown variable z.
-   @param[in]  prev_state        The state at the previous time step.
+  /* Advances `prev_fem_data` by one time step to the `next_fem_data` with the
+   given value of the unknown variable z.
+   @param[in]  prev_fem_data     The FEM data at the previous time step.
    @param[in]  unknown_variable  The unknown variable z.
-   @param[out] next_state        The state at the next time step.
-   @pre next_state != nullptr.
-   @pre The sizes of `prev_state`, `unknown_variable`, and `next_state` are
-   compatible. */
-  void AdvanceOneTimeStep(const FemState<T>& prev_state,
+   @param[out] next_fem_data     The FEM data at the next time step.
+   @pre next_fem_data != nullptr.
+   @pre The sizes of `prev_fem_data`, `unknown_variable`, and `next_fem_data`
+   are compatible. */
+  void AdvanceOneTimeStep(const FemData<T>& prev_fem_data,
                           const VectorX<T>& unknown_variable,
-                          FemState<T>* next_state) const;
+                          FemData<T>* next_fem_data) const;
 
  protected:
   DiscreteTimeIntegrator() = default;
@@ -83,18 +84,18 @@ class DiscreteTimeIntegrator {
 
   /* Derived classes must override this method to implement the NVI
    GetUnknowns(). */
-  virtual const VectorX<T>& DoGetUnknowns(const FemState<T>& state) const = 0;
+  virtual const VectorX<T>& DoGetUnknowns(const FemData<T>& fem_data) const = 0;
 
   /* Derived classes must override this method to implement the NVI
    UpdateStateFromChangeInUnknowns(). */
-  virtual void DoUpdateStateFromChangeInUnknowns(const VectorX<T>& dz,
-                                                 FemState<T>* state) const = 0;
+  virtual void DoUpdateStateFromChangeInUnknowns(
+      const VectorX<T>& dz, FemData<T>* fem_data) const = 0;
 
   /* Derived classes must override this method to implement the NVI
    AdvanceOneTimeStep(). */
-  virtual void DoAdvanceOneTimeStep(const FemState<T>& prev_state,
+  virtual void DoAdvanceOneTimeStep(const FemData<T>& prev_fem_data,
                                     const VectorX<T>& unknowns,
-                                    FemState<T>* next_state) const = 0;
+                                    FemData<T>* next_fem_data) const = 0;
 };
 
 }  // namespace internal

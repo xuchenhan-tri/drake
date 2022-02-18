@@ -91,17 +91,13 @@ class LeafSystem : public System<T> {
 
   std::multimap<int, int> GetDirectFeedthroughs() const final;
   
-  // Hack to build FemModel
-  using SystemBase::DeclareCacheEntry;
 
-  /* Temp hack. Need to inherit from leafsystem to define a system that can
-   declare cache entries. */
+ protected:
   /** Default constructor that declares no inputs, outputs, state, parameters,
   events, nor scalar-type conversion support (AutoDiff, etc.).  To enable
   AutoDiff support, use the SystemScalarConverter-based constructor. */
   LeafSystem();
 
- protected:
   // Promote so we don't need "this->" in defaults which show up in Doxygen.
   using SystemBase::all_sources_ticket;
 

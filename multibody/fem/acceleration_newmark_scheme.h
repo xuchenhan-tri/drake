@@ -9,7 +9,7 @@ namespace fem {
 namespace internal {
 
 /* Implements NewmarkScheme with acceleration as the unknown variable.
- Given the value for the current time step acceleration `a`, the state at the
+ Given the value for the current time step acceleration `a`, the fem_data at the
  next time step can be calculated from that of the previous time step according
  to the following equations:
 
@@ -43,16 +43,16 @@ class AccelerationNewmarkScheme final : public NewmarkScheme<T> {
     return {beta() * dt() * dt(), gamma() * dt(), 1.0};
   }
 
-  const VectorX<T>& DoGetUnknowns(const FemState<T>& state) const final {
-    return state.GetAccelerations();
+  const VectorX<T>& DoGetUnknowns(const FemData<T>& fem_data) const final {
+    return fem_data.GetAccelerations();
   }
 
   void DoUpdateStateFromChangeInUnknowns(const VectorX<T>& dz,
-                                         FemState<T>* state) const final;
+                                         FemData<T>* fem_data) const final;
 
-  void DoAdvanceOneTimeStep(const FemState<T>& prev_state,
+  void DoAdvanceOneTimeStep(const FemData<T>& prev_fem_data,
                             const VectorX<T>& unknown_variable,
-                            FemState<T>* state) const final;
+                            FemData<T>* next_fem_data) const final;
 };
 
 }  // namespace internal
