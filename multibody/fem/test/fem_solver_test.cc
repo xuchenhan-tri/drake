@@ -48,29 +48,28 @@ TEST_F(FemSolverTest, Tolerancse) {
  case) should satisfy A*z = -b, where A is the constant tangent matrix and b is
  the nonzero residual evaluated at the zero state. */
 TEST_F(FemSolverTest, AdvanceOneTimeStep) {
-  std::unique_ptr<FemState<double>> state0 = model_.MakeFemState();
-  std::unique_ptr<FemState<double>> state = model_.MakeFemState();
-  std::unique_ptr<FemState<double>> expected_state =
-      model_.MakeFemState();
-  const int num_iterations = solver_.AdvanceOneTimeStep(*state0, state.get());
+  const FemData<double> fem_data0 = model_.MakeFemData();
+  FemData<double> fem_data = model_.MakeFemData();
+  FemData<double> expected_fem_data = model_.MakeFemData();
+  const int num_iterations = solver_.AdvanceOneTimeStep(fem_data0, &fem_data);
   EXPECT_EQ(num_iterations, 1);
 
   /* The expected result from AdvanceOneTimeStep(). */
   Eigen::SparseMatrix<double> tangent_matrix =
       model_.MakeEigenSparseTangentMatrix();
-  model_.CalcTangentMatrix(*state0, integrator_.weights(), &tangent_matrix);
+  model_.CalcTangentMatrix(fem_data0, integrator_.weights(), &tangent_matrix);
   VectorX<double> residual(model_.num_dofs());
-  model_.CalcResidual(*state0, &residual);
+  model_.CalcResidual(fem_data0, &residual);
   Eigen::ConjugateGradient<Eigen::SparseMatrix<double>> cg;
   cg.compute(tangent_matrix);
   const VectorX<double> dz = cg.solve(-residual);
-  integrator_.UpdateStateFromChangeInUnknowns(dz, expected_state.get());
-  EXPECT_TRUE(CompareMatrices(expected_state->GetPositions(),
-                              state->GetPositions(), kEps));
-  EXPECT_TRUE(CompareMatrices(expected_state->GetAccelerations(),
-                              state->GetAccelerations(), kEps));
-  EXPECT_TRUE(CompareMatrices(expected_state->GetVelocities(),
-                              state->GetVelocities(), kEps));
+  integrator_.UpdateStateFromChangeInUnknowns(dz, &expected_fem_data);
+  EXPECT_TRUE(CompareMatrices(expected_fem_data.GetPositions(),
+                              fem_data.GetPositions(), kEps));
+  EXPECT_TRUE(CompareMatrices(expected_fem_data.GetAccelerations(),
+                              fem_data.GetAccelerations(), kEps));
+  EXPECT_TRUE(CompareMatrices(expected_fem_data.GetVelocities(),
+                              fem_data.GetVelocities(), kEps));
 }
 
 }  // namespace

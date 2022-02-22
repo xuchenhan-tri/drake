@@ -2,8 +2,8 @@
 
 #include <array>
 #include <memory>
-#include <string>
 #include <utility>
+#include <string>
 
 #include <Eigen/Sparse>
 

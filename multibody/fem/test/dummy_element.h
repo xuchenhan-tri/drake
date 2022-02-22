@@ -163,6 +163,7 @@ class DummyElement final : public FemElement<DummyElement, DummyElementTraits> {
     *M += scale * dummy_mass_matrix();
   }
 
+  // TODO(xuchenhan-tri): Move this out side of the dummy element class.
   CachingSystem system_;
   FemDataInfo<T> fem_data_info_;
 };

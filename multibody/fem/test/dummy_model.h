@@ -37,10 +37,20 @@ class DummyModel final : public FemModelImpl<DummyElement> {
 
  private:
   /* Creates an all-zero FEM state for the dummy model. */
-  FemStateImpl<DummyElement> DoMakeFemStateImpl() const final {
-    return FemStateImpl<DummyElement>(VectorX<T>::Zero(kNumDofs),
-                                      VectorX<T>::Zero(kNumDofs),
-                                      VectorX<T>::Zero(kNumDofs));
+  VectorX<T> MakeReferencePositions() const final {
+    return VectorX<T>::Zero(kNumDofs);
+  }
+
+  systems::CacheIndex DeclareElementData(
+      systems::DiscreteStateIndex q_index, systems::DiscreteStateIndex v_index,
+      systems::DiscreteStateIndex a_index) const final {
+    using Data = Traits::Data;
+    const std::vector<Data> model_element_data(this->num_elements());
+    auto& system = this->get_mutable_caching_system();
+    const auto& cache_entry = system.DeclareCacheEntry(
+        "dummy data", systems::ValueProducer(model_element_data,
+                                             systems::ValueProducer::NoopCalc));
+    return cache_entry.cache_index();
   }
 };
 

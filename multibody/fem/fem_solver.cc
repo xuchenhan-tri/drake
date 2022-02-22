@@ -15,18 +15,17 @@ FemSolver<T>::FemSolver(const FemModel<T>* model,
 }
 
 template <typename T>
-int FemSolver<T>::AdvanceOneTimeStep(const FemData<T>& prev_state,
-                                     FemData<T>* next_state) const {
-  DRAKE_DEMAND(next_state != nullptr);
-  model_->ThrowIfModelStateIncompatible(__func__, prev_state);
-  model_->ThrowIfModelStateIncompatible(__func__, *next_state);
+int FemSolver<T>::AdvanceOneTimeStep(const FemData<T>& prev_fem_data,
+                                     FemData<T>* next_fem_data) const {
+  DRAKE_DEMAND(next_fem_data != nullptr);
+  model_->ThrowIfModelDataIncompatible(__func__, prev_fem_data);
+  model_->ThrowIfModelDataIncompatible(__func__, *next_fem_data);
   /* Make initial guess of the unknown variable that it stays the same. */
-  const VectorX<T>& unknown_variable =
-      integrator_->GetUnknowns(prev_state.GetFemState());
-  integrator_->AdvanceOneTimeStep(prev_state.GetFemState(), unknown_variable,
-                                  &(next_state->GetMutableFemState()));
+  const VectorX<T>& unknown_variable = integrator_->GetUnknowns(prev_fem_data);
+  integrator_->AdvanceOneTimeStep(prev_fem_data, unknown_variable,
+                                  next_fem_data);
   /* Run Newton-Raphson iterations. */
-  return SolveWithInitialGuess(next_state);
+  return SolveWithInitialGuess(next_fem_data);
 }
 
 template <typename T>
@@ -52,15 +51,11 @@ void FemSolver<T>::set_linear_solve_tolerance(const T& residual_norm) const {
 }
 
 template <typename T>
-int FemSolver<T>::SolveWithInitialGuess(FemData<T>* state) const {
+int FemSolver<T>::SolveWithInitialGuess(FemData<T>* fem_data) const {
   /* Make sure the scratch quantities are of the correct sizes. */
   ResetScratchDataIfNecessary();
-
-  /* GetMutableFemState() marks the mutable state cache entry out of date and
-   invalidates all downstream dependents. Then ApplyBoundaryCondition() sets the
-   mutable state to our first guess. */
-  model_->ApplyBoundaryCondition(&state->GetMutableFemState());
-  model_->CalcResidual(*state, &b_);
+  model_->ApplyBoundaryCondition(fem_data);
+  model_->CalcResidual(*fem_data, &b_);
   T residual_norm = b_.norm();
   T initial_residual_norm = residual_norm;
   int iter = 0;
@@ -74,7 +69,7 @@ int FemSolver<T>::SolveWithInitialGuess(FemData<T>* state) const {
     /* Use PETSc matrix when scalar type is double. Otherwise, use Eigen
      matrix. */
     if constexpr (std::is_same_v<T, double>) {
-      model_->CalcTangentMatrix(*state, integrator_->weights(),
+      model_->CalcTangentMatrix(*fem_data, integrator_->weights(),
                                 tangent_matrix_petsc_.get());
       tangent_matrix_petsc_->AssembleIfNecessary();
       /* Solve for A * dz = -b, where A is the tangent matrix. */
@@ -85,17 +80,14 @@ int FemSolver<T>::SolveWithInitialGuess(FemData<T>* state) const {
               kIncompleteCholesky,
           -b_);
     } else {
-      model_->CalcTangentMatrix(*state, integrator_->weights(),
+      model_->CalcTangentMatrix(*fem_data, integrator_->weights(),
                                 &tangent_matrix_eigen_);
       /* Solve for A * dz = -b, where A is the tangent matrix. */
       eigen_tangent_matrix_solver_.compute(tangent_matrix_eigen_);
       dz_ = eigen_tangent_matrix_solver_.solve(-b_);
     }
-    /* GetMutableFemState() marks out of date and invalidates downstream
-     UpdateStateFromChangeInUnknowns() sets state to the next estimate. */
-    integrator_->UpdateStateFromChangeInUnknowns(dz_,
-                                                 &state->GetMutableFemState());
-    model_->CalcResidual(*state, &b_);
+    integrator_->UpdateStateFromChangeInUnknowns(dz_, fem_data);
+    model_->CalcResidual(*fem_data, &b_);
     residual_norm = b_.norm();
     ++iter;
   } while (iter < kMaxIterations &&
