@@ -1,10 +1,11 @@
 #pragma once
 
-#include "drake/multibody/fem/element_data_impl.h"
+#include <vector>
+
+#include "drake/common/copyable_unique_ptr.h"
 #include "drake/multibody/fem/fem_indexes.h"
 #include "drake/systems/framework/context.h"
 #include "drake/systems/framework/leaf_system.h"
-#include "drake/common/copyable_unique_ptr.h"
 
 namespace drake {
 namespace multibody {
@@ -36,16 +37,19 @@ class FemData {
   DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(FemData);
 
   /* Creates an FemData described by the given information. */
-  FemData(const FemDataInfo<T>& data_info);
+  explicit FemData(const FemDataInfo<T>& data_info);
 
   /* Returns per element data in `this` FemData.
-  @throws std::exception if the value doesn't actually have type V. */
-  template <typename DataType>
-  const DataType& EvalElementData(ElementIndex element_index) const {
+  @throws std::exception if the value doesn't actually have type V.
+  @throws std::exception if `element_index` is larger than the number of
+  elements in this FemData. */
+  template <typename Data>
+  const Data& EvalElementData(ElementIndex element_index) const {
     const auto& element_data =
         info_.system->get_cache_entry(info_.element_data_index)
-            .template Eval<internal::ElementDataImpl<DataType>>(*context_);
-    return element_data.get_data(element_index);
+            .template Eval<std::vector<Data>>(*context_);
+    DRAKE_THROW_UNLESS(element_index < element_data.size());
+    return element_data[element_index];
   }
 
   /* Sugar to get/set a part of the FEM state (q, v, or a). */

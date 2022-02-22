@@ -3,10 +3,10 @@
 #include <array>
 #include <memory>
 #include <utility>
+#include <vector>
 
 #include "drake/geometry/proximity/volume_mesh.h"
 #include "drake/multibody/fem/damping_model.h"
-#include "drake/multibody/fem/element_data_impl.h"
 #include "drake/multibody/fem/fem_data.h"
 #include "drake/multibody/fem/fem_model_impl.h"
 #include "drake/multibody/fem/volumetric_element.h"
@@ -140,31 +140,31 @@ class VolumetricModel : public FemModelImpl<Element> {
   void CalcElementData(const Eigen::Ref<const VectorX<T>>& q,
                        const Eigen::Ref<const VectorX<T>>& v,
                        const Eigen::Ref<const VectorX<T>>& a,
-                       ElementDataImpl<Data>* element_data) const {
+                       std::vector<Data>* element_data) const {
     DRAKE_DEMAND(element_data != nullptr);
-    DRAKE_DEMAND(element_data->size() == this->num_elements());
+    DRAKE_DEMAND(static_cast<int>(element_data->size()) ==
+                 this->num_elements());
     DRAKE_DEMAND(q.size() == this->num_dofs());
     DRAKE_DEMAND(v.size() == this->num_dofs());
     DRAKE_DEMAND(a.size() == this->num_dofs());
     for (ElementIndex i(0); i < this->num_elements(); ++i) {
-      element_data->set_data(i, this->element(i).ComputeData(q, v, a));
+      (*element_data)[i] = this->element(i).ComputeData(q, v, a);
     }
   }
 
   systems::CacheIndex DeclareElementData(
       systems::DiscreteStateIndex q_index, systems::DiscreteStateIndex v_index,
       systems::DiscreteStateIndex a_index) const final {
-    const ElementDataImpl<Data> model_element_data(this->num_elements());
+    const std::vector<Data> model_element_data(this->num_elements());
     auto& system = this->get_mutable_caching_system();
     const auto& element_data_cache_entry = system.DeclareCacheEntry(
         "FEM state dependent element data",
         systems::ValueProducer(
             model_element_data,
-            std::function<void(const systems::Context<T>&,
-                               ElementDataImpl<Data>*)>{
+            std::function<void(const systems::Context<T>&, std::vector<Data>*)>{
                 [q_index, v_index, a_index, this](
                     const systems::Context<T>& context,
-                    ElementDataImpl<Data>* element_data) {
+                    std::vector<Data>* element_data) {
                   const VectorX<T>& q =
                       context.get_discrete_state(q_index).value();
                   const VectorX<T>& v =

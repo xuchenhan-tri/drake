@@ -4,7 +4,7 @@
 
 #include "drake/common/test_utilities/eigen_matrix_compare.h"
 #include "drake/common/test_utilities/expect_throws_message.h"
-#include "drake/multibody/fem/fem_state.h"
+#include "drake/multibody/fem/fem_data.h"
 #include "drake/multibody/fem/test/dummy_element.h"
 
 namespace drake {
@@ -20,7 +20,7 @@ using DenseMatrix = Eigen::Matrix<double, kNumDofs, kNumDofs>;
 using Eigen::VectorXd;
 using SparseMatrix = Eigen::SparseMatrix<double>;
 using Element = DummyElement;
-using State = FemState<DummyElement::T>;
+using FemData = FemData<DummyElement::T>;
 using std::make_unique;
 using std::unique_ptr;
 using std::vector;

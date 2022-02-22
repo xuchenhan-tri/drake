@@ -67,16 +67,15 @@ class VolumetricElementTest : public ::testing::Test {
     const DiscreteStateIndex v_index = system_.DeclareDiscreteState(v);
     const DiscreteStateIndex a_index = system_.DeclareDiscreteState(a);
     /* FEM element data. */
-    ElementDataImpl<Data> model_data(1);
+    std::vector<Data> model_data(1);
     const auto& element_data_cache_entry = system_.DeclareCacheEntry(
         "FEM state dependent element data",
         systems::ValueProducer(
             model_data,
-            std::function<void(const systems::Context<T>&,
-                               ElementDataImpl<Data>*)>{
+            std::function<void(const systems::Context<T>&, std::vector<Data>*)>{
                 [this, q_index, v_index, a_index](
                     const systems::Context<T>& context,
-                    ElementDataImpl<Data>* element_data) {
+                    std::vector<Data>* element_data) {
                   DRAKE_DEMAND(element_data != nullptr);
                   DRAKE_DEMAND(element_data->size() == 1);
                   const VectorX<T>& position =
@@ -85,16 +84,16 @@ class VolumetricElementTest : public ::testing::Test {
                       context.get_discrete_state(v_index).value();
                   const VectorX<T>& acceleration =
                       context.get_discrete_state(a_index).value();
-                  element_data->set_data(
-                      ElementIndex(0),
-                      element().ComputeData(position, velocity, acceleration));
+                  (*element_data)[0] =
+                      element().ComputeData(position, velocity, acceleration);
                 }}),
         {system_.discrete_state_ticket(q_index),
          system_.discrete_state_ticket(v_index),
          system_.discrete_state_ticket(a_index)});
     auto element_data_index = element_data_cache_entry.cache_index();
-    FemDataInfo<T> fem_data_info{&system_, ModelId::get_new_id(), q_index,
-                                 v_index,  a_index,       element_data_index};
+    FemDataInfo<T> fem_data_info{&system_, ModelId::get_new_id(),
+                                 q_index,  v_index,
+                                 a_index,  element_data_index};
     return FemData<T>(fem_data_info);
   }
 

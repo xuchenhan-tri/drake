@@ -2,6 +2,7 @@
 
 #include <array>
 #include <memory>
+#include <string>
 #include <utility>
 
 #include <Eigen/Sparse>
@@ -9,7 +10,6 @@
 #include "drake/common/default_scalars.h"
 #include "drake/common/eigen_types.h"
 #include "drake/multibody/fem/dirichlet_boundary_condition.h"
-#include "drake/multibody/fem/element_data.h"
 #include "drake/multibody/fem/fem_data.h"
 #include "drake/multibody/fem/petsc_symmetric_block_sparse_matrix.h"
 
@@ -72,15 +72,16 @@ class FemModel {
 
   /** Creates a default FemData compatible with this model. */
   FemData<T> MakeFemData() const {
-    /* Right now we declare new state and element data whenever MakeFemData is
-     called. Consider only declaring new states and data when needed. */
+    // TODO(xuchenhan-tri) Right now we declare additional state and element
+    //  data whenever MakeFemData is called. We should only redeclare states and
+    //  data when the model changes.
     const auto [q_index, v_index, a_index] = DeclareFemState();
     const systems::CacheIndex element_data_index =
         DeclareElementData(q_index, v_index, a_index);
     return FemData<T>(
         {&system_, model_id_, q_index, v_index, a_index, element_data_index});
   }
- 
+
   /** Calculates the residual with the given FEM data.
   @pre residual != nullptr.
   @throw std::exception if the FEM data is incompatible with this model. */

@@ -24,8 +24,6 @@ drake_cc_package_library(
         ":deformation_gradient_data",
         ":dirichlet_boundary_condition",
         ":discrete_time_integrator",
-        ":element_cache_entry",
-        ":element_data",
         ":fem_data",
         ":fem_element",
         ":fem_indexes",
@@ -150,8 +148,8 @@ drake_cc_library(
         "dirichlet_boundary_condition.h",
     ],
     deps = [
-        ":fem_indexes",
         ":fem_data",
+        ":fem_indexes",
         ":petsc_symmetric_block_sparse_matrix",
         "//common:essential",
     ],
@@ -172,17 +170,6 @@ drake_cc_library(
 )
 
 drake_cc_library(
-    name = "element_data",
-    hdrs = [
-        "element_data.h",
-        "element_data_impl.h",
-    ],
-    deps = [
-        "//common:essential",
-    ],
-)
-
-drake_cc_library(
     name = "fem_data",
     srcs = [
         "fem_data.cc",
@@ -191,7 +178,6 @@ drake_cc_library(
         "fem_data.h",
     ],
     deps = [
-        ":element_data",
         ":fem_indexes",
         "//common:essential",
         "//systems/framework:context",
@@ -206,9 +192,8 @@ drake_cc_library(
     ],
     deps = [
         ":damping_model",
-        ":element_data",
-        ":fem_indexes",
         ":fem_data",
+        ":fem_indexes",
         "//common:essential",
         "//multibody/fem:constitutive_model",
     ],
@@ -236,7 +221,6 @@ drake_cc_library(
     ],
     deps = [
         ":dirichlet_boundary_condition",
-        ":element_data",
         ":fem_data",
         ":fem_element",
         ":fem_indexes",
@@ -563,9 +547,8 @@ drake_cc_library(
     hdrs = ["test/dummy_element.h"],
     deps = [
         ":damping_model",
-        ":element_data",
-        ":fem_element",
         ":fem_data",
+        ":fem_element",
         ":linear_constitutive_model",
     ],
 )
@@ -578,13 +561,6 @@ drake_cc_library(
     deps = [
         ":dummy_element",
         ":fem_model",
-    ],
-)
-
-drake_cc_googletest(
-    name = "element_cache_entry_test",
-    deps = [
-        ":element_cache_entry",
     ],
 )
 

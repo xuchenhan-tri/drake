@@ -6,7 +6,6 @@
 #include "drake/common/eigen_types.h"
 #include "drake/multibody/fem/constitutive_model.h"
 #include "drake/multibody/fem/damping_model.h"
-#include "drake/multibody/fem/element_data.h"
 #include "drake/multibody/fem/fem_data.h"
 #include "drake/multibody/fem/fem_indexes.h"
 

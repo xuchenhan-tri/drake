@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <vector>
 
 #include "drake/multibody/fem/damping_model.h"
 #include "drake/multibody/fem/fem_element.h"
@@ -51,7 +52,7 @@ class DummyElement final : public FemElement<DummyElement, DummyElementTraits> {
     const DiscreteStateIndex v_index = system_.DeclareDiscreteState(kNumDofs);
     const DiscreteStateIndex a_index = system_.DeclareDiscreteState(kNumDofs);
     /* FEM element data. */
-    ElementDataImpl<Data> model_data(1);
+    std::vector<Data> model_data(1);
     const auto& element_data_cache_entry = system_.DeclareCacheEntry(
         "FEM state dependent element data",
         systems::ValueProducer(model_data, systems::ValueProducer::NoopCalc),

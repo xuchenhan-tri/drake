@@ -12,8 +12,6 @@
 #include <Eigen/Sparse>
 
 #include "drake/common/eigen_types.h"
-#include "drake/multibody/fem/element_data.h"
-#include "drake/multibody/fem/element_data_impl.h"
 #include "drake/multibody/fem/fem_element.h"
 #include "drake/multibody/fem/fem_indexes.h"
 #include "drake/multibody/fem/fem_model.h"

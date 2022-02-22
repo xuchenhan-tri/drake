@@ -6,8 +6,8 @@
 
 #include "drake/common/eigen_types.h"
 #include "drake/multibody/fem/discrete_time_integrator.h"
+#include "drake/multibody/fem/fem_data.h"
 #include "drake/multibody/fem/fem_model.h"
-#include "drake/multibody/fem/fem_state.h"
 
 namespace drake {
 namespace multibody {
@@ -41,20 +41,20 @@ class FemSolver {
 
   /* Advances the state of the FEM model by one time step with the integrator
    prescribed at construction.
-   @param[in] prev_state   The state of the FEM model evaluated at the previous
-                           time step.
-   @param[out] next_state  The state of the FEM model evaluated at the next time
-                           step.
+   @param[in] prev_fem_data   The state of the FEM model evaluated at the
+                              previous time step.
+   @param[out] next_fem_data  The state of the FEM model evaluated at the next
+                              time step.
    @returns the number of Newton-Raphson iterations the solver takes to
    converge.
-   @pre next_state != nullptr.
-   @pre prev_state.num_dofs() == next_state->dofs().
-   @throw std::exception if the input `prev_state` or `next_state` is
+   @pre next_fem_data != nullptr.
+   @pre prev_fem_data.num_dofs() == next_fem_data->num_dofs().
+   @throw std::exception if the input `prev_fem_data` or `next_fem_data` is
    incompatible with the FEM model solved by this solver.
    @throw std::exception if the solver doesn't converge after `kMaxIterations`
    Newton-Raphson iterations. */
-  int AdvanceOneTimeStep(const FemData<T>& prev_state,
-                         FemData<T>* next_state) const;
+  int AdvanceOneTimeStep(const FemData<T>& prev_fem_data,
+                         FemData<T>* next_fem_data) const;
 
   /* Returns the FEM model that this solver solves for. */
   const FemModel<T>& model() const { return *model_; }
@@ -84,11 +84,11 @@ class FemSolver {
  private:
   /* Uses a Newton-Raphson solver to solve for the equilibrium state that
    satisfies the tolerances. See set_relative_tolerance() and
-   set_absolute_tolerance() for convergence criteria. The input FEM state is
+   set_absolute_tolerance() for convergence criteria. The input FEM data is
    non-null and is guaranteed to be compatible with the FEM model.
-   @param[in, out] state  As input, `state` provides an initial guess of
-   the solution. As output, `state` reports the equilibrium state. */
-  int SolveWithInitialGuess(FemData<T>* state) const;
+   @param[in, out] fem_data  As input, `fem_data` provides an initial guess of
+   the solution. As output, `fem_data` reports the equilibrium state. */
+  int SolveWithInitialGuess(FemData<T>* fem_data) const;
 
   /* Reset the scratch data in this class (tangent matrix, residual, and dz) if
    necessary. */
