@@ -4,6 +4,7 @@
 
 #include "drake/common/copyable_unique_ptr.h"
 #include "drake/multibody/fem/fem_indexes.h"
+#include "drake/multibody/fem/fem_state_manager.h"
 #include "drake/systems/framework/context.h"
 #include "drake/systems/framework/leaf_system.h"
 
@@ -11,28 +12,16 @@ namespace drake {
 namespace multibody {
 namespace fem {
 
-namespace internal {
-
-// TODO(xuchenhan-tri): Consider using a factory method to ensure FemStateInfo
-//  is valid.
-/* FemStateInfo contains information required to allocate and access FEM
- states and cache entries. Usually created with FemModel::AllocateFemState.
- @tparam_nonsymbolic_scalar */
 template <typename T>
-struct FemStateInfo {
-  /* The system that manages the discrete states and cache entries in the FEM
-   state. It must have the following discrete states and cache entry allocated.
-  */
-  const systems::LeafSystem<T>* system{nullptr};
-  /* State and cache indexes. */
-  systems::DiscreteStateIndex fem_position_index;
-  systems::DiscreteStateIndex fem_velocity_index;
-  systems::DiscreteStateIndex fem_acceleration_index;
-  systems::CacheIndex element_data_index;
-  /* The model ID of the model that consumes the state and the cached data. */
-  FemModelId model_id;
-};
+class FemState;
 
+namespace internal {
+template <typename T, class Data>
+FemState<T> MakeFemState(
+    internal::FemStateManager<T>*, FemModelId, int, const VectorX<T>&,
+    const VectorX<T>&, const VectorX<T>&,
+    std::function<void(const VectorX<T>&, const VectorX<T>&, const VectorX<T>&,
+                       std::vector<Data>*)>);
 }  // namespace internal
 
 /** %FemState provides access to private workspace FEM state and per-element
@@ -42,10 +31,6 @@ template <typename T>
 class FemState {
  public:
   DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(FemState);
-
-  /** Creates an %FemState that allocates and accesses states and cached data
-   using the provided `state_info`. */
-  explicit FemState(const internal::FemStateInfo<T>& state_info);
 
   /** Returns per-element data in `this` %FemState.
    @tparam Data the per-element data type.
@@ -84,11 +69,92 @@ class FemState {
   FemModelId model_id() const { return info_.model_id; }
 
  private:
-  internal::FemStateInfo<T> info_;
+  /* Friend that factory method so that it can access the private constructor.
+   */
+  template <typename U, class Data>
+  friend FemState<U> internal::MakeFemState(
+      internal::FemStateManager<U>*, FemModelId, int, const VectorX<U>&,
+      const VectorX<U>&, const VectorX<U>&,
+      std::function<void(const VectorX<U>&, const VectorX<U>&,
+                         const VectorX<U>&, std::vector<Data>*)>);
+
+  /* FemStateInfo contains information required to allocate and access FEM
+   states and cache entries. Usually created with FemModel::AllocateFemState.
+   @tparam_nonsymbolic_scalar */
+  struct FemStateInfo {
+    /* The system that manages the discrete states and cache entries in the
+     FEM state. It must have the following discrete states and cache entry
+     allocated.
+    */
+    const systems::LeafSystem<T>* system{nullptr};
+    /* State and cache indexes. */
+    systems::DiscreteStateIndex fem_position_index;
+    systems::DiscreteStateIndex fem_velocity_index;
+    systems::DiscreteStateIndex fem_acceleration_index;
+    systems::CacheIndex element_data_index;
+    /* The model ID of the model that consumes the state and the cached data.
+     */
+    FemModelId model_id;
+  };
+
+  /* Creates an FemState that allocates and accesses states and cached data
+   using the provided `state_info`. */
+  explicit FemState(const FemStateInfo& state_info);
+
+  FemStateInfo info_;
   /* Owned contexts that contains the FEM states and data. */
   copyable_unique_ptr<systems::Context<T>> context_{nullptr};
 };
 
+namespace internal {
+
+template <typename T, class Data>
+FemState<T> MakeFemState(
+    FemStateManager<T>* state_manager, FemModelId model_id, int num_elements,
+    const VectorX<T>& model_q, const VectorX<T>& model_v,
+    const VectorX<T>& model_a,
+    std::function<void(const VectorX<T>&, const VectorX<T>&, const VectorX<T>&,
+                       std::vector<Data>*)>
+        calc_element_data) {
+  DRAKE_DEMAND(state_manager != nullptr);
+  DRAKE_THROW_UNLESS(model_q.size() == model_v.size());
+  DRAKE_THROW_UNLESS(model_q.size() == model_a.size());
+  DRAKE_THROW_UNLESS(model_id.is_valid());
+
+  const auto q_index = state_manager->DeclareDiscreteState(model_q);
+  const auto v_index = state_manager->DeclareDiscreteState(model_v);
+  const auto a_index = state_manager->DeclareDiscreteState(model_a);
+  const auto element_data_index =
+      state_manager
+          ->DeclareCacheEntry(
+              "FEM element data",
+              systems::ValueProducer(
+                  std::function<void(const systems::Context<T>&,
+                                     std::vector<Data>*)>{
+                      [q_index, v_index, a_index, num_elements,
+                       calc_element_data](const systems::Context<T>& context,
+                                          std::vector<Data>* element_data) {
+                        DRAKE_DEMAND(element_data != nullptr);
+                        element_data->resize(num_elements);
+                        const VectorX<T>& q =
+                            context.get_discrete_state(q_index).value();
+                        const VectorX<T>& v =
+                            context.get_discrete_state(v_index).value();
+                        const VectorX<T>& a =
+                            context.get_discrete_state(a_index).value();
+                        calc_element_data(q, v, a, element_data);
+                      }}),
+              {state_manager->discrete_state_ticket(q_index),
+               state_manager->discrete_state_ticket(q_index),
+               state_manager->discrete_state_ticket(q_index)})
+          .cache_index();
+
+  typename FemState<T>::FemStateInfo info{
+      state_manager, q_index, v_index, a_index, element_data_index, model_id};
+  return FemState<T>(info);
+}
+
+}  // namespace internal
 }  // namespace fem
 }  // namespace multibody
 }  // namespace drake

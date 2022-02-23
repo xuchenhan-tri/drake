@@ -5,8 +5,7 @@ namespace multibody {
 namespace fem {
 
 template <typename T>
-FemState<T>::FemState(const internal::FemStateInfo<T>& data_info)
-    : info_(data_info) {
+FemState<T>::FemState(const FemStateInfo& data_info) : info_(data_info) {
   context_ = info_.system->CreateDefaultContext();
 }
 
