@@ -161,10 +161,14 @@ class RigidGeometry {
  std::nullopt. The rigid mesh created upon a successful creation of
  RigidGeometry will be the same mesh as used for rigid hydroelastics. */
 template <typename Shape>
-std::optional<RigidGeometry> MakeRigidRepresentation(
-    const Shape& shape, const ProximityProperties& props) {
+std::optional<RigidGeometry> MakeRigidRepresentation(const Shape& shape,
+                                                     double resolution_hint) {
+  /* Create a temporary hydor proximity property that specifies the desired
+   resolution hint so that we can reuse the hydro implementation. */
+  ProximityProperties props;
+  AddRigidHydroelasticProperties(resolution_hint, &props);
   std::optional<internal::hydroelastic::RigidGeometry> hydro_rigid_geometry =
-      internal::hydroelastic::MakeRigidRepresentation(shape, props);
+      internal::hydroelastic::MakeRigidRepresentation(shape, std::move(props));
   if (!hydro_rigid_geometry) {
     static const logging::Warn log_once(
         "Rigid {} shapes are not currently supported for deformable "
@@ -182,8 +186,8 @@ std::optional<RigidGeometry> MakeRigidRepresentation(
 
 /* Half space is not supported for deformable contact at the moment as we
  require a surface mesh. */
-std::optional<RigidGeometry> MakeRigidRepresentation(
-    const HalfSpace&, const ProximityProperties&);
+std::optional<RigidGeometry> MakeRigidRepresentation(const HalfSpace&,
+                                                     double resolution_hint);
 
 }  // namespace deformable
 }  // namespace internal

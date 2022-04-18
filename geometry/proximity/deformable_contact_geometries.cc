@@ -82,7 +82,7 @@ void ReferenceDeformableGeometry::ImplementGeometry(const Box& box,
 }
 
 std::optional<RigidGeometry> MakeRigidRepresentation(
-    const HalfSpace&, const ProximityProperties&) {
+    const HalfSpace&, double) {
   throw std::logic_error(
       "Half spaces are not currently supported for deformable contact; "
       "registration is allowed, but an error will be thrown "

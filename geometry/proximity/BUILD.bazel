@@ -20,6 +20,11 @@ drake_cc_package_library(
         ":collision_filter",
         ":contact_surface_utility",
         ":deformable_contact_geometries",
+<<<<<<< HEAD
+=======
+        ":deformable_contact_internal",
+        ":deformable_contact_surface",
+>>>>>>> a59a3e78ce... rebase
         ":deformable_mesh_intersection",
         ":deformable_volume_mesh",
         ":field_intersection",
@@ -171,6 +176,20 @@ drake_cc_library(
         "//geometry:geometry_ids",
         "//geometry:proximity_properties",
         "//geometry:shape_specification",
+    ],
+)
+
+drake_cc_library(
+    name = "deformable_contact_internal",
+    srcs = ["deformable_contact_internal.cc"],
+    hdrs = ["deformable_contact_internal.h"],
+    deps = [
+        ":deformable_mesh_intersection",
+        ":deformable_rigid_contact_surface",
+        "//common:essential",
+        "//geometry:geometry_ids",
+        "//geometry:shape_specification",
+        "//geometry/query_results:deformable_contact_data",
     ],
 )
 
