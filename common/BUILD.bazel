@@ -683,6 +683,15 @@ drake_cc_googletest(
 )
 
 drake_cc_googletest(
+    name = "autodiffxd_ldlt_test",
+    deps = [
+        ":autodiff",
+        "//math:gradient",
+        "//common/test_utilities:eigen_matrix_compare",
+    ],
+)
+
+drake_cc_googletest(
     name = "autodiffxd_heap_test",
     deps = [
         ":autodiff",

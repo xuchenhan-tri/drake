@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "drake/common/extract_double.h"
+#include "drake/math/autodiff_gradient.h"
 
 namespace drake {
 namespace multibody {
@@ -621,7 +622,19 @@ TamsiSolverResult TamsiSolver<T>::SolveWithGuess(
     auto& v = fixed_size_workspace_.mutable_v();
     // With no friction forces Eq. (3) in the documentation reduces to
     // M vˢ⁺¹ = p*.
-    v = M.ldlt().solve(p_star);
+    v = M.llt().solve(p_star);
+    if constexpr (std::is_same_v<T, AutoDiffXd>) {
+      std::cout << "dp_star = "
+              << math::ExtractGradient(p_star)
+              << std::endl;
+      std::cout << "d(M*v) = "
+              << math::ExtractGradient(M*v)
+              << std::endl;
+      std::cout << "dv = "
+              << math::ExtractGradient(v)
+              << std::endl;
+    }
+
     // "One iteration" with exactly "zero" vt_error.
     statistics_.Update(0.0);
     return TamsiSolverResult::kSuccess;
