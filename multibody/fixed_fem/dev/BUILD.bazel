@@ -121,6 +121,12 @@ drake_cc_library(
 
 # === test/ ===
 drake_cc_googletest(
+    name = "autodiff_test",
+    deps = [
+        "//common:autodiff",
+    ],
+)
+drake_cc_googletest(
     name = "mesh_utilities_test",
     deps = [
         ":mesh_utilities",
