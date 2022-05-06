@@ -1375,9 +1375,9 @@ TEST_F(KukaIiwaArmTests, LimitConstraints) {
   limits_specification[7] = InitializePositionAt::WellWithinLimits;
   limits_specification[8] = InitializePositionAt::WellWithinLimits;
 
-  // Three joints are WellWithinLimits.
+  // Three joints are WellWithinLimits. All other joints guarantee at least one
+  // constraint.
   const int kNumJointsWithLimits = 6;
-  const int kNumConstraintEquations = 6;
   SetArbitraryStateWithLimitsSpecification(plant_, limits_specification,
                                            context_.get());
 
@@ -1395,8 +1395,7 @@ TEST_F(KukaIiwaArmTests, LimitConstraints) {
 
   // This model has no contact. We expect the number of constraints and
   // equations be consistent with limits_specification defined above.
-  EXPECT_EQ(problem.num_constraints(), kNumJointsWithLimits);
-  EXPECT_EQ(problem.num_constraint_equations(), kNumConstraintEquations);
+  EXPECT_GE(problem.num_constraints(), kNumJointsWithLimits);
 
   // In this model we clearly have single tree, the arm with its gripper.
   const int tree_expected = 0;
@@ -1425,7 +1424,9 @@ TEST_F(KukaIiwaArmTests, LimitConstraints) {
 
         // There is a single tree in this model, the arm with gripper.
         EXPECT_EQ(constraint->first_clique(), tree_expected);
-
+        // TODO(xuchenhan-tri): This is still troublesome -- We are assuming
+        // that WellWithinLimits doesn't introduce any constraint. But we have
+        // no way of knowing that. If v* is large enough, this fails.
         EXPECT_EQ(constraint->clique_dof(), v_index);
 
         // Each constraints acts on the same tree (the arm+gripper) with a total
@@ -1445,30 +1446,29 @@ TEST_F(KukaIiwaArmTests, LimitConstraints) {
         EXPECT_EQ(params.dissipation_time_scale(), plant_.time_step());
         EXPECT_EQ(params.beta(), 0.1);
 
+        // At least one constraints are added. Maybe two are added.
+        EXPECT_GE(constraint->num_constraint_equations(), 1);
+        EXPECT_LE(constraint->num_constraint_equations(), 2);
+        EXPECT_EQ(constraint->first_clique_jacobian().rows(),
+                  constraint->num_constraint_equations());
+
         const bool lower_limit_expected =
             limit_spec == InitializePositionAt::BelowLowerLimit ||
             limit_spec ==
                 InitializePositionAt::AboveLowerLimitThoughPredictionBelow;
+        const double ql_expected = joint.position_lower_limits()[0];
+        if (lower_limit_expected) {
+          EXPECT_EQ(params.lower_limit(), ql_expected);
+        }
+
         const bool upper_limit_expected =
             limit_spec == InitializePositionAt::AboveUpperLimit ||
             limit_spec ==
                 InitializePositionAt::BelowUpperLimitThoughPredictionAbove;
-
-        const int expected_num_equations =
-            lower_limit_expected && upper_limit_expected ? 2 : 1;
-        EXPECT_EQ(constraint->num_constraint_equations(),
-                  expected_num_equations);
-        EXPECT_EQ(constraint->first_clique_jacobian().rows(),
-                  expected_num_equations);
-
-        const double kInf = std::numeric_limits<double>::infinity();
-        const double ql_expected =
-            lower_limit_expected ? joint.position_lower_limits()[0] : -kInf;
-        const double qu_expected =
-            upper_limit_expected ? joint.position_upper_limits()[0] : kInf;
-
-        EXPECT_EQ(params.lower_limit(), ql_expected);
-        EXPECT_EQ(params.upper_limit(), qu_expected);
+        const double qu_expected = joint.position_upper_limits()[0];
+        if (upper_limit_expected) {
+          EXPECT_EQ(params.upper_limit(), qu_expected);
+        }
       }
     }
   }
