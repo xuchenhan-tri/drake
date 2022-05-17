@@ -122,6 +122,7 @@ drake_cc_library(
         ":scene_graph",
         "//common:essential",
         "//lcm:drake_lcm",
+        "//lcmtypes:experimental_deformable_mesh",
         "//lcmtypes:viewer",
         "//systems/framework:context",
         "//systems/framework:leaf_system",
