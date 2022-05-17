@@ -9,4 +9,5 @@ struct experimental_lcmt_deformable_tri_mesh_init {
   int32_t num_vertices;
   int32_t num_tris;
   experimental_lcmt_deformable_tri tris[num_tris];
+  float color[4];
 }
