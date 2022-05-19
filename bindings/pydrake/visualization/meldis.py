@@ -32,6 +32,7 @@ from drake import (
     lcmt_contact_results_for_viz,
     lcmt_viewer_draw,
     lcmt_viewer_geometry_data,
+    lcmt_viewer_link_data,
     lcmt_viewer_load_robot,
 )
 from pydrake.common import (
@@ -115,8 +116,46 @@ class _ViewerApplet:
             self._waiting_for_first_draw_message = False
             self._set_visible(True)
 
+    def on_viewer_deformable(self, message):
+        """Handler for lcmt_viewer_link_data that encodes deformable
+        geometries."""
+        link_name = message.name
+        robot = message.robot_num
+        link_path = f"{self._path}/{robot}/{link_name}"
+        for i, geom in enumerate(message.geom):
+            geom_name = geom.string_data
+            geom_path = f"{link_path}/{geom_name}"
+            vertices, triangles, rgba, pose = self._convert_deformable_geom(
+                geom)
+            self._meshcat.SetTriangleMesh(
+                path=geom_path, vertices=vertices, triangles=triangles,
+                rgba=rgba)
+            self._meshcat.SetTransform(path=link_path, X_ParentPath=pose)
+        if self._waiting_for_first_draw_message:
+            self._waiting_for_first_draw_message = False
+            self._set_visible(True)
+
     def _set_visible(self, value):
         self._meshcat.SetProperty(self._path, property="visible", value=value)
+
+    def _convert_deformable_geom(self, geom):
+        """Given an lcmt_viewer_geometry_data, parse it into a tuple of
+        (vertices, triangles, Rgba, RigidTransform) if the geometry type is a
+        MESH"""
+        assert geom.type == lcmt_viewer_geometry_data.MESH
+        num_verts = int(geom.float_data[0])
+        num_triangles = int(geom.float_data[1])
+        # The first two floats encode the number of vertices and number of
+        # triangles.
+        v_start_index = 2
+        f_start_index = v_start_index + 3 * num_verts
+        vertices = np.array(geom.float_data[v_start_index:f_start_index])
+        triangles = np.array(geom.float_data[f_start_index:]).astype(int)
+        vertices = np.reshape(vertices, (3, num_verts), order='F')
+        triangles = np.reshape(triangles, (3, num_triangles), order='F')
+        rgba = Rgba(*geom.color)
+        pose = self._to_pose(geom.position, geom.quaternion)
+        return (vertices, triangles, rgba, pose)
 
     def _convert_geom(self, geom):
         """Given an lcmt_viewer_geometry_data, parse it into a tuple of (Shape,
@@ -244,6 +283,9 @@ class Meldis:
         self._subscribe(channel="DRAKE_VIEWER_DRAW",
                         message_type=lcmt_viewer_draw,
                         handler=viewer.on_viewer_draw)
+        self._subscribe(channel="DRAKE_VIEWER_DEFORMABLE",
+                        message_type=lcmt_viewer_link_data,
+                        handler=viewer.on_viewer_deformable)
 
         contact = _ContactApplet(meshcat=self.meshcat)
         self._subscribe(channel="CONTACT_RESULTS",
