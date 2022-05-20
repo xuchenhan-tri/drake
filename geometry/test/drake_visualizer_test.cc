@@ -108,6 +108,32 @@ class PoseSource : public systems::LeafSystem<T> {
   FramePoseVector<T> poses_;
 };
 
+/* Serves as a source of configuration values for SceneGraph input ports. */
+template <typename T>
+class ConfigurationSource : public systems::LeafSystem<T> {
+ public:
+  DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(ConfigurationSource)
+  ConfigurationSource() {
+    this->DeclareAbstractOutputPort(
+        systems::kUseDefaultName, std::unordered_map<GeometryId, VectorX<T>>(),
+        &ConfigurationSource<T>::ReadConfigurations);
+  }
+
+  void SetConfigurations(
+      std::unordered_map<GeometryId, VectorX<T>> configurations) {
+    configurations_ = move(configurations);
+  }
+
+ private:
+  void ReadConfigurations(
+      const Context<T>&,
+      std::unordered_map<GeometryId, VectorX<T>>* configurations) const {
+    *configurations = configurations_;
+  }
+
+  std::unordered_map<GeometryId, VectorX<T>> configurations_;
+};
+
 // TODO(SeanCurtis-TRI): These unit tests aren't complete. Much of the DUT has
 //  code from the old `geometry_visualizer.{h|cc}. That code wasn't particularly
 //  tested either, but has been run thousands of times. That code lives on in
@@ -141,6 +167,10 @@ class DrakeVisualizerTest : public ::testing::Test {
     pose_source_ = builder.template AddSystem<PoseSource<T>>();
     builder.Connect(pose_source_->get_output_port(0),
                     scene_graph_->get_source_pose_port(source_id_));
+    configuration_source_ =
+        builder.template AddSystem<ConfigurationSource<T>>();
+    builder.Connect(configuration_source_->get_output_port(0),
+                    scene_graph_->get_source_configuration_port(source_id_));
     diagram_ = builder.Build();
   }
 
@@ -326,7 +356,8 @@ class DrakeVisualizerTest : public ::testing::Test {
    expected messages on those subscribers is proof.  */
   static constexpr char kLoadChannel[] = "DRAKE_VIEWER_LOAD_ROBOT";
   static constexpr char kDrawChannel[] = "DRAKE_VIEWER_DRAW";
-  static constexpr char kDeformableDrawChannel[] = "DEFORMABLE_MESHES_UPDATE";
+  static constexpr char kDeformableDrawChannel[] =
+      "DRAKE_VIEWER_DRAW_DEFORMABLE";
 
   /* The name of the source registered with the SceneGraph.  */
   static constexpr char kSourceName[] = "DrakeVisualizerTest";
@@ -345,6 +376,7 @@ class DrakeVisualizerTest : public ::testing::Test {
   DrakeVisualizer<T>* visualizer_{};
   /* Raw pointer to the pose data.  */
   PoseSource<T>* pose_source_{};
+  ConfigurationSource<T>* configuration_source_{};
   SourceId source_id_;
   /* A diagram containing scene graph and connected visualizer.  */
   unique_ptr<Diagram<T>> diagram_;
@@ -759,6 +791,7 @@ TYPED_TEST(DrakeVisualizerTest, ChangesInVersion) {
  not evaluating the mesh data produced. We assume that incorrectness in the
  mesh data will be immediately visible in visualization. */
 TYPED_TEST(DrakeVisualizerTest, VisualizeDeformableGeometry) {
+  using T = TypeParam;
   DrakeVisualizerParams params;
   /* We'll expect the visualizer default color gets applied to the deformable
    meshes -- we haven't defined any other color to the geometry. So, we'll pick
@@ -770,10 +803,19 @@ TYPED_TEST(DrakeVisualizerTest, VisualizeDeformableGeometry) {
   constexpr double kRadius = 1.0;
   auto geometry_instance = make_unique<GeometryInstance>(
       RigidTransformd::Identity(), make_unique<Sphere>(kRadius), "sphere");
-  /*GeometryId deformable_id =*/
-  this->scene_graph_->RegisterDeformableGeometry(
+  GeometryId deformable_id = this->scene_graph_->RegisterDeformableGeometry(
       this->source_id_, this->scene_graph_->world_frame_id(),
       std::move(geometry_instance), kRezHint);
+
+  const SceneGraphInspector<T>& inspector =
+      this->scene_graph_->model_inspector();
+  const VolumeMesh<double>* mesh_ptr =
+      inspector.GetReferenceMesh(deformable_id);
+  ASSERT_NE(mesh_ptr, nullptr);
+  std::unordered_map<GeometryId, VectorX<T>> configuration;
+  configuration[deformable_id] =
+      VectorX<double>::Zero(mesh_ptr->num_vertices() * 3);
+  this->configuration_source_->SetConfigurations(std::move(configuration));
 
   /* Dispatch a load message. */
   auto context = this->diagram_->CreateDefaultContext();
