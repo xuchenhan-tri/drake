@@ -69,6 +69,12 @@ class SceneGraphTester {
   }
 
   template <typename T>
+  static void FullConfigurationUpdate(const SceneGraph<T>& scene_graph,
+                                      const Context<T>& context) {
+    scene_graph.FullConfigurationUpdate(context);
+  }
+
+  template <typename T>
   static void GetQueryObjectPortValue(const SceneGraph<T>& scene_graph,
                                       const systems::Context<T>& context,
                                       QueryObject<T>* handle) {
@@ -277,6 +283,14 @@ TEST_F(SceneGraphTest, FullPoseUpdateEmpty) {
       SceneGraphTester::FullPoseUpdate(scene_graph_, *context_));
 }
 
+// Simple, toy case: there are no deformable geometry sources; evaluate of
+// configuration update should be, essentially a no op.
+TEST_F(SceneGraphTest, FullConfigurationUpdateEmpty) {
+  CreateDefaultContext();
+  DRAKE_EXPECT_NO_THROW(
+      SceneGraphTester::FullConfigurationUpdate(scene_graph_, *context_));
+}
+
 // Test case where there are only anchored geometries -- same as the empty case;
 // no geometry to update.
 TEST_F(SceneGraphTest, FullPoseUpdateAnchoredOnly) {
@@ -295,7 +309,6 @@ TEST_F(SceneGraphTest, RegisterDeformableGeometry) {
       s_id, scene_graph_.world_frame_id(), make_sphere_instance());
   constexpr double kRezHint = 0.5;
   std::unique_ptr<GeometryInstance> geometry_instance = make_sphere_instance();
-  const RigidTransformd X_WG = geometry_instance->pose();
   GeometryId deformable_id = scene_graph_.RegisterDeformableGeometry(
       s_id, scene_graph_.world_frame_id(), std::move(geometry_instance),
       kRezHint);
@@ -308,13 +321,14 @@ TEST_F(SceneGraphTest, RegisterDeformableGeometry) {
 
   CreateDefaultContext();
   const QueryObject<double>& query_object = this->query_object();
-  const VectorX<double>& q_WG =
-      query_object.GetConfigurationsInWorld(deformable_id);
-  VectorX<double> expected_q_WG(3 * mesh_ptr->num_vertices());
-  for (int v = 0; v < mesh_ptr->num_vertices(); ++v) {
-    expected_q_WG.segment<3>(3 * v) = X_WG * mesh_ptr->vertex(v);
-  }
-  EXPECT_EQ(q_WG, expected_q_WG);
+  const VectorX<double> q_WG =
+      VectorX<double>::Zero(mesh_ptr->num_vertices() * 3);
+  std::unordered_map<GeometryId, VectorX<double>> configuration_map;
+  configuration_map[deformable_id] = q_WG;
+  scene_graph_.get_source_configuration_port(s_id).FixValue(context_.get(),
+                                                            configuration_map);
+  EXPECT_EQ(query_object.GetConfigurationsInWorld(deformable_id), q_WG);
+
   DRAKE_EXPECT_THROWS_MESSAGE(
       query_object.GetConfigurationsInWorld(rigid_id),
       "Non-deformable geometries.*Use get_pose_in_world().*.");
