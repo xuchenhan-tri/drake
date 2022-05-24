@@ -16,7 +16,7 @@ drake_cc_binary(
     deps = [
         "//geometry:drake_visualizer",
         "//geometry:scene_graph",
-        "//multibody/plant",
+        "//multibody/plant:deformable_model",
         "//systems/analysis:simulator",
         "//systems/framework:diagram",
         "@gflags",
