@@ -91,6 +91,12 @@ class DeformableModel final : public multibody::internal::PhysicalModel<T> {
    registered in this model. */
   const VectorX<T>& GetReferencePositions(DeformableBodyId id) const;
 
+  /* Returns the output port of the vertex positions for all registered
+   deformable geometries. */
+  const systems::OutputPort<T>& get_vertex_positions_port() const {
+    return plant_->get_output_port(vertex_positions_port_index_);
+  }
+
  private:
   // TODO(xuchenhan-tri): Implement CloneToDouble() and CloneToAutoDiffXd()
   // and the corresponding is_cloneable methods.
@@ -124,6 +130,7 @@ class DeformableModel final : public multibody::internal::PhysicalModel<T> {
   /* The discrete state indexes for all deformable bodies. */
   std::unordered_map<DeformableBodyId, systems::DiscreteStateIndex>
       discrete_state_indexes_;
+  systems::OutputPortIndex vertex_positions_port_index_;
   std::unordered_map<DeformableBodyId, geometry::GeometryId>
       body_id_to_geometry_id_;
   std::unordered_map<DeformableBodyId, std::unique_ptr<fem::FemModel<T>>>

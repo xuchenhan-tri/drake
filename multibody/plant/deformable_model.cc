@@ -161,6 +161,35 @@ void DeformableModel<T>::DoDeclareSystemResources(MultibodyPlant<T>* plant) {
     discrete_state_indexes_.emplace(
         deformable_id, this->DeclareDiscreteState(plant, model_state));
   }
+  /* Declare the vertex position output port. */
+  vertex_positions_port_index_ =
+      this->DeclareAbstractOutputPort(
+              plant, "vertex_positions",
+              []() {
+                return AbstractValue::Make<
+                    std::unordered_map<geometry::GeometryId, VectorX<T>>>();
+              },
+              [this](const systems::Context<T>& context,
+                     AbstractValue* output) {
+                auto& output_value = output->get_mutable_value<
+                    std::unordered_map<geometry::GeometryId, VectorX<T>>>();
+                output_value.clear();
+                for (const auto& [deformable_body_id, geometry_id] :
+                     body_id_to_geometry_id_) {
+                  const auto& fem_model = GetFemModel(deformable_body_id);
+                  const int num_dofs = fem_model.num_dofs();
+                  const auto& discrete_state_index =
+                      GetDiscreteStateIndex(deformable_body_id);
+                  VectorX<T> vertex_positions =
+                      context.get_discrete_state(discrete_state_index)
+                          .value()
+                          .head(num_dofs);
+                  vertex_positions *= std::sin(context.get_time());
+                  output_value[geometry_id] = std::move(vertex_positions);
+                }
+              },
+              {systems::System<double>::xd_ticket()})
+          .get_index();
 }
 
 template <typename T>

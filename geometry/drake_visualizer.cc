@@ -190,6 +190,7 @@ lcmt_viewer_geometry_data MakeDeformableSurfaceMesh(
 
   float_data[0] = num_verts;
   float_data[1] = num_tris;
+  std::cout << num_tris << std::endl;
 
   const int v_start_index = header_floats;
   const int t_start_index = v_start_index + 3 * num_verts;
