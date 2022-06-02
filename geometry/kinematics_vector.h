@@ -1,7 +1,6 @@
 #pragma once
 
 #include <initializer_list>
-#include <memory>
 #include <utility>
 #include <vector>
 
@@ -155,7 +154,9 @@ class KinematicsVector {
 
  private:
   class Impl;
-  std::unique_ptr<Impl> pimpl_;
+  Impl& impl();
+  const Impl& impl() const;
+  void* pimpl_{};
 };
 
 /** Class for communicating _pose_ information to SceneGraph for registered
