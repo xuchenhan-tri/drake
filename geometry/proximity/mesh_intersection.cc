@@ -292,15 +292,22 @@ void SurfaceVolumeIntersector<MeshBuilder, BvType>::SampleVolumeFieldOnSurface(
     const bool filter_face_normal_along_field_gradient) {
   const VolumeMesh<double>& vol_mesh_M = volume_field_M.mesh();
 
+  // Factor this into a helper function.
+  std::vector<std::pair<int, int>> candidate_tet_tri_pair;
   const math::RigidTransform<double>& X_MN_d = convert_to_double(X_MN);
-  auto callback = [&volume_field_M, &surface_N,
-                   &vol_mesh_M, &X_MN_d, &X_MN,
-                   &builder_M, &filter_face_normal_along_field_gradient,
-                   this](int tet_index, int tri_index) -> BvttCallbackResult {
+  auto callback = [&candidate_tet_tri_pair](int tet_index,
+                                            int tri_index) -> BvttCallbackResult {
+    candidate_tet_tri_pair.emplace_back(tet_index, tri_index);
+    return BvttCallbackResult::Continue;
+  };
+  bvh_M.Collide(bvh_N, X_MN_d, callback);
+
+  // Factor this into a helper function.
+  for (const auto& [tet_index, tri_index] : candidate_tet_tri_pair) {
     if (filter_face_normal_along_field_gradient) {
-      if (!this->IsFaceNormalAlongPressureGradient(
+      if (!IsFaceNormalAlongPressureGradient(
           volume_field_M, surface_N, X_MN_d, tet_index, tri_index)) {
-        return BvttCallbackResult::Continue;
+        continue;
       }
     }
 
@@ -318,7 +325,7 @@ void SurfaceVolumeIntersector<MeshBuilder, BvType>::SampleVolumeFieldOnSurface(
         this->ClipTriangleByTetrahedron(tet_index, vol_mesh_M, tri_index,
                                         surface_N, X_MN);
 
-    if (polygon_vertices_M.size() < 3) return BvttCallbackResult::Continue;
+    if (polygon_vertices_M.size() < 3) continue;
 
     // Add the vertices to the builder (with corresponding pressure values) and
     // construct index-based polygon representation.
@@ -347,10 +354,7 @@ void SurfaceVolumeIntersector<MeshBuilder, BvType>::SampleVolumeFieldOnSurface(
     for (int i = 0; i < num_new_faces; ++i) {
       this->grad_eM_Ms_.push_back(grad_e_MN_M);
     }
-
-    return BvttCallbackResult::Continue;
-  };
-  bvh_M.Collide(bvh_N, X_MN_d, callback);
+  }
 
   if (builder_M->num_faces() == 0) return;
 
