@@ -15,6 +15,8 @@ const char* const kRezHint = "resolution_hint";
 const char* const kComplianceType = "compliance_type";
 const char* const kSlabThickness = "slab_thickness";
 
+const char* const kDeformableContactGroup = "deformable_contact";
+
 std::ostream& operator<<(std::ostream& out, const HydroelasticType& type) {
   switch (type) {
     case HydroelasticType::kUndefined:
@@ -120,6 +122,13 @@ void AddCompliantHydroelasticPropertiesForHalfSpace(
   properties->AddProperty(internal::kHydroGroup, internal::kSlabThickness,
                           slab_thickness);
   AddCompliantHydroelasticProperties(hydroelastic_modulus, properties);
+}
+
+void AddDeformableContactProperties(double resolution_hint,
+                                    ProximityProperties* properties) {
+  DRAKE_DEMAND(properties != nullptr);
+  properties->AddProperty(internal::kDeformableContactGroup, internal::kRezHint,
+                          resolution_hint);
 }
 
 }  // namespace geometry
