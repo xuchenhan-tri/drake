@@ -12,12 +12,13 @@ namespace {
 
 using internal::HydroelasticType;
 using internal::kComplianceType;
+using internal::kDeformableContactGroup;
 using internal::kElastic;
 using internal::kFriction;
 using internal::kHcDissipation;
-using internal::kPointStiffness;
 using internal::kHydroGroup;
 using internal::kMaterialGroup;
+using internal::kPointStiffness;
 using internal::kRezHint;
 using internal::kSlabThickness;
 using CoulombFrictiond = multibody::CoulombFriction<double>;
@@ -170,6 +171,16 @@ GTEST_TEST(ProximityPropertiesTest, AddHalfSpaceSoftProperties) {
       [](double modulus, ProximityProperties* p) {
         AddCompliantHydroelasticPropertiesForHalfSpace(1., modulus, p);
       });
+}
+
+GTEST_TEST(ProximityPropertiesTest, AddDeformableContactProperties) {
+  for (double length : {1e-5, 1.25, 1e7}) {
+    ProximityProperties props;
+    AddDeformableContactProperties(length, &props);
+    EXPECT_TRUE(props.HasProperty(kDeformableContactGroup, kRezHint));
+    EXPECT_EQ(props.GetProperty<double>(kDeformableContactGroup, kRezHint),
+              length);
+  }
 }
 
 }  // namespace

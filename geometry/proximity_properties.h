@@ -88,6 +88,19 @@ enum class HydroelasticType {
 /* Streaming operator for writing hydroelastic type to output stream.  */
 std::ostream& operator<<(std::ostream& out, const HydroelasticType& type);
 
+/* @name  Declaring geometry for deformable contact.
+
+ In order for a non-deformable geometry interact with deformable geometries
+ through contact, it must have a mesh representation. We require a input that
+ dictates the resolution of the tessellated meshes. */
+//@{
+
+extern const char* const
+    kDeformableContactGroup;        // deformable contact group name.
+extern const char* const kRezHint;  // Resolution hint property name.
+
+//@}
+
 }  // namespace internal
 
 /**
@@ -173,7 +186,24 @@ void AddCompliantHydroelasticPropertiesForHalfSpace(
     double slab_thickness, double hydroelastic_modulus,
     ProximityProperties* properties);
 
-//@}
+/** Adds properties to the given set of proximity properties sufficient to cause
+ the associated geometry to generate a representation suitable for contact with
+ deformable geometries.
+
+ @param resolution_hint       If the geometry is to be tessellated, it is the
+                              parameter that guides the level of mesh
+                              refinement. It has length units (in meters) and
+                              roughly corresponds to a typical edge length in
+                              the resulting mesh.  See @ref hug_properties.
+                              This will be ignored for geometry types that don't
+                              require tessellation.
+ @param[in,out] properties    The properties will be added to this property set.
+ @throws std::exception       If `properties` already has properties with the
+                              names that this function would need to add.
+ @pre 0 < `resolution_hint` < ∞ and `properties` is not nullptr.
+ @experimental. */
+void AddDeformableContactProperties(double resolution_hint,
+                                    ProximityProperties* properties);
 
 }  // namespace geometry
 }  // namespace drake
