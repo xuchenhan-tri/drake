@@ -79,6 +79,7 @@ drake_cc_library(
         ":utilities",
         "//geometry/proximity",
         "//geometry/proximity:collisions_exist_callback",
+        "//geometry/proximity:deformable_contact_geometries",
         "//geometry/proximity:distance_to_point_callback",
         "//geometry/proximity:distance_to_shape_callback",
         "//geometry/proximity:find_collision_candidates_callback",

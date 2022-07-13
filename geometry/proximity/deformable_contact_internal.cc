@@ -34,6 +34,8 @@ void Geometries::RemoveGeometry(GeometryId id) {
 
 void Geometries::MaybeAddRigidGeometry(const Shape& shape, GeometryId id,
                                        const ProximityProperties& props) {
+  // TODO(xuchenhan-tri): Figure out whether we want to reuse the hydro
+  // property.
   if (props.HasProperty(kDeformableContactGroup, kRezHint)) {
     const double resolution_hint =
         props.GetProperty<double>(kDeformableContactGroup, kRezHint);
@@ -62,112 +64,82 @@ void Geometries::UpdateDeformableVertexPositions(
   }
 }
 
-void Geometries::ComputeAllDeformableContactData(
-    std::vector<DeformableContactData<double>>* deformable_contact_data) const {
-  DRAKE_DEMAND(deformable_contact_data != nullptr);
-  deformable_contact_data->clear();
-  deformable_contact_data->reserve(num_deformable_geometries());
-  for (const auto& it : deformable_geometries_) {
-    DeformableContactData<double> contact_data =
-        CalcDeformableContactData(it.first);
-    if (contact_data.num_contact_points() > 0) {
-      deformable_contact_data->emplace_back(move(contact_data));
+void Geometries::ComputeDeformableRigidContact(
+    std::vector<DeformableRigidContact<double>>* deformable_rigid_contact)
+    const {
+  DRAKE_DEMAND(deformable_rigid_contact != nullptr);
+  deformable_rigid_contact->clear();
+  deformable_rigid_contact->reserve(num_deformable_geometries());
+
+  for (const auto& [deformable_id, deformable_geometry] :
+       deformable_geometries_) {
+    const VolumeMesh<double>& deformable_mesh =
+        deformable_geometry.deformable_mesh().mesh();
+    DeformableRigidContact<double> contact_data(deformable_id,
+                                                deformable_mesh.num_vertices());
+    for (const auto& [rigid_id, rigid_geometry] : rigid_geometries_) {
+      const math::RigidTransform<double>& X_WR = rigid_geometry.pose_in_world();
+      const auto& rigid_bvh = rigid_geometry.rigid_mesh().bvh();
+      const auto& rigid_tri_mesh = rigid_geometry.rigid_mesh().mesh();
+      AppendDeformableRigidContact(deformable_geometry, rigid_id,
+                                   rigid_tri_mesh, rigid_bvh, X_WR,
+                                   &contact_data);
     }
+    deformable_rigid_contact->emplace_back(std::move(contact_data));
   }
 }
 
-  void Geometries::ImplementGeometry(const Sphere& sphere, void* user_data) {
-    MakeShape(sphere, *static_cast<ReifyData*>(user_data));
-  }
+void Geometries::ImplementGeometry(const Sphere& sphere, void* user_data) {
+  MakeShape(sphere, *static_cast<ReifyData*>(user_data));
+}
 
-  void Geometries::ImplementGeometry(const Cylinder& cylinder,
-                                     void* user_data) {
-    MakeShape(cylinder, *static_cast<ReifyData*>(user_data));
-  }
+void Geometries::ImplementGeometry(const Cylinder& cylinder, void* user_data) {
+  MakeShape(cylinder, *static_cast<ReifyData*>(user_data));
+}
 
-  void Geometries::ImplementGeometry(const HalfSpace& half_space,
-                                     void* user_data) {
-    MakeShape(half_space, *static_cast<ReifyData*>(user_data));
-  }
+void Geometries::ImplementGeometry(const HalfSpace& half_space,
+                                   void* user_data) {
+  MakeShape(half_space, *static_cast<ReifyData*>(user_data));
+}
 
-  void Geometries::ImplementGeometry(const Box& box, void* user_data) {
-    MakeShape(box, *static_cast<ReifyData*>(user_data));
-  }
+void Geometries::ImplementGeometry(const Box& box, void* user_data) {
+  MakeShape(box, *static_cast<ReifyData*>(user_data));
+}
 
-  void Geometries::ImplementGeometry(const Capsule& capsule, void* user_data) {
-    MakeShape(capsule, *static_cast<ReifyData*>(user_data));
-  }
+void Geometries::ImplementGeometry(const Capsule& capsule, void* user_data) {
+  MakeShape(capsule, *static_cast<ReifyData*>(user_data));
+}
 
-  void Geometries::ImplementGeometry(const Ellipsoid& ellipsoid,
-                                     void* user_data) {
-    MakeShape(ellipsoid, *static_cast<ReifyData*>(user_data));
-  }
+void Geometries::ImplementGeometry(const Ellipsoid& ellipsoid,
+                                   void* user_data) {
+  MakeShape(ellipsoid, *static_cast<ReifyData*>(user_data));
+}
 
-  void Geometries::ImplementGeometry(const Mesh& mesh, void* user_data) {
-    MakeShape(mesh, *static_cast<ReifyData*>(user_data));
-  }
+void Geometries::ImplementGeometry(const Mesh& mesh, void* user_data) {
+  MakeShape(mesh, *static_cast<ReifyData*>(user_data));
+}
 
-  void Geometries::ImplementGeometry(const Convex& convex, void* user_data) {
-    MakeShape(convex, *static_cast<ReifyData*>(user_data));
-  }
+void Geometries::ImplementGeometry(const Convex& convex, void* user_data) {
+  MakeShape(convex, *static_cast<ReifyData*>(user_data));
+}
 
-  template <typename ShapeType>
-  void Geometries::MakeShape(const ShapeType& shape, const ReifyData& data) {
-    if (data.mesh) {
-      DeformableGeometry geometry(shape, *(data.mesh));
-      deformable_geometries_.insert({data.id, move(geometry)});
+template <typename ShapeType>
+void Geometries::MakeShape(const ShapeType& shape, const ReifyData& data) {
+  if (data.mesh) {
+    DeformableGeometry geometry(shape, *(data.mesh));
+    deformable_geometries_.insert({data.id, move(geometry)});
+  } else {
+    std::optional<RigidGeometry> geometry =
+        MakeRigidRepresentation(shape, *(data.resolution_hint));
+    if (geometry) {
+      rigid_geometries_.insert({data.id, move(*geometry)});
     } else {
-      std::optional<RigidGeometry> geometry =
-          MakeRigidRepresentation(shape, *(data.resolution_hint));
-      if (geometry) {
-        rigid_geometries_.insert({data.id, move(*geometry)});
-      } else {
-        throw std::logic_error(
-            "The provided shape cannot be instantiated as rigid geometry "
-            "participating in deformable contact. ");
-      }
+      throw std::logic_error(
+          "The provided shape cannot be instantiated as rigid geometry "
+          "participating in deformable contact. ");
     }
   }
-
-  DeformableContactData<double> Geometries::CalcDeformableContactData(
-      GeometryId deformable_id) const {
-    DRAKE_DEMAND(is_deformable(deformable_id));
-    std::vector<DeformableRigidContactSurface<double>>
-        deformable_rigid_contact_surfaces;
-    for (const auto& it : rigid_geometries_) {
-      DeformableRigidContactSurface<double> contact_surface =
-          CalcDeformableRigidContactSurface(it.first, deformable_id);
-      if (contact_surface.num_contact_points() != 0) {
-        deformable_rigid_contact_surfaces.emplace_back(move(contact_surface));
-      }
-    }
-
-    const VolumeMesh<double>& deformable_mesh =
-        deformable_geometries_.at(deformable_id).deformable_mesh().mesh();
-
-    return {move(deformable_rigid_contact_surfaces), deformable_mesh};
-  }
-
-  DeformableRigidContactSurface<double>
-  Geometries::CalcDeformableRigidContactSurface(
-      GeometryId rigid_id, GeometryId deformable_id) const {
-    DRAKE_DEMAND(is_deformable(deformable_id));
-    DRAKE_DEMAND(is_rigid(rigid_id));
-
-    const DeformableGeometry& deformable_geometry =
-        deformable_geometries_.at(deformable_id);
-    const RigidGeometry& rigid_geometry = rigid_geometries_.at(rigid_id);
-    const math::RigidTransform<double>& X_WR = rigid_geometry.pose_in_world();
-    const auto& rigid_bvh = rigid_geometry.rigid_mesh().bvh();
-    const auto& rigid_tri_mesh = rigid_geometry.rigid_mesh().mesh();
-
-    std::unique_ptr<DeformableRigidContactSurface<double>> contact_surface =
-        ComputeContactSurfaceFromDeformableVolumeRigidSurface(
-            deformable_id, deformable_geometry, rigid_id, rigid_tri_mesh,
-            rigid_bvh, X_WR);
-    // TODO(xuchenhan-tri): Remove this copy.
-    return *contact_surface;
-  }
+}
 
 }  // namespace deformable
 }  // namespace internal

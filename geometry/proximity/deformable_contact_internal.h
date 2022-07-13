@@ -5,8 +5,9 @@
 #include <vector>
 
 #include "drake/geometry/geometry_ids.h"
-#include "drake/geometry/proximity/deformable_rigid_contact_surface.h"
-#include "drake/geometry/query_results/deformable_contact_data.h"
+#include "drake/geometry/proximity/deformable_contact_geometries.h"
+#include "drake/geometry/proximity/volume_mesh.h"
+#include "drake/geometry/query_results/deformable_rigid_contact.h"
 #include "drake/geometry/shape_specification.h"
 
 namespace drake {
@@ -23,18 +24,18 @@ namespace deformable {
    - be declared via calling MaybeAddGeometry();
    - is either a deformable geometry (See
      SceneGraphInspector::IsDeformableGeometry) or a rigid (non-deformable)
-     geometry with "DeformableContact properties" (See
+     geometry with "deformable contact properties" (See
      internal::AddDeformableContactProperties());
    - the geometry cannot have been subsequently removed via a call to
      RemoveGeometry().
 
  If a geometry satisfies the requirements above, we say that the geometry has a
  "deformable contact representation". If two geometries are in contact, in order
- to produce the corresponding DeformableContactData, both ids must have a valid
+ to produce the corresponding contact data, both ids must have a valid
  representation in this data structure. Right now, we only support deformable
  vs. rigid contact. In the future, we will also support deformable vs.
  deformable contact. Rigid vs. rigid contact is handled through point contact or
- hydroelastics. */
+ hydroelastics outside of this class. */
 class Geometries final : public ShapeReifier {
  public:
   DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(Geometries);
@@ -68,11 +69,13 @@ class Geometries final : public ShapeReifier {
     return deformable_geometries_.size();
   }
 
-  /* Removes the geometry (if it has a deformable contact representation).  */
+  /* Removes the geometry (if it has a deformable contact representation). No-op
+   if no geometry with a deformable contact representation exists with the
+   provided id. */
   void RemoveGeometry(GeometryId id);
 
   /* Examines the given shape and properties, adding a rigid geometry
-   representation if `properties` specify the resolution hint for the mesh
+   representation if `props` specify the resolution hint for the mesh
    representation of the rigid geometry.
 
    @param shape         The shape to possibly represent.
@@ -80,7 +83,7 @@ class Geometries final : public ShapeReifier {
    @param properties    The proximity properties that specifies the properties
                         of the rigid representation.
    @throws std::exception if the shape is not supported or the resolution hint
-   specified by `properties` is non-positive.
+   specified by `props` is non-positive.
    @pre There is no previous representation associated with id.  */
   void MaybeAddRigidGeometry(const Shape& shape, GeometryId id,
                              const ProximityProperties& props);
@@ -90,9 +93,13 @@ class Geometries final : public ShapeReifier {
   void UpdateRigidWorldPose(GeometryId id,
                             const math::RigidTransform<double>& X_WG);
 
-  /* Adds a deformable geometry with the given `shape` and `mesh`.
+  /* Adds a deformable geometry whose contact mesh representation is given by
+   `mesh`.
 
-   @param shape  The shape to possibly represent.
+   @param shape  The shape of the geometry used to calculate the approximate
+                 signed distance field. Note that the shape is usually
+                 approximated by the `mesh`, but that does not necessarily need
+                 to be the case.
    @param id     The unique identifier for the geometry.
    @param mesh   The volume mesh representation of the deformable geometry.
    @throws std::exception if the shape is not supported.
@@ -101,18 +108,16 @@ class Geometries final : public ShapeReifier {
                                   const VolumeMesh<double>& mesh);
 
   /* If the deformable geometry with `id` exists, updates the vertex positions
-   of the geometry (in the world frame W) to `q_WG`. */
+   of the geometry (in the World frame) to `q_WG`. */
   void UpdateDeformableVertexPositions(
       GeometryId id, const Eigen::Ref<const VectorX<double>>& q_WG);
 
-  /* For all registered deformable bodies, computes the contact data of that
-   deformable body with all registered rigid bodies; if a contact exist, adds
-   the contact results to `deformable_contact_data`.
-   Assumes the vertex positions and poses of all registered deformable and rigid
-   bodies are up to date.
-   @pre deformable_contact_data != nullptr. */
-  void ComputeAllDeformableContactData(
-      std::vector<DeformableContactData<double>>* deformable_contact_data)
+  /* For each registered deformable geometry, computes the contact data of it
+   with all registered rigid geometries; Assumes the vertex positions and poses
+   of all registered deformable and rigid geometries are up to date.
+   @pre deformable_rigid_contact != nullptr. */
+  void ComputeDeformableRigidContact(
+      std::vector<DeformableRigidContact<double>>* deformable_rigid_contact)
       const;
 
  private:
@@ -146,18 +151,6 @@ class Geometries final : public ShapeReifier {
   representation is not supported. */
   template <typename ShapeType>
   void MakeShape(const ShapeType& shape, const ReifyData& data);
-
-  /* Calculates the contact data for the deformable body with the given id.
-   @pre A deformable representation with `deformable_id` exists. */
-  DeformableContactData<double> CalcDeformableContactData(
-      GeometryId deformable_id) const;
-
-  /* Calculates the contact surface between the deformable geometry with
-   `deformable_id` and the rigid geometry with `rigid_id`.
-   @pre A rigid representation with `rigid_id` exists.
-   @pre A deformable representation with `deformable_id` exists. */
-  DeformableRigidContactSurface<double> CalcDeformableRigidContactSurface(
-      GeometryId rigid_id, GeometryId deformable_id) const;
 
   // The representations of all deformable geometries.
   std::unordered_map<GeometryId, DeformableGeometry> deformable_geometries_;

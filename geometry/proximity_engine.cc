@@ -16,6 +16,7 @@
 #include "drake/common/eigen_types.h"
 #include "drake/geometry/geometry_ids.h"
 #include "drake/geometry/proximity/collisions_exist_callback.h"
+#include "drake/geometry/proximity/deformable_contact_geometries.h"
 #include "drake/geometry/proximity/deformable_contact_internal.h"
 #include "drake/geometry/proximity/distance_to_point_callback.h"
 #include "drake/geometry/proximity/distance_to_shape_callback.h"
@@ -681,15 +682,15 @@ class ProximityEngine<T>::Impl : public ShapeReifier {
 
   template <typename T1 = T>
   typename std::enable_if_t<scalar_predicate<T1>::is_bool, void>
-  ComputeDeformableContactData(
-      std::vector<DeformableContactData<T>>* deformable_contact_data) const {
+  ComputeDeformableRigidContact(
+      std::vector<DeformableRigidContact<T>>* deformable_contact_data) const {
     if constexpr (std::is_same_v<T, double>) {
-      deformable_contact_geometries_.ComputeAllDeformableContactData(
+      deformable_contact_geometries_.ComputeDeformableRigidContact(
           deformable_contact_data);
     } else {
       unused(deformable_contact_data);
       throw std::logic_error(
-          "ComputeDeformableContactData() only supports scalar type double at "
+          "ComputeDeformableRigidContact() only supports scalar type double at "
           "the moment.");
     }
   }
@@ -1047,9 +1048,9 @@ ProximityEngine<T>::ComputeContactSurfacesWithFallback(
 template <typename T>
 template <typename T1>
 typename std::enable_if_t<scalar_predicate<T1>::is_bool, void>
-ProximityEngine<T>::ComputeDeformableContactData(
-    std::vector<DeformableContactData<T>>* deformable_contact_data) const {
-  return impl_->ComputeDeformableContactData(deformable_contact_data);
+ProximityEngine<T>::ComputeDeformableRigidContact(
+    std::vector<DeformableRigidContact<T>>* deformable_contact_data) const {
+  return impl_->ComputeDeformableRigidContact(deformable_contact_data);
 }
 
 template <typename T>
