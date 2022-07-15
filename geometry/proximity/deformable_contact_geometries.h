@@ -155,40 +155,6 @@ class RigidGeometry {
   math::RigidTransform<double> X_WG_;
 };
 
-/* Generic interface for handling rigid Shapes. By default, we support all
- shapes that are supported by rigid hydroelastic. Unsupported shapes (e.g. half
- space) can choose to opt out. Unsupported geometries will return a
- std::nullopt. The rigid mesh created upon a successful creation of
- RigidGeometry will be the same mesh as used for rigid hydroelastics. */
-template <typename Shape>
-std::optional<RigidGeometry> MakeRigidRepresentation(const Shape& shape,
-                                                     double resolution_hint) {
-  /* Create a temporary hydor proximity property that specifies the desired
-   resolution hint so that we can reuse the hydro implementation. */
-  ProximityProperties props;
-  AddRigidHydroelasticProperties(resolution_hint, &props);
-  std::optional<internal::hydroelastic::RigidGeometry> hydro_rigid_geometry =
-      internal::hydroelastic::MakeRigidRepresentation(shape, std::move(props));
-  if (!hydro_rigid_geometry) {
-    static const logging::Warn log_once(
-        "Rigid {} shapes are not currently supported for deformable "
-        "contact; registration is allowed, but an error will be thrown "
-        "during contact.",
-        ShapeName(shape));
-    return {};
-  }
-  auto surface_mesh = std::make_unique<TriangleSurfaceMesh<double>>(
-      (*hydro_rigid_geometry).mesh());
-  auto rigid_mesh = std::make_unique<internal::hydroelastic::RigidMesh>(
-      std::move(surface_mesh));
-  return RigidGeometry(std::move(rigid_mesh));
-}
-
-/* Half space is not supported for deformable contact at the moment as we
- require a surface mesh. */
-std::optional<RigidGeometry> MakeRigidRepresentation(const HalfSpace&,
-                                                     double resolution_hint);
-
 }  // namespace deformable
 }  // namespace internal
 }  // namespace geometry

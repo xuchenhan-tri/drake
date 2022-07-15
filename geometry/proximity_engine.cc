@@ -277,9 +277,8 @@ class ProximityEngine<T>::Impl : public ShapeReifier {
                 &anchored_objects_);
   }
 
-  void AddDeformableGeometry(const Shape& shape, const VolumeMesh<double>& mesh,
-                           GeometryId id) {
-    deformable_contact_geometries_.MaybeAddDeformableGeometry(shape, id, mesh);
+  void AddDeformableGeometry(const VolumeMesh<double>& mesh, GeometryId id) {
+    deformable_contact_geometries_.MaybeAddDeformableGeometry(id, mesh);
   }
 
   void UpdateRepresentationForNewProperties(
@@ -917,10 +916,9 @@ void ProximityEngine<T>::AddAnchoredGeometry(
 }
 
 template <typename T>
-void ProximityEngine<T>::AddDeformableGeometry(const Shape& shape,
-                                               const VolumeMesh<double>& mesh,
+void ProximityEngine<T>::AddDeformableGeometry(const VolumeMesh<double>& mesh,
                                                GeometryId id) {
-  impl_->AddDeformableGeometry(shape, mesh, id);
+  impl_->AddDeformableGeometry(mesh, id);
 }
 
 template <typename T>

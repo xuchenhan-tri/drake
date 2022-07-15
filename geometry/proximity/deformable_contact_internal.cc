@@ -7,13 +7,12 @@
 #include "drake/common/drake_assert.h"
 #include "drake/geometry/proximity/deformable_contact_geometries.h"
 #include "drake/geometry/proximity/deformable_mesh_intersection.h"
+#include "drake/geometry/proximity/hydroelastic_internal.h"
 
 namespace drake {
 namespace geometry {
 namespace internal {
 namespace deformable {
-
-using std::move;
 
 const DeformableGeometry& Geometries::deformable_geometry(GeometryId id) const {
   if (is_deformable(id)) return deformable_geometries_.at(id);
@@ -34,13 +33,26 @@ void Geometries::RemoveGeometry(GeometryId id) {
 
 void Geometries::MaybeAddRigidGeometry(const Shape& shape, GeometryId id,
                                        const ProximityProperties& props) {
-  // TODO(xuchenhan-tri): Figure out whether we want to reuse the hydro
-  // property.
-  if (props.HasProperty(kDeformableContactGroup, kRezHint)) {
-    const double resolution_hint =
-        props.GetProperty<double>(kDeformableContactGroup, kRezHint);
-    ReifyData data{id, resolution_hint, std::nullopt};
-    shape.Reify(this, &data);
+  // TODO(xuchenhan-tri): Right now, rigid geometries participating in
+  // deformable contact share the property "kRezHint" with hydroelastics. It's
+  // reasonable to use the contact mesh with the same resolution for both hydro
+  // and deformable contact. Consider reorganizing the proximity properties to
+  // make this sharing more explicit. We should also avoid having two copies of
+  // the same rigid geometry for both hydro and deformable contact.
+  if (props.HasProperty(kHydroGroup, kRezHint)) {
+    // TODO(xuchenhan-tri): Currently the warning log message doesn't make sense
+    // when a shape doesn't support rigid contact representation. It talks about
+    // "hydroelastic contact". It doesn't matter too much because we will throw
+    // immediately after the message is emitted. In the long run, we should
+    // unify the representation of rigid hydro and rigid (non-deformable)
+    // geometries in deformable contact because they are way too similar.
+    std::optional<internal::hydroelastic::RigidGeometry> hydro_rigid_geometry =
+        internal::hydroelastic::MakeRigidRepresentation(shape, props);
+    if (!hydro_rigid_geometry || hydro_rigid_geometry->is_half_space()) {
+      return;
+    }
+    rigid_geometries_.insert(
+        {id, RigidGeometry(hydro_rigid_geometry->release_mesh())});
   }
 }
 
@@ -51,11 +63,8 @@ void Geometries::UpdateRigidWorldPose(
   }
 }
 
-void Geometries::MaybeAddDeformableGeometry(const Shape& shape, GeometryId id,
-                                            const VolumeMesh<double>& mesh) {
-  ReifyData data{id, std::nullopt, mesh};
-  shape.Reify(this, &data);
-}
+void Geometries::MaybeAddDeformableGeometry(GeometryId,
+                                            const VolumeMesh<double>&) {}
 
 void Geometries::UpdateDeformableVertexPositions(
     GeometryId id, const Eigen::Ref<const VectorX<double>>& q_WG) {
@@ -86,58 +95,6 @@ void Geometries::ComputeDeformableRigidContact(
                                    &contact_data);
     }
     deformable_rigid_contact->emplace_back(std::move(contact_data));
-  }
-}
-
-void Geometries::ImplementGeometry(const Sphere& sphere, void* user_data) {
-  MakeShape(sphere, *static_cast<ReifyData*>(user_data));
-}
-
-void Geometries::ImplementGeometry(const Cylinder& cylinder, void* user_data) {
-  MakeShape(cylinder, *static_cast<ReifyData*>(user_data));
-}
-
-void Geometries::ImplementGeometry(const HalfSpace& half_space,
-                                   void* user_data) {
-  MakeShape(half_space, *static_cast<ReifyData*>(user_data));
-}
-
-void Geometries::ImplementGeometry(const Box& box, void* user_data) {
-  MakeShape(box, *static_cast<ReifyData*>(user_data));
-}
-
-void Geometries::ImplementGeometry(const Capsule& capsule, void* user_data) {
-  MakeShape(capsule, *static_cast<ReifyData*>(user_data));
-}
-
-void Geometries::ImplementGeometry(const Ellipsoid& ellipsoid,
-                                   void* user_data) {
-  MakeShape(ellipsoid, *static_cast<ReifyData*>(user_data));
-}
-
-void Geometries::ImplementGeometry(const Mesh& mesh, void* user_data) {
-  MakeShape(mesh, *static_cast<ReifyData*>(user_data));
-}
-
-void Geometries::ImplementGeometry(const Convex& convex, void* user_data) {
-  MakeShape(convex, *static_cast<ReifyData*>(user_data));
-}
-
-template <typename ShapeType>
-void Geometries::MakeShape(const ShapeType& shape, const ReifyData& data) {
-  if (data.mesh) {
-    DeformableGeometry geometry(shape, *(data.mesh));
-    deformable_geometries_.insert({data.id, move(geometry)});
-  } else {
-    std::optional<RigidGeometry> geometry =
-        MakeRigidRepresentation(shape, *(data.resolution_hint));
-    if (geometry) {
-      rigid_geometries_.insert({data.id, move(*geometry)});
-    } else {
-      throw std::logic_error(
-          "The provided shape cannot be instantiated as rigid geometry "
-          "participating in deformable contact. ");
-    }
   }
 }
 

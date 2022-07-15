@@ -107,13 +107,11 @@ class ProximityEngine {
                            const math::RigidTransformd& X_WG, GeometryId id,
                            const ProximityProperties& props = {});
 
-  /* Adds the given `shape` to the engine's deformable geometries.
-   @param shape   The shape to add.
-   @param mesh    The volume mesh of representation of the collision geometry.
-   @param id      The id of the geometry in SceneGraph to which this shape
+  /* Adds a new deformable geometry the engine.
+   @param mesh    The volume mesh representation of the deformable geometry.
+   @param id      The id of the geometry in SceneGraph to which this geometry
                   belongs. */
-  void AddDeformableGeometry(const Shape& shape, const VolumeMesh<double>& mesh,
-                             GeometryId id);
+  void AddDeformableGeometry(const VolumeMesh<double>& mesh, GeometryId id);
 
   /* Possibly updates the proximity representation of the given `geometry`
    based on the relationship between its _current_ proximity properties and the
