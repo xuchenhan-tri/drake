@@ -11,6 +11,8 @@ namespace geometry {
 namespace internal {
 namespace deformable {
 
+/* TODO(xuchenhan-tri): Remove this tester if Geometries::deformable_geometry()
+ and Geometries::rigid_geometry() are to stay. */
 class GeometriesTester {
  public:
   /* Returns the deformable geometry with `deformable_id` registered in
@@ -23,7 +25,7 @@ class GeometriesTester {
   }
 
   /* Returns the rigid geometry with `rigid_id` registered in `geometries`.
-   @pre a rigid representatino with `rigid_id` exists in `geometries`. */
+   @pre a rigid representation with `rigid_id` exists in `geometries`. */
   static const RigidGeometry& get_rigid_geometry(const Geometries& geometries,
                                                  GeometryId rigid_id) {
     return geometries.rigid_geometries_.at(rigid_id);
@@ -37,73 +39,67 @@ using Eigen::VectorXd;
 
 enum class GeometryType { kRigid, kDeformable };
 
-/* Makes a ProximityProperties with two properties in the hydro group.
- 1. A compliance type property that is set to `kSoft` if the input `type` is
-   `kDeformable` and to `kRigid` otherwise.
- 2. A resolution hint property set to the given resolution hint. */
-ProximityProperties MakeProximityPropsWithRezHint(GeometryType type,
-                                                  double resolution_hint) {
+/* Makes a ProximityProperties with a resolution hint property in the hydro
+ group.
+ @pre resolution_hint > 0. */
+ProximityProperties MakeProximityPropsWithRezHint(double resolution_hint) {
   ProximityProperties props;
   props.AddProperty(internal::kHydroGroup, internal::kRezHint, resolution_hint);
-  if (type == GeometryType::kRigid) {
-    props.AddProperty(internal::kHydroGroup, internal::kComplianceType,
-                      internal::HydroelasticType::kRigid);
-  } else if (type == GeometryType::kDeformable) {
-    props.AddProperty(internal::kHydroGroup, internal::kComplianceType,
-                      internal::HydroelasticType::kDeformable);
-  } else {
-    DRAKE_UNREACHABLE();
-  }
   return props;
 }
 
-// Tests the simple public API of the deformable::Geometries: adding
-// geometries and querying the data stored.
-GTEST_TEST(DeformableContactInternalTest, GeometriesPopulationAndQuery) {
+GTEST_TEST(GeometriesTest, AddAndRemoveRigidGeometry) {
   Geometries geometries;
-
-  // Ids that haven't been added report as undefined.
   GeometryId rigid_id = GeometryId::get_new_id();
-  ProximityProperties rigid_properties =
-      MakeProximityPropsWithRezHint(GeometryType::kRigid, 0.5);
-
-  GeometryId deformable_id = GeometryId::get_new_id();
-  ProximityProperties deformable_properties =
-      MakeProximityPropsWithRezHint(GeometryType::kDeformable, 0.25);
-
-  GeometryId bad_id = GeometryId::get_new_id();
+  /* No geometries have been added yet. */
   EXPECT_FALSE(geometries.is_rigid(rigid_id));
   EXPECT_FALSE(geometries.is_deformable(rigid_id));
-  EXPECT_FALSE(geometries.is_rigid(deformable_id));
-  EXPECT_FALSE(geometries.is_deformable(deformable_id));
-  EXPECT_FALSE(geometries.is_rigid(bad_id));
-  EXPECT_FALSE(geometries.is_deformable(bad_id));
 
-  // Once added, they report the appropriate type.
-  geometries.MaybeAddGeometry(Sphere(0.5), deformable_id,
-                              deformable_properties);
-  EXPECT_FALSE(geometries.is_rigid(deformable_id));
-  EXPECT_TRUE(geometries.is_deformable(deformable_id));
-  geometries.MaybeAddGeometry(Sphere(0.5), rigid_id, rigid_properties);
+  /* Add a rigid geometry. */
+  constexpr double kRadius = 0.5;
+  constexpr double kRezHint = 0.5;
+  ProximityProperties props = MakeProximityPropsWithRezHint(kRezHint);
+  geometries.MaybeAddRigidGeometry(Sphere(kRadius), rigid_id, props);
+
   EXPECT_TRUE(geometries.is_rigid(rigid_id));
   EXPECT_FALSE(geometries.is_deformable(rigid_id));
-  // Ids that report the correct type, successfully access the appropriate
-  // representation.
-  DRAKE_EXPECT_NO_THROW(geometries.deformable_geometry(deformable_id));
-  DRAKE_EXPECT_NO_THROW(geometries.rigid_geometry(rigid_id));
-  // Ids that report the wrong type throw an exception.
-  DRAKE_EXPECT_THROWS_MESSAGE(geometries.rigid_geometry(deformable_id),
-                              "There is no rigid geometry with GeometryId .*");
-  DRAKE_EXPECT_THROWS_MESSAGE(
-      geometries.deformable_geometry(rigid_id),
-      "There is no deformable geometry with GeometryId .*");
 
-  // Rigid geometry's pose can be updated.
+  /* Remove the rigid geometry. */
+  geometries.RemoveGeometry(rigid_id);
+  EXPECT_FALSE(geometries.is_rigid(rigid_id));
+  EXPECT_FALSE(geometries.is_deformable(rigid_id));
+}
+
+GTEST_TEST(GeometriesTest, UpdateRigidWorldPose) {
+  Geometries geometries;
+
+  /* Add a rigid geometry. */
+  GeometryId rigid_id = GeometryId::get_new_id();
+  constexpr double kRadius = 0.5;
+  constexpr double kRezHint = 0.5;
+  ProximityProperties props = MakeProximityPropsWithRezHint(kRezHint);
+  geometries.MaybeAddRigidGeometry(Sphere(kRadius), rigid_id, props);
+
+  /* Initially the pose is identity. */
+  {
+    const RigidGeometry& rigid_geometry =
+        GeometriesTester::get_rigid_geometry(geometries, rigid_id);
+    EXPECT_TRUE(rigid_geometry.pose_in_world().IsExactlyIdentity());
+  }
+  /* Update the pose to some arbitrary value. */
   const math::RigidTransform<double> X_WG(
       math::RollPitchYaw<double>(-1.57, 0, 3), Vector3d(-0.3, -0.55, 0.36));
   geometries.UpdateRigidWorldPose(rigid_id, X_WG);
-  const RigidGeometry& rigid_geometry = geometries.rigid_geometry(rigid_id);
-  EXPECT_TRUE(rigid_geometry.pose_in_world().IsExactlyEqualTo(X_WG));
+  {
+    const RigidGeometry& rigid_geometry =
+        GeometriesTester::get_rigid_geometry(geometries, rigid_id);
+    EXPECT_TRUE(rigid_geometry.pose_in_world().IsExactlyEqualTo(X_WG));
+  }
+}
+
+/*
+
+GTEST_TEST(GeometriesTest, AddAndRemoveDeformableGeometry) {
   // Deformable geometry's vertex positions can be updated.
   const DeformableGeometry& deformable_geometry =
       geometries.deformable_geometry(deformable_id);
@@ -118,40 +114,6 @@ GTEST_TEST(DeformableContactInternalTest, GeometriesPopulationAndQuery) {
     const Vector3d& expected_q_MV = q.segment<3>(3 * i);
     EXPECT_EQ(q_MV, expected_q_MV);
   }
-}
-
-GTEST_TEST(DeformableContactInternalTest, RemoveGeometry) {
-  Geometries geometries;
-
-  GeometryId rigid_id = GeometryId::get_new_id();
-  ProximityProperties rigid_properties =
-      MakeProximityPropsWithRezHint(GeometryType::kRigid, 0.5);
-  geometries.MaybeAddGeometry(Sphere(0.5), rigid_id, rigid_properties);
-
-  GeometryId deformable_id = GeometryId::get_new_id();
-  ProximityProperties deformable_properties =
-      MakeProximityPropsWithRezHint(GeometryType::kDeformable, 0.25);
-  geometries.MaybeAddGeometry(Sphere(0.5), deformable_id,
-                              deformable_properties);
-
-  EXPECT_TRUE(geometries.is_rigid(rigid_id));
-  EXPECT_TRUE(geometries.is_deformable(deformable_id));
-
-  // Removing a non-existant geometry is a no-op.
-  const GeometryId bad_id = GeometryId::get_new_id();
-  EXPECT_NO_THROW(geometries.RemoveGeometry(bad_id));
-  EXPECT_TRUE(geometries.is_rigid(rigid_id));
-  EXPECT_TRUE(geometries.is_deformable(deformable_id));
-
-  // Remove the deformable geometry.
-  geometries.RemoveGeometry(deformable_id);
-  EXPECT_TRUE(geometries.is_rigid(rigid_id));
-  EXPECT_FALSE(geometries.is_deformable(deformable_id));
-
-  // Remove the rigid geometry.
-  geometries.RemoveGeometry(rigid_id);
-  EXPECT_FALSE(geometries.is_rigid(rigid_id));
-  EXPECT_FALSE(geometries.is_deformable(deformable_id));
 }
 
 GTEST_TEST(DeformableContactInternalTest, CalcDeformableContactData) {
@@ -184,23 +146,23 @@ GTEST_TEST(DeformableContactInternalTest, CalcDeformableContactData) {
   geometries.ComputeAllDeformableContactData(&contact_data);
   EXPECT_EQ(contact_data.size(), 0);
 
-  /* Now shift the rigid geometry closer to the deformable geometry.
-                                    +Z
-                                     |
-                                     |
-               rigid box             |      deformable box
-                     ----------+--+--+-------
-                     |         |  ●  |      |
-                     |         |  |  |      |
-              -Y-----+---------+--+--+------+-------+Y
-                     |         |  |  |      |
-                     |         |  ●  |      |
-                     ----------+--+--+-------
-                                     |
-                                     |
-                                     |
-                                    -Z
-   where the "●"s denote representative contact points. */
+  // Now shift the rigid geometry closer to the deformable geometry.
+  //                                +Z
+  //                                 |
+  //                                 |
+  //           rigid box             |      deformable box
+  //                 ----------+--+--+-------
+  //                 |         |  ●  |      |
+  //                 |         |  |  |      |
+  //          -Y-----+---------+--+--+------+-------+Y
+  //                 |         |  |  |      |
+  //                 |         |  ●  |      |
+  //                 ----------+--+--+-------
+  //                                 |
+  //                                 |
+  //                                 |
+  //                                -Z
+  //  where the "●"s denote representative contact points.
   X_WR = math::RigidTransform<double>(Vector3d(0, -0.75, 0));
   geometries.UpdateRigidWorldPose(rigid_id, X_WR);
 
@@ -255,6 +217,8 @@ GTEST_TEST(DeformableContactInternalTest, CalcDeformableContactData) {
         Vector3d(0, 0, 1), kTol));
   }
 }
+
+*/
 
 }  // namespace
 }  // namespace deformable

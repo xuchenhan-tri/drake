@@ -278,7 +278,7 @@ class ProximityEngine<T>::Impl : public ShapeReifier {
   }
 
   void AddDeformableGeometry(const VolumeMesh<double>& mesh, GeometryId id) {
-    deformable_contact_geometries_.MaybeAddDeformableGeometry(id, mesh);
+    deformable_contact_geometries_.AddDeformableGeometry(id, mesh);
   }
 
   void UpdateRepresentationForNewProperties(

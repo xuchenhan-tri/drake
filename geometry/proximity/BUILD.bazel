@@ -866,6 +866,16 @@ drake_cc_googletest(
 )
 
 drake_cc_googletest(
+    name = "deformable_contact_internal_test",
+    deps = [
+        ":deformable_contact_internal",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//common/test_utilities:expect_no_throw",
+        "//common/test_utilities:expect_throws_message",
+    ],
+)
+
+drake_cc_googletest(
     name = "deformable_contact_geometries_test",
     deps = [
         ":deformable_contact_geometries",

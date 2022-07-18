@@ -40,19 +40,8 @@ void Geometries::MaybeAddRigidGeometry(const Shape& shape, GeometryId id,
   // make this sharing more explicit. We should also avoid having two copies of
   // the same rigid geometry for both hydro and deformable contact.
   if (props.HasProperty(kHydroGroup, kRezHint)) {
-    // TODO(xuchenhan-tri): Currently the warning log message doesn't make sense
-    // when a shape doesn't support rigid contact representation. It talks about
-    // "hydroelastic contact". It doesn't matter too much because we will throw
-    // immediately after the message is emitted. In the long run, we should
-    // unify the representation of rigid hydro and rigid (non-deformable)
-    // geometries in deformable contact because they are way too similar.
-    std::optional<internal::hydroelastic::RigidGeometry> hydro_rigid_geometry =
-        internal::hydroelastic::MakeRigidRepresentation(shape, props);
-    if (!hydro_rigid_geometry || hydro_rigid_geometry->is_half_space()) {
-      return;
-    }
-    rigid_geometries_.insert(
-        {id, RigidGeometry(hydro_rigid_geometry->release_mesh())});
+    ReifyData data{id, props};
+    shape.Reify(this, &data);
   }
 }
 
@@ -63,8 +52,7 @@ void Geometries::UpdateRigidWorldPose(
   }
 }
 
-void Geometries::MaybeAddDeformableGeometry(GeometryId,
-                                            const VolumeMesh<double>&) {}
+void Geometries::AddDeformableGeometry(GeometryId, const VolumeMesh<double>&) {}
 
 void Geometries::UpdateDeformableVertexPositions(
     GeometryId id, const Eigen::Ref<const VectorX<double>>& q_WG) {
@@ -96,6 +84,56 @@ void Geometries::ComputeDeformableRigidContact(
     }
     deformable_rigid_contact->emplace_back(std::move(contact_data));
   }
+}
+
+void Geometries::ImplementGeometry(const Sphere& sphere, void* user_data) {
+  AddRigidGeometry(sphere, *static_cast<ReifyData*>(user_data));
+}
+
+void Geometries::ImplementGeometry(const Cylinder& cylinder, void* user_data) {
+  AddRigidGeometry(cylinder, *static_cast<ReifyData*>(user_data));
+}
+
+void Geometries::ImplementGeometry(const Box& box, void* user_data) {
+  AddRigidGeometry(box, *static_cast<ReifyData*>(user_data));
+}
+
+void Geometries::ImplementGeometry(const Capsule& capsule, void* user_data) {
+  AddRigidGeometry(capsule, *static_cast<ReifyData*>(user_data));
+}
+
+void Geometries::ImplementGeometry(const Ellipsoid& ellipsoid,
+                                   void* user_data) {
+  AddRigidGeometry(ellipsoid, *static_cast<ReifyData*>(user_data));
+}
+
+void Geometries::ImplementGeometry(const Mesh& mesh, void* user_data) {
+  AddRigidGeometry(mesh, *static_cast<ReifyData*>(user_data));
+}
+
+void Geometries::ImplementGeometry(const Convex& convex, void* user_data) {
+  AddRigidGeometry(convex, *static_cast<ReifyData*>(user_data));
+}
+
+template <typename ShapeType>
+void Geometries::AddRigidGeometry(const ShapeType& shape,
+                                  const ReifyData& data) {
+  /* Forward to hydroelastics to construct the geometry. */
+  std::optional<internal::hydroelastic::RigidGeometry> hydro_rigid_geometry =
+      internal::hydroelastic::MakeRigidRepresentation(shape, data.properties);
+  /* Unsupported geometries will be handle through the
+   `ThrowUnsupportedGeometry()` code path. */
+  DRAKE_DEMAND(hydro_rigid_geometry.has_value());
+  rigid_geometries_.insert(
+      {data.id, RigidGeometry(hydro_rigid_geometry->release_mesh())});
+}
+
+void Geometries::ThrowUnsupportedGeometry(const std::string& shape_name) {
+  static const logging::Warn log_once(
+      "Rigid (non-deformable) {} shapes are not currently supported for "
+      "deformable contact; registration is allowed, but an error will be "
+      "thrown during contact.",
+      shape_name);
 }
 
 }  // namespace deformable

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <optional>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -21,11 +22,9 @@ namespace deformable {
  In order for a geometry with id `g_id` to have a representation in this
  collection, it must:
 
-   - be declared via calling MaybeAddRigidGeometry();
-   - be either a deformable geometry (See
-     SceneGraphInspector::IsDeformableGeometry) or a rigid (non-deformable)
-     geometry with "deformable contact properties" (See
-     internal::AddDeformableContactProperties());
+   - be declared via successful calls to MaybeAddRigidGeometry() (for
+     non-deformable geometries) or AddDeformableGeometry() (for deformable
+     geometries);
    - the geometry cannot have been subsequently removed via a call to
      RemoveGeometry().
 
@@ -36,12 +35,13 @@ namespace deformable {
  vs. rigid contact. In the future, we will also support deformable vs.
  deformable contact. Rigid vs. rigid contact is handled through point contact or
  hydroelastics outside of this class. */
-class Geometries {
+class Geometries final : public ShapeReifier {
  public:
   DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(Geometries);
 
   Geometries() = default;
 
+  // TODO(xuchenhan-tri): Determine if these getters are needed.
   /* Returns the representation of the deformable geometry with the given `id`.
    @throws exception if the deformable geometry with the given `id` doesn't
    exist. */
@@ -64,6 +64,7 @@ class Geometries {
     return deformable_geometries_.count(id) != 0;
   }
 
+  // TODO(xuchenhan-tri): Determine if needed.
   /* Returns the total number of deformable geometries. */
   int num_deformable_geometries() const {
     return deformable_geometries_.size();
@@ -104,10 +105,9 @@ class Geometries {
    @param id     The unique identifier for the geometry.
    @param mesh   The volume mesh representation of the deformable geometry.
    @pre There is no previous representation associated with id.  */
-  void MaybeAddDeformableGeometry(GeometryId id,
-                                  const VolumeMesh<double>& mesh);
+  void AddDeformableGeometry(GeometryId id, const VolumeMesh<double>& mesh);
 
-  /* If the deformable geometry with `id` exists, updates the vertex positions
+  /* If a deformable geometry with `id` exists, updates the vertex positions
    of the geometry (in the World frame) to `q_WG`. */
   void UpdateDeformableVertexPositions(
       GeometryId id, const Eigen::Ref<const VectorX<double>>& q_WG);
@@ -122,6 +122,32 @@ class Geometries {
 
  private:
   friend class GeometriesTester;
+
+  // Data to be used during reification. It is passed as the `user_data`
+  // parameter in the ImplementGeometry API.
+  struct ReifyData {
+    GeometryId id;
+    const ProximityProperties& properties;
+  };
+
+  using ShapeReifier::ImplementGeometry;
+
+  void ImplementGeometry(const Sphere& sphere, void* user_data) override;
+  void ImplementGeometry(const Cylinder& cylinder, void* user_data) override;
+  void ImplementGeometry(const Box& box, void* user_data) override;
+  void ImplementGeometry(const Capsule& capsule, void* user_data) override;
+  void ImplementGeometry(const Ellipsoid& ellipsoid, void* user_data) override;
+  void ImplementGeometry(const Mesh&, void*) override;
+  void ImplementGeometry(const Convex& convex, void* user_data) override;
+
+  /* Makes a rigid (non-deformable) geometry from a supported shape type using
+   the given `data`. */
+  template <typename ShapeType>
+  void AddRigidGeometry(const ShapeType& shape, const ReifyData& data);
+
+  /* We override the behavior towards unsupported geometry from throwing to
+   logging a warning. */
+  void ThrowUnsupportedGeometry(const std::string& shape_name) override;
 
   // The representations of all deformable geometries.
   std::unordered_map<GeometryId, DeformableGeometry> deformable_geometries_;

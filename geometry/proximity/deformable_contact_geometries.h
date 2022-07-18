@@ -83,10 +83,10 @@ class ReferenceDeformableGeometry : public ShapeReifier {
       nullptr};
 };
 
-/* Definition of a deformable geometry for contact implementations. To be a
- deformable geometry, a shape must be associated with both:
+/* Definition of a deformable geometry for contact implementations. To be
+ considered as deformable, a geometry must be associated with both:
    - a deformable volume mesh, and
-   - an approximate signed distance field in the interior of the mesh. */
+   - an approximate signed distance field in the interior of the geometry. */
 class DeformableGeometry {
  public:
   DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(DeformableGeometry)
