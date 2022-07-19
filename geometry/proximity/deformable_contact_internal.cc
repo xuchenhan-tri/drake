@@ -52,7 +52,10 @@ void Geometries::UpdateRigidWorldPose(
   }
 }
 
-void Geometries::AddDeformableGeometry(GeometryId, const VolumeMesh<double>&) {}
+void Geometries::AddDeformableGeometry(GeometryId id,
+                                       const VolumeMesh<double>& mesh) {
+  deformable_geometries_.insert({id, DeformableGeometry(mesh)});
+}
 
 void Geometries::UpdateDeformableVertexPositions(
     GeometryId id, const Eigen::Ref<const VectorX<double>>& q_WG) {

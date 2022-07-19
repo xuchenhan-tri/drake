@@ -2,9 +2,13 @@
 
 #include <gtest/gtest.h>
 
+#include "drake/common/find_resource.h"
 #include "drake/common/test_utilities/eigen_matrix_compare.h"
 #include "drake/common/test_utilities/expect_no_throw.h"
 #include "drake/common/test_utilities/expect_throws_message.h"
+#include "drake/geometry/proximity/deformable_mesh_intersection.h"
+#include "drake/geometry/proximity/make_box_mesh.h"
+#include "drake/geometry/proximity/make_sphere_mesh.h"
 
 namespace drake {
 namespace geometry {
@@ -37,7 +41,14 @@ namespace {
 using Eigen::Vector3d;
 using Eigen::VectorXd;
 
-enum class GeometryType { kRigid, kDeformable };
+/* Makes an arbitrary volume mesh. */
+VolumeMesh<double> MakeVolumeMesh() {
+  constexpr double kRadius = 0.5;
+  constexpr double kRezHint = 0.5;
+  Sphere sphere(kRadius);
+  return MakeSphereVolumeMesh<double>(
+      sphere, kRezHint, TessellationStrategy::kDenseInteriorVertices);
+}
 
 /* Makes a ProximityProperties with a resolution hint property in the hydro
  group.
@@ -48,14 +59,14 @@ ProximityProperties MakeProximityPropsWithRezHint(double resolution_hint) {
   return props;
 }
 
-GTEST_TEST(GeometriesTest, AddAndRemoveRigidGeometry) {
+GTEST_TEST(GeometriesTest, AddRigidGeometry) {
   Geometries geometries;
   GeometryId rigid_id = GeometryId::get_new_id();
   /* No geometries have been added yet. */
   EXPECT_FALSE(geometries.is_rigid(rigid_id));
   EXPECT_FALSE(geometries.is_deformable(rigid_id));
 
-  /* Add a rigid geometry. */
+  /* Add a rigid geometry with resolution hint property. */
   constexpr double kRadius = 0.5;
   constexpr double kRezHint = 0.5;
   ProximityProperties props = MakeProximityPropsWithRezHint(kRezHint);
@@ -64,10 +75,90 @@ GTEST_TEST(GeometriesTest, AddAndRemoveRigidGeometry) {
   EXPECT_TRUE(geometries.is_rigid(rigid_id));
   EXPECT_FALSE(geometries.is_deformable(rigid_id));
 
-  /* Remove the rigid geometry. */
-  geometries.RemoveGeometry(rigid_id);
-  EXPECT_FALSE(geometries.is_rigid(rigid_id));
-  EXPECT_FALSE(geometries.is_deformable(rigid_id));
+  /* Trying to a rigid geometry without the resolution hint property is a no-op.
+   */
+  GeometryId g_id = GeometryId::get_new_id();
+  ProximityProperties empty_props;
+  geometries.MaybeAddRigidGeometry(Sphere(kRadius), g_id, empty_props);
+
+  EXPECT_FALSE(geometries.is_rigid(g_id));
+  EXPECT_FALSE(geometries.is_deformable(g_id));
+}
+
+/* Test coverage for all shapes as rigid geometries. */
+GTEST_TEST(GeometriesTest, RigidShapes) {
+  constexpr double kRezHint = 0.5;
+  ProximityProperties props = MakeProximityPropsWithRezHint(kRezHint);
+  Geometries geometries;
+
+  /* Unsupported shapes: MeshcatCone, HalfSpace. */
+  /* MeshcatCone */
+  {
+    GeometryId cone_id = GeometryId::get_new_id();
+    const double height = 2.0;
+    const double a = 1.0;
+    const double b = 1.0;
+    EXPECT_NO_THROW(geometries.MaybeAddRigidGeometry(MeshcatCone(height, a, b),
+                                                     cone_id, props));
+    EXPECT_FALSE(geometries.is_rigid(cone_id));
+  }
+  /* HalfSpace */
+  {
+    GeometryId hs_id = GeometryId::get_new_id();
+    EXPECT_NO_THROW(
+        geometries.MaybeAddRigidGeometry(HalfSpace(), hs_id, props));
+    EXPECT_FALSE(geometries.is_rigid(hs_id));
+  }
+
+  /* Supported shapes: Box, Sphere (tested in GeometriesTest::AddRigidGeometry),
+   Cylinder, Capsule, Ellipsoid, Mesh, Convex. */
+  /* Box */
+  {
+    GeometryId box_id = GeometryId::get_new_id();
+    geometries.MaybeAddRigidGeometry(Box::MakeCube(1.0), box_id, props);
+    EXPECT_TRUE(geometries.is_rigid(box_id));
+  }
+  /* Cylinder */
+  {
+    GeometryId cylinder_id = GeometryId::get_new_id();
+    const double radius = 1.0;
+    const double length = 2.0;
+    geometries.MaybeAddRigidGeometry(Cylinder(radius, length), cylinder_id,
+                                     props);
+    EXPECT_TRUE(geometries.is_rigid(cylinder_id));
+  }
+  /* Capsule */
+  {
+    GeometryId capsule_id = GeometryId::get_new_id();
+    const double radius = 1.0;
+    const double length = 2.0;
+    geometries.MaybeAddRigidGeometry(Capsule(radius, length), capsule_id,
+                                     props);
+    EXPECT_TRUE(geometries.is_rigid(capsule_id));
+  }
+  /* Ellipsoid */
+  {
+    GeometryId ellipsoid_id = GeometryId::get_new_id();
+    const double a = 0.5;
+    const double b = 0.8;
+    const double c = 0.3;
+    geometries.MaybeAddRigidGeometry(Ellipsoid(a, b, c), ellipsoid_id, props);
+    EXPECT_TRUE(geometries.is_rigid(ellipsoid_id));
+  }
+  /* Mesh */
+  {
+    GeometryId mesh_id = GeometryId::get_new_id();
+    std::string file = FindResourceOrThrow("drake/geometry/test/quad_cube.obj");
+    geometries.MaybeAddRigidGeometry(Mesh(file, 1.0), mesh_id, props);
+    EXPECT_TRUE(geometries.is_rigid(mesh_id));
+  }
+  /* Convex */
+  {
+    GeometryId convex_id = GeometryId::get_new_id();
+    std::string file = FindResourceOrThrow("drake/geometry/test/quad_cube.obj");
+    geometries.MaybeAddRigidGeometry(Convex(file, 1.0), convex_id, props);
+    EXPECT_TRUE(geometries.is_rigid(convex_id));
+  }
 }
 
 GTEST_TEST(GeometriesTest, UpdateRigidWorldPose) {
@@ -97,128 +188,183 @@ GTEST_TEST(GeometriesTest, UpdateRigidWorldPose) {
   }
 }
 
-/*
+GTEST_TEST(GeometriesTest, AddDeformableGeometry) {
+  Geometries geometries;
+  GeometryId deformable_id = GeometryId::get_new_id();
+  EXPECT_FALSE(geometries.is_rigid(deformable_id));
+  EXPECT_FALSE(geometries.is_deformable(deformable_id));
 
-GTEST_TEST(GeometriesTest, AddAndRemoveDeformableGeometry) {
-  // Deformable geometry's vertex positions can be updated.
-  const DeformableGeometry& deformable_geometry =
-      geometries.deformable_geometry(deformable_id);
-  const int num_vertices =
-      deformable_geometry.deformable_volume_mesh().mesh().num_vertices();
-  const VectorXd q = VectorXd::LinSpaced(3 * num_vertices, 0.0, 1.0);
-  geometries.UpdateDeformableVertexPositions(deformable_id, q);
-  const VolumeMesh<double>& mesh =
-      deformable_geometry.deformable_volume_mesh().mesh();
-  for (int i = 0; i < num_vertices; ++i) {
-    const Vector3d& q_MV = mesh.vertex(i);
-    const Vector3d& expected_q_MV = q.segment<3>(3 * i);
-    EXPECT_EQ(q_MV, expected_q_MV);
+  /* Add a deformable geometry. */
+  geometries.AddDeformableGeometry(deformable_id, MakeVolumeMesh());
+  EXPECT_FALSE(geometries.is_rigid(deformable_id));
+  EXPECT_TRUE(geometries.is_deformable(deformable_id));
+}
+
+GTEST_TEST(GeometriesTest, RemoveGeometry) {
+  Geometries geometries;
+  /* Add a couple of deformable geometries. */
+  GeometryId deformable_id0 = GeometryId::get_new_id();
+  GeometryId deformable_id1 = GeometryId::get_new_id();
+  geometries.AddDeformableGeometry(deformable_id0, MakeVolumeMesh());
+  geometries.AddDeformableGeometry(deformable_id1, MakeVolumeMesh());
+
+  /* Add a couple of rigid geometries. */
+  GeometryId rigid_id0 = GeometryId::get_new_id();
+  GeometryId rigid_id1 = GeometryId::get_new_id();
+  constexpr double kRadius = 0.5;
+  constexpr double kRezHint = 0.5;
+  ProximityProperties props = MakeProximityPropsWithRezHint(kRezHint);
+  geometries.MaybeAddRigidGeometry(Sphere(kRadius), rigid_id0, props);
+  geometries.MaybeAddRigidGeometry(Sphere(kRadius), rigid_id1, props);
+
+  /* Calling RemoveGeometry on an existing deformable geometry. */
+  {
+    geometries.RemoveGeometry(deformable_id0);
+    /* The geometry is indeed removed. */
+    EXPECT_FALSE(geometries.is_deformable(deformable_id0));
+    /* Other geometries are unaffected. */
+    EXPECT_TRUE(geometries.is_deformable(deformable_id1));
+    EXPECT_TRUE(geometries.is_rigid(rigid_id0));
+    EXPECT_TRUE(geometries.is_rigid(rigid_id1));
+  }
+  /* Calling RemoveGeometry on an existing rigid geometry. */
+  {
+    geometries.RemoveGeometry(rigid_id0);
+    /* The geometry is indeed removed. */
+    EXPECT_FALSE(geometries.is_rigid(rigid_id0));
+    /* Other geometries are unaffected. */
+    EXPECT_FALSE(geometries.is_deformable(deformable_id0));
+    EXPECT_TRUE(geometries.is_deformable(deformable_id1));
+    EXPECT_TRUE(geometries.is_rigid(rigid_id1));
+  }
+  /* Calling RemoveGeometry on an invalid or already deleted geometry is a
+   no-op. */
+  {
+    GeometryId invalid_id = GeometryId::get_new_id();
+    geometries.RemoveGeometry(invalid_id);
+    geometries.RemoveGeometry(rigid_id0);
+
+    EXPECT_FALSE(geometries.is_rigid(rigid_id0));
+    EXPECT_FALSE(geometries.is_deformable(deformable_id0));
+    EXPECT_TRUE(geometries.is_rigid(rigid_id1));
+    EXPECT_TRUE(geometries.is_deformable(deformable_id1));
   }
 }
 
-GTEST_TEST(DeformableContactInternalTest, CalcDeformableContactData) {
+GTEST_TEST(GeometriesTest, UpdateDeformableVertexPositions) {
   Geometries geometries;
-  // The contact data is empty when there is no deformable geometry.
-  std::vector<DeformableContactData<double>> contact_data;
-  geometries.ComputeAllDeformableContactData(&contact_data);
-  EXPECT_EQ(contact_data.size(), 0);
-
-  // Add a deformable unit cube.
+  /* Add a deformable geometry. */
   GeometryId deformable_id = GeometryId::get_new_id();
-  ProximityProperties deformable_properties =
-      MakeProximityPropsWithRezHint(GeometryType::kDeformable, 1.0);
-  geometries.MaybeAddGeometry(Box(1.0, 1.0, 1.0), deformable_id,
-                              deformable_properties);
+  const VolumeMesh<double> input_mesh = MakeVolumeMesh();
+  geometries.AddDeformableGeometry(deformable_id, input_mesh);
+  const int num_vertices = input_mesh.num_vertices();
 
-  // There is no rigid geometry to collide with the deformable geometry yet.
-  geometries.ComputeAllDeformableContactData(&contact_data);
+  /* Initially the vertex positions is the same as the registered mesh. */
+  {
+    ASSERT_TRUE(geometries.is_deformable(deformable_id));
+    const DeformableGeometry& geometry =
+        GeometriesTester::get_deformable_geometry(geometries, deformable_id);
+    EXPECT_TRUE(geometry.deformable_mesh().mesh().Equal(input_mesh));
+  }
+  /* Update the vertex positions to some arbitrary value. */
+  const VectorXd q = VectorXd::LinSpaced(3 * num_vertices, 0.0, 1.0);
+  geometries.UpdateDeformableVertexPositions(deformable_id, q);
+  {
+    const DeformableGeometry& geometry =
+        GeometriesTester::get_deformable_geometry(geometries, deformable_id);
+    const VolumeMesh<double>& mesh = geometry.deformable_mesh().mesh();
+    for (int i = 0; i < num_vertices; ++i) {
+      const Vector3d& q_MV = mesh.vertex(i);
+      const Vector3d& expected_q_MV = q.segment<3>(3 * i);
+      EXPECT_EQ(q_MV, expected_q_MV);
+    }
+  }
+}
+
+GTEST_TEST(GeometriesTest, CalcDeformableRigidContact) {
+  Geometries geometries;
+  /* The contact data is empty when there is no deformable geometry. */
+  std::vector<DeformableRigidContact<double>> contact_data;
+  geometries.ComputeDeformableRigidContact(&contact_data);
   EXPECT_EQ(contact_data.size(), 0);
 
-  // Add a rigid unit cube.
+  /* Add a deformable unit cube. */
+  GeometryId deformable_id = GeometryId::get_new_id();
+  VolumeMesh<double> deformable_mesh =
+      MakeBoxVolumeMesh<double>(Box::MakeCube(1.0), 1.0);
+  const int num_vertices = deformable_mesh.num_vertices();
+  geometries.AddDeformableGeometry(deformable_id, std::move(deformable_mesh));
+
+  /* There is no rigid geometry to collide with the deformable geometry yet. */
+  geometries.ComputeDeformableRigidContact(&contact_data);
+  ASSERT_EQ(contact_data.size(), 1);
+  EXPECT_EQ(contact_data[0].num_rigid_geometries(), 0);
+  /* Add a rigid unit cube. */
   GeometryId rigid_id = GeometryId::get_new_id();
-  ProximityProperties rigid_properties =
-      MakeProximityPropsWithRezHint(GeometryType::kRigid, 1.0);
-  geometries.MaybeAddGeometry(Box(1.0, 1.0, 1.0), rigid_id, rigid_properties);
+  ProximityProperties rigid_properties = MakeProximityPropsWithRezHint(1.0);
+  geometries.MaybeAddRigidGeometry(Box::MakeCube(1.0), rigid_id,
+                                   rigid_properties);
   math::RigidTransform<double> X_WR(Vector3d(0, -2.0, 0));
   geometries.UpdateRigidWorldPose(rigid_id, X_WR);
 
-  // The deformable box and the rigid box are not in contact yet.
-  geometries.ComputeAllDeformableContactData(&contact_data);
-  EXPECT_EQ(contact_data.size(), 0);
+  /* The deformable box and the rigid box are not in contact yet. */
+  geometries.ComputeDeformableRigidContact(&contact_data);
+  ASSERT_EQ(contact_data.size(), 1);
+  EXPECT_EQ(contact_data[0].num_rigid_geometries(), 0);
 
-  // Now shift the rigid geometry closer to the deformable geometry.
-  //                                +Z
-  //                                 |
-  //                                 |
-  //           rigid box             |      deformable box
-  //                 ----------+--+--+-------
-  //                 |         |  ●  |      |
-  //                 |         |  |  |      |
-  //          -Y-----+---------+--+--+------+-------+Y
-  //                 |         |  |  |      |
-  //                 |         |  ●  |      |
-  //                 ----------+--+--+-------
-  //                                 |
-  //                                 |
-  //                                 |
-  //                                -Z
-  //  where the "●"s denote representative contact points.
+  /* Now shift the rigid geometry closer to the deformable geometry.
+                                  +Z
+                                   |
+                                   |
+             rigid box             |      deformable box
+                   ----------+--+--+-------
+                   |         |  ●  |      |
+                   |         |  |  |      |
+            -Y-----+---------+--+--+------+-------+Y
+                   |         |  |  |      |
+                   |         |  ●  |      |
+                   ----------+--+--+-------
+                                   |
+                                   |
+                                   |
+                                  -Z
+    where the "●"s denote representative contact points. */
   X_WR = math::RigidTransform<double>(Vector3d(0, -0.75, 0));
   geometries.UpdateRigidWorldPose(rigid_id, X_WR);
 
-  // Now there should be exactly one contact pair.
-  geometries.ComputeAllDeformableContactData(&contact_data);
+  /* Now there should be exactly one contact data. */
+  geometries.ComputeDeformableRigidContact(&contact_data);
   ASSERT_EQ(contact_data.size(), 1);
-  const DeformableContactData<double>& box_box_contact_data = contact_data[0];
-  ASSERT_EQ(box_box_contact_data.num_contact_pairs(), 1);
-  EXPECT_EQ(box_box_contact_data.deformable_geometry_id(), deformable_id);
-  const DeformableRigidContactPair<double> contact_pair =
-      box_box_contact_data.contact_pairs()[0];
+  const DeformableRigidContact<double>& box_box_contact_data = contact_data[0];
 
-  // Verify that the contact surface is as expected.
+  /* Verify that the contact surface is as expected. */
   const auto& X_DR =
       X_WR;  // The deformable mesh frame is always the world frame.
   const DeformableGeometry& deformable_geometry =
       GeometriesTester::get_deformable_geometry(geometries, deformable_id);
   const RigidGeometry& rigid_geometry =
       GeometriesTester::get_rigid_geometry(geometries, rigid_id);
-  const DeformableContactSurface<double> expected_contact_surface =
-      ComputeTetMeshTriMeshContact<double>(
-          deformable_geometry.deformable_volume_mesh(),
-          rigid_geometry.rigid_mesh().mesh(), rigid_geometry.rigid_mesh().bvh(),
-          X_DR);
-  EXPECT_EQ(contact_pair.num_contact_points(),
-            expected_contact_surface.num_polygons());
-  const int num_contacts = expected_contact_surface.num_polygons();
-  for (int i = 0; i < num_contacts; ++i) {
-    const auto& expected_polygon_data =
-        expected_contact_surface.polygon_data(i);
-    const auto& calculated_polygon_data =
-        contact_pair.contact_surface.polygon_data(i);
-    EXPECT_EQ(expected_polygon_data.area, calculated_polygon_data.area);
-    EXPECT_TRUE(CompareMatrices(expected_polygon_data.unit_normal,
-                                calculated_polygon_data.unit_normal));
-    EXPECT_TRUE(CompareMatrices(expected_polygon_data.centroid,
-                                calculated_polygon_data.centroid));
-    EXPECT_TRUE(CompareMatrices(expected_polygon_data.b_centroid,
-                                calculated_polygon_data.b_centroid));
-    EXPECT_EQ(expected_polygon_data.tet_index,
-              calculated_polygon_data.tet_index);
-  }
+  DeformableRigidContact<double> expected_contact_data(deformable_id,
+                                                       num_vertices);
+  AppendDeformableRigidContact(
+      deformable_geometry, rigid_id, rigid_geometry.rigid_mesh().mesh(),
+      rigid_geometry.rigid_mesh().bvh(), X_DR, &expected_contact_data);
 
-  // Verify the calculated rotation matrices map contact normals from
-  // world frame to contact frame ({0,0,1}).
-  constexpr double kTol = std::numeric_limits<double>::epsilon();
-  ASSERT_EQ(contact_pair.R_CWs.size(), num_contacts);
-  for (int i = 0; i < num_contacts; ++i) {
-    EXPECT_TRUE(CompareMatrices(
-        contact_pair.R_CWs[i] *
-            contact_pair.contact_surface.polygon_data(i).unit_normal,
-        Vector3d(0, 0, 1), kTol));
-  }
+  /* Verify that the contact data is the same as expected by checking a subset
+   of all data fields. */
+  ASSERT_EQ(box_box_contact_data.num_rigid_geometries(), 1);
+  ASSERT_EQ(expected_contact_data.num_rigid_geometries(), 1);
+  EXPECT_EQ(box_box_contact_data.rigid_ids()[0],
+            expected_contact_data.rigid_ids()[0]);
+  EXPECT_EQ(box_box_contact_data.deformable_id(),
+            expected_contact_data.deformable_id());
+  EXPECT_EQ(box_box_contact_data.num_contact_points(),
+            expected_contact_data.num_contact_points());
+  ASSERT_EQ(box_box_contact_data.contact_meshes_W().size(), 1);
+  ASSERT_EQ(expected_contact_data.contact_meshes_W().size(), 1);
+  EXPECT_TRUE(box_box_contact_data.contact_meshes_W()[0].Equal(
+      expected_contact_data.contact_meshes_W()[0]));
 }
-
-*/
 
 }  // namespace
 }  // namespace deformable

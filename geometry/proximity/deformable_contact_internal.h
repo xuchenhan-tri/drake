@@ -123,8 +123,8 @@ class Geometries final : public ShapeReifier {
  private:
   friend class GeometriesTester;
 
-  // Data to be used during reification. It is passed as the `user_data`
-  // parameter in the ImplementGeometry API.
+  /* Data to be used during reification. It is passed as the `user_data`
+   parameter in the ImplementGeometry API. */
   struct ReifyData {
     GeometryId id;
     const ProximityProperties& properties;
@@ -137,7 +137,7 @@ class Geometries final : public ShapeReifier {
   void ImplementGeometry(const Box& box, void* user_data) override;
   void ImplementGeometry(const Capsule& capsule, void* user_data) override;
   void ImplementGeometry(const Ellipsoid& ellipsoid, void* user_data) override;
-  void ImplementGeometry(const Mesh&, void*) override;
+  void ImplementGeometry(const Mesh& mesh, void* user_data) override;
   void ImplementGeometry(const Convex& convex, void* user_data) override;
 
   /* Makes a rigid (non-deformable) geometry from a supported shape type using
