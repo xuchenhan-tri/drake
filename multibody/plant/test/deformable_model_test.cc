@@ -27,6 +27,18 @@ class DeformableModelTest : public ::testing::Test {
     plant_->AddPhysicalModel(move(deformable_model));
   }
 
+  /* Registers a deformable body representing a sphere with an octahedron.
+   Returns the DeformableBodyId of the newly added body. */
+  DeformableBodyId RegisterCoarseSphere(std::string name) {
+    /* Make the resolution hint coarse enough so that we know for sure an
+     * octahedron is registered. */
+    constexpr double kRezHint = 10.0;
+    return deformable_model_ptr_->RegisterDeformableBody(
+        make_unique<GeometryInstance>(
+            RigidTransformd(), make_unique<Sphere>(1.0), std::move(name)),
+        default_body_config_, kRezHint);
+  }
+
   systems::DiagramBuilder<double> builder_;
   const fem::DeformableBodyConfig<double> default_body_config_{};
   DeformableModel<double>* deformable_model_ptr_{nullptr};
@@ -111,6 +123,29 @@ TEST_F(DeformableModelTest, InvalidBodyId) {
   DRAKE_EXPECT_THROWS_MESSAGE(
       deformable_model_ptr_->GetReferencePositions(fake_id),
       "GetReferencePositions.*No deformable body with id.*");
+}
+
+TEST_F(DeformableModelTest, GetDeformableBodyIds) {
+  DeformableBodyId id0 = RegisterCoarseSphere("body0");
+  DeformableBodyId id1 = RegisterCoarseSphere("body1");
+  DeformableBodyId id2 = RegisterCoarseSphere("body2");
+
+  const std::vector<DeformableBodyId> all_ids =
+      deformable_model_ptr_->GetDeformableBodyIds();
+  ASSERT_EQ(all_ids.size(), 3);
+  EXPECT_EQ(all_ids[0], id0);
+  EXPECT_EQ(all_ids[1], id1);
+  EXPECT_EQ(all_ids[2], id2);
+}
+
+TEST_F(DeformableModelTest, GetNumDofs) {
+  EXPECT_EQ(deformable_model_ptr_->GetNumDofs(), 0);
+  // The coarsest sphere has 7 vertices.
+  constexpr int kNumDofsInSphere = 3 * 7;
+  RegisterCoarseSphere("body0");
+  EXPECT_EQ(deformable_model_ptr_->GetNumDofs(), kNumDofsInSphere);
+  RegisterCoarseSphere("body1");
+  EXPECT_EQ(deformable_model_ptr_->GetNumDofs(), 2 * kNumDofsInSphere);
 }
 
 }  // namespace

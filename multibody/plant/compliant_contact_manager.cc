@@ -20,6 +20,9 @@
 #include "drake/multibody/contact_solvers/sap/sap_limit_constraint.h"
 #include "drake/multibody/contact_solvers/sap/sap_solver.h"
 #include "drake/multibody/contact_solvers/sap/sap_solver_results.h"
+#include "drake/multibody/fem/fem_model.h"
+#include "drake/multibody/fem/fem_solver.h"
+#include "drake/multibody/fem/velocity_newmark_scheme.h"
 #include "drake/multibody/plant/multibody_plant.h"
 #include "drake/multibody/triangle_quadrature/gaussian_triangle_quadrature_rule.h"
 #include "drake/systems/framework/context.h"
@@ -38,6 +41,10 @@ using drake::multibody::contact_solvers::internal::SapLimitConstraint;
 using drake::multibody::contact_solvers::internal::SapSolver;
 using drake::multibody::contact_solvers::internal::SapSolverResults;
 using drake::multibody::contact_solvers::internal::SapSolverStatus;
+using drake::multibody::fem::FemModel;
+using drake::multibody::fem::FemState;
+using drake::multibody::fem::internal::FemSolver;
+using drake::multibody::fem::internal::FemSolverScratchData;
 using drake::multibody::internal::DiscreteContactPair;
 using drake::multibody::internal::MultibodyTreeTopology;
 using drake::systems::Context;
@@ -103,6 +110,66 @@ void CompliantContactManager<T>::DeclareCacheEntries() {
           &CompliantContactManager<T>::CalcContactProblemCache),
       {plant().cache_entry_ticket(cache_indexes_.discrete_contact_pairs)});
   cache_indexes_.contact_problem = contact_problem_cache_entry.cache_index();
+
+  DeclareDeformableCacheEntries();
+}
+
+template <typename T>
+void CompliantContactManager<T>::DeclareDeformableCacheEntries() {
+  if (deformable_model_ == nullptr) {
+    return;
+  }
+  if (!std::is_same_v<T, double>) {
+    throw std::logic_error(
+        "CompliantContactManager only supports updates for deformable bodies "
+        "when T == double.");
+  } else {
+    const std::vector<DeformableBodyId> deformable_ids =
+        GetDeformableModelOrThrow().GetDeformableBodyIds();
+    // Declare per deformable body cache entries.
+    for (const auto id : deformable_ids) {
+      const fem::FemModel<T>& fem_model =
+          GetDeformableModelOrThrow().GetFemModel(id);
+      std::unique_ptr<fem::FemState<T>> model_state = fem_model.MakeFemState();
+
+      const auto& fem_state_cache_entry = this->DeclareCacheEntry(
+          fmt::format("FEM state {}", id),
+          systems::ValueProducer(
+              *model_state,
+              std::function<void(const systems::Context<T>&,
+                                 fem::FemState<T>*)>{
+                  [this, id](const systems::Context<T>& context,
+                             fem::FemState<T>* state) {
+                    this->CalcFemState(context, id, state);
+                  }}),
+          {systems::System<T>::xd_ticket()});
+      cache_indexes_.fem_states.insert(
+          {id, fem_state_cache_entry.cache_index()});
+
+      const auto& fem_free_motion_state_cache_entry = this->DeclareCacheEntry(
+          fmt::format("FEM free motion state {}", id),
+          systems::ValueProducer(
+              *model_state,
+              std::function<void(const systems::Context<T>&,
+                                 fem::FemState<T>*)>{
+                  [this, id](const systems::Context<T>& context,
+                             fem::FemState<T>* free_motion_state) {
+                    this->CalcFreeMotionFemState(context, id,
+                                                 free_motion_state);
+                  }}),
+          {fem_state_cache_entry.ticket()});
+      cache_indexes_.fem_free_motion_states.insert(
+          {id, fem_free_motion_state_cache_entry.cache_index()});
+
+      FemSolverScratchData scratch(fem_model);
+      const auto& scratch_entry = this->DeclareCacheEntry(
+          fmt::format("FEM solver scratches for {}", id),
+          systems::ValueProducer(scratch, &systems::ValueProducer::NoopCalc),
+          {systems::SystemBase::nothing_ticket()});
+      cache_indexes_.fem_solver_scratches.insert(
+          {id, scratch_entry.cache_index()});
+    }
+  }
 }
 
 template <typename T>
@@ -575,17 +642,123 @@ template <typename T>
 void CompliantContactManager<T>::CalcFreeMotionVelocities(
     const systems::Context<T>& context, VectorX<T>* v_star) const {
   DRAKE_DEMAND(v_star != nullptr);
+  // The total number of velocities is equal to the number of rigid dofs + the
+  // number of deformable dofs. We always put the deformable dofs _after the
+  // rigid dofs.
+  const int rigid_dofs = plant().num_velocities();
+  const int deformable_dofs = GetNumDeformableDofs();
+  v_star->resize(rigid_dofs + deformable_dofs);
+  CalcRigidFreeMotionVelocities(context, v_star);
+  CalcDeformableFreeMotionVelocities(context, v_star, rigid_dofs);
+}
+
+template <typename T>
+void CompliantContactManager<T>::CalcRigidFreeMotionVelocities(
+    const systems::Context<T>& context, VectorX<T>* v_star) const {
+  DRAKE_DEMAND(v_star != nullptr);
   // N.B. Forces are evaluated at the previous time step state. This is
   // consistent with the explicit Euler and symplectic Euler schemes.
   // TODO(amcastro-tri): Implement free-motion velocities update based on the
   // theta-method, as in the SAP paper.
   const VectorX<T>& vdot0 =
       EvalAccelerationsDueToNonContactForcesCache(context).get_vdot();
+  DRAKE_DEMAND(v_star->size() >= vdot0.size());
   const double dt = this->plant().time_step();
   const VectorX<T>& x0 =
       context.get_discrete_state(this->multibody_state_index()).value();
   const auto v0 = x0.bottomRows(this->plant().num_velocities());
-  *v_star = v0 + dt * vdot0;
+  v_star->head(v0.size()) = v0 + dt * vdot0;
+}
+
+template <typename T>
+void CompliantContactManager<T>::CalcDeformableFreeMotionVelocities(
+    const systems::Context<T>& context, VectorX<T>* v_star,
+    int starting_dof) const {
+  DRAKE_DEMAND(v_star != nullptr);
+  DRAKE_DEMAND(starting_dof <= v_star->size());
+
+  if (starting_dof == v_star->size()) {
+    return;
+  }
+
+  const std::vector<DeformableBodyId> ids =
+      GetDeformableModelOrThrow().GetDeformableBodyIds();
+  for (const auto id : ids) {
+    const fem::FemState<T>& free_motion_state =
+        EvalFreeMotionFemState(context, id);
+    const int num_dofs = free_motion_state.num_dofs();
+    v_star->segment(starting_dof, num_dofs) = free_motion_state.GetVelocities();
+    starting_dof += num_dofs;
+  }
+}
+
+template <typename T>
+const DeformableModel<T>&
+CompliantContactManager<T>::GetDeformableModelOrThrow() const {
+  if (deformable_model_ != nullptr) {
+    return *deformable_model_;
+  }
+  throw std::logic_error(
+      "Trying to acquire information about a deformable model, but no "
+      "deformable model has been registered.");
+}
+
+template <typename T>
+void CompliantContactManager<T>::CalcFemState(
+    const systems::Context<T>& context, DeformableBodyId id,
+    FemState<T>* fem_state) const {
+  const systems::BasicVector<T>& discrete_state =
+      context.get_discrete_state().get_vector(
+          GetDeformableModelOrThrow().GetDiscreteStateIndex(id));
+  const auto& discrete_value = discrete_state.get_value();
+  DRAKE_DEMAND(discrete_value.size() % 3 == 0);
+  const int num_dofs = discrete_value.size() / 3;
+  const auto& q = discrete_value.head(num_dofs);
+  const auto& qdot = discrete_value.segment(num_dofs, num_dofs);
+  const auto& qddot = discrete_value.tail(num_dofs);
+  fem_state->SetPositions(q);
+  fem_state->SetVelocities(qdot);
+  fem_state->SetAccelerations(qddot);
+}
+
+template <typename T>
+const FemState<T>& CompliantContactManager<T>::EvalFemState(
+    const systems::Context<T>& context, DeformableBodyId id) const {
+  return plant()
+      .get_cache_entry(cache_indexes_.fem_states.at(id))
+      .template Eval<FemState<T>>(context);
+}
+
+template <typename T>
+void CompliantContactManager<T>::CalcFreeMotionFemState(
+    const systems::Context<T>& context, DeformableBodyId id,
+    FemState<T>* fem_state_star) const {
+  if constexpr (std::is_same_v<T, double>) {
+    const FemState<T>& fem_state = EvalFemState(context, id);
+    const FemModel<T>& model = GetDeformableModelOrThrow().GetFemModel(id);
+    const FemSolver<T> solver(&model, integrator_.get());
+    FemSolverScratchData<T>& scratch =
+        plant()
+            .get_cache_entry(cache_indexes_.fem_solver_scratches.at(id))
+            .get_mutable_cache_entry_value(context)
+            .template GetMutableValueOrThrow<FemSolverScratchData<T>>();
+    solver.AdvanceOneTimeStep(fem_state, fem_state_star, &scratch);
+  } else {
+    unused(context);
+    unused(id);
+    unused(fem_state_star);
+    throw std::logic_error(
+        "CompliantContactManager only supports simulation with deformable "
+        "bodies with T == double.");
+  }
+}
+
+template <typename T>
+const FemState<T>& CompliantContactManager<T>::EvalFreeMotionFemState(
+    const systems::Context<T>& context, DeformableBodyId id) const {
+  return plant()
+      .get_cache_entry(cache_indexes_.fem_free_motion_states.at(id))
+      .template Eval<FemState<T>>(context);
 }
 
 template <typename T>
@@ -1030,6 +1203,16 @@ void CompliantContactManager<T>::ExtractModelInfo() {
     const int nv = joint.num_velocities();
     joint_damping_.segment(velocity_start, nv) = joint.damping_vector();
   }
+  // Collect information from each PhysicalModel owned by the plant.
+  const std::vector<std::unique_ptr<multibody::internal::PhysicalModel<T>>>&
+      physical_models = this->plant().physical_models();
+  for (const auto& model : physical_models) {
+    model->SetUpCompliantContactManager(this);
+  }
+  // Set the time integrator for advancing deformable states in time to be the
+  // mid-point rule, i.e., x = x₀ + δt/2 *(v₀ + v).
+  integrator_ = std::make_unique<fem::internal::VelocityNewmarkScheme<T>>(
+      plant().time_step(), 1.0, 0.5);
 }
 
 template <typename T>

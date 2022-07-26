@@ -3,6 +3,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 #include "drake/common/eigen_types.h"
 #include "drake/common/identifier.h"
@@ -91,11 +92,22 @@ class DeformableModel final : public multibody::internal::PhysicalModel<T> {
    registered in this model. */
   const VectorX<T>& GetReferencePositions(DeformableBodyId id) const;
 
+  /* Returns a vector registered DeformableBodyIds sorted in increasing order.
+   */
+  std::vector<DeformableBodyId> GetDeformableBodyIds() const;
+
+  /* Returns the number of dofs of all bodies registered in this
+   DeformableModel. */
+  int GetNumDofs() const;
+
  private:
   // TODO(xuchenhan-tri): Implement CloneToDouble() and CloneToAutoDiffXd()
   // and the corresponding is_cloneable methods.
 
   void DoDeclareSystemResources(MultibodyPlant<T>* plant) final;
+
+  void DoSetUpCompliantContactManager(
+      CompliantContactManager<T>* manager) final;
 
   /* Builds a FEM model for the body with `id` with linear tetrahedral elements
    and a single quadrature point. The reference positions as well as the

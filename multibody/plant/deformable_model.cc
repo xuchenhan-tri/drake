@@ -1,5 +1,6 @@
 #include "drake/multibody/plant/deformable_model.h"
 
+#include <algorithm>
 #include <utility>
 
 #include "drake/geometry/proximity/volume_mesh.h"
@@ -9,6 +10,7 @@
 #include "drake/multibody/fem/linear_simplex_element.h"
 #include "drake/multibody/fem/simplex_gaussian_quadrature.h"
 #include "drake/multibody/fem/volumetric_model.h"
+#include "drake/multibody/plant/compliant_contact_manager.h"
 
 namespace drake {
 namespace multibody {
@@ -82,6 +84,24 @@ const VectorX<T>& DeformableModel<T>::GetReferencePositions(
 }
 
 template <typename T>
+std::vector<DeformableBodyId> DeformableModel<T>::GetDeformableBodyIds() const {
+  std::vector<DeformableBodyId> all_deformable_ids;
+  all_deformable_ids.reserve(num_bodies());
+  for (const auto& [body_id, geometry_id] : body_id_to_geometry_id_) {
+    unused(geometry_id);
+    all_deformable_ids.emplace_back(body_id);
+  }
+  std::sort(all_deformable_ids.begin(), all_deformable_ids.end());
+  return all_deformable_ids;
+}
+
+template <typename T>
+void DeformableModel<T>::DoSetUpCompliantContactManager(
+    CompliantContactManager<T>* manager) {
+  manager->set_deformable_model(this);
+}
+
+template <typename T>
 void DeformableModel<T>::BuildLinearVolumetricModel(
     DeformableBodyId id, const geometry::VolumeMesh<double>& mesh,
     const fem::DeformableBodyConfig<T>& config) {
@@ -145,6 +165,16 @@ void DeformableModel<T>::BuildLinearVolumetricModelHelper(
 }
 
 template <typename T>
+int DeformableModel<T>::GetNumDofs() const {
+  int total_dofs = 0;
+  for (const auto& [id, fem_model] : fem_models_) {
+    unused(id);
+    total_dofs += fem_model->num_dofs();
+  }
+  return total_dofs;
+}
+
+template <typename T>
 void DeformableModel<T>::DoDeclareSystemResources(MultibodyPlant<T>* plant) {
   /* Ensure that the owning plant is the one declaring system resources. */
   DRAKE_DEMAND(plant == plant_);
@@ -178,3 +208,4 @@ void DeformableModel<T>::ThrowUnlessRegistered(const char* source_method,
 }  // namespace drake
 
 template class drake::multibody::internal::DeformableModel<double>;
+template class drake::multibody::internal::DeformableModel<drake::AutoDiffXd>;

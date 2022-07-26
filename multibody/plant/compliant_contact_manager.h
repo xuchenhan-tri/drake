@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -13,6 +14,8 @@
 #include "drake/multibody/contact_solvers/sap/sap_contact_problem.h"
 #include "drake/multibody/contact_solvers/sap/sap_solver.h"
 #include "drake/multibody/contact_solvers/sap/sap_solver_results.h"
+#include "drake/multibody/fem/discrete_time_integrator.h"
+#include "drake/multibody/plant/deformable_model.h"
 #include "drake/multibody/plant/discrete_update_manager.h"
 #include "drake/systems/framework/context.h"
 
@@ -146,6 +149,17 @@ class CompliantContactManager final
   bool is_cloneable_to_double() const final { return true; }
   bool is_cloneable_to_autodiff() const final { return true; }
 
+  // Sets the DeformableModel back pointer so that `this` manager can access
+  // deformable body information.
+  // @pre deformable_model != nullptr.
+  // @throws exception if `this` manager already reference another
+  // DeformableModel.
+  void set_deformable_model(const DeformableModel<T>* deformable_model) {
+    DRAKE_DEMAND(deformable_model != nullptr);
+    DRAKE_THROW_UNLESS(deformable_model_ == nullptr);
+    deformable_model_ = deformable_model;
+  }
+
  private:
   // Struct used to conglomerate the indexes of cache entries declared by the
   // manager.
@@ -153,6 +167,11 @@ class CompliantContactManager final
     systems::CacheIndex contact_problem;
     systems::CacheIndex discrete_contact_pairs;
     systems::CacheIndex non_contact_forces_accelerations;
+    std::unordered_map<DeformableBodyId, systems::CacheIndex> fem_states;
+    std::unordered_map<DeformableBodyId, systems::CacheIndex>
+        fem_free_motion_states;
+    std::unordered_map<DeformableBodyId, systems::CacheIndex>
+        fem_solver_scratches;
   };
 
   // Allow different specializations to access each other's private data for
@@ -177,6 +196,9 @@ class CompliantContactManager final
   void ExtractModelInfo() final;
 
   void DeclareCacheEntries() final;
+
+  // Declares cache entries associated with deformable bodies.
+  void DeclareDeformableCacheEntries();
 
   // TODO(amcastro-tri): implement these APIs according to #16955.
   void DoCalcContactSolverResults(
@@ -265,6 +287,52 @@ class CompliantContactManager final
   // "free motion" velocities, denoted v*.
   void CalcFreeMotionVelocities(const systems::Context<T>& context,
                                 VectorX<T>* v_star) const;
+
+  // Given the previous state x0 stored in `context`, this method computes the
+  // "free motion" velocities for the rigid dofs, and write it to the front of
+  // `v_star`.
+  void CalcRigidFreeMotionVelocities(const systems::Context<T>& context,
+                                     VectorX<T>* v_star) const;
+
+  // Given the state stored in `context`, computes the "free motion"
+  // velocities for the deformable dofs at the next time step, and write it to
+  // `v_star` with an offset `starting_dof`.
+  void CalcDeformableFreeMotionVelocities(const systems::Context<T>& context,
+                                          VectorX<T>* v_star,
+                                          int starting_dof) const;
+
+  // Returns the deformable model referenced by this manager or throws if one
+  // doesn't exist.
+  const DeformableModel<T>& GetDeformableModelOrThrow() const;
+
+  // Returns the number of deformable dofs if a deformable model is registered.
+  // Returns zero otherwise.
+  int GetNumDeformableDofs() const {
+    if (deformable_model_ == nullptr) {
+      return 0;
+    }
+    return deformable_model_->GetNumDofs();
+  }
+
+  // Copies the state of the deformable body with `id` in the given `context` to
+  // the `fem_state`.
+  void CalcFemState(const systems::Context<T>& context, DeformableBodyId id,
+                    fem::FemState<T>* fem_state) const;
+
+  // Eval version of CalcFemState().
+  const fem::FemState<T>& EvalFemState(const systems::Context<T>& context,
+                                       DeformableBodyId id) const;
+
+  // Given the state of the deformable body with `id` in the given `context`,
+  // computes the "free motion" state of the deformable body at the next time
+  // step.
+  void CalcFreeMotionFemState(const systems::Context<T>& context,
+                              DeformableBodyId id,
+                              fem::FemState<T>* fem_state_star) const;
+
+  // Eval version of CalcFreeMotionFemState().
+  const fem::FemState<T>& EvalFreeMotionFemState(
+      const systems::Context<T>& context, DeformableBodyId id) const;
 
   // Computes the linearized momentum equation matrix A to build the SAP
   // contact problem. Refer to SapContactProblem's class documentation for
@@ -360,11 +428,31 @@ class CompliantContactManager final
       contact_solvers::internal::ContactSolverResults<T>* contact_results)
       const;
 
+  void CopyFemState(const systems::Context<T>& context, DeformableBodyId id,
+                    fem::FemState<T>* state) const {
+    const systems::BasicVector<T>& discrete_state =
+        context.get_discrete_state().get_vector(
+            deformable_model_->GetDiscreteStateIndex(id));
+    const auto& discrete_value = discrete_state.get_value();
+    DRAKE_DEMAND(discrete_value.size() % 3 == 0);
+    const int num_dofs = discrete_value.size() / 3;
+    const auto& q = discrete_value.head(num_dofs);
+    const auto& qdot = discrete_value.segment(num_dofs, num_dofs);
+    const auto& qddot = discrete_value.tail(num_dofs);
+    state->SetPositions(q);
+    state->SetVelocities(qdot);
+    state->SetAccelerations(qddot);
+  }
+
   CacheIndexes cache_indexes_;
   contact_solvers::internal::SapSolverParameters sap_parameters_;
   // Vector of joint damping coefficients, of size plant().num_velocities().
   // This information is extracted during the call to ExtractModelInfo().
   VectorX<T> joint_damping_;
+  // Modelling information about all deformable bodies.
+  const DeformableModel<T>* deformable_model_{nullptr};
+  // The integrator used to advance deformable body states in time.
+  std::unique_ptr<fem::internal::DiscreteTimeIntegrator<T>> integrator_;
 };
 
 }  // namespace internal
