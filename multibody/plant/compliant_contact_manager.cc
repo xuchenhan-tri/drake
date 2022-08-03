@@ -1,6 +1,7 @@
 #include "drake/multibody/plant/compliant_contact_manager.h"
 
 #include <algorithm>
+#include <iostream>
 #include <limits>
 #include <memory>
 #include <string>
@@ -1169,6 +1170,22 @@ void CompliantContactManager<T>::DoCalcDiscreteValues(
   VectorX<T> x_next(plant().num_multibody_states());
   x_next << q_next, v_next;
   updates->set_value(this->multibody_state_index(), x_next);
+
+  if (deformable_model_ != nullptr) {
+    const DeformableModel<T>& model = GetDeformableModelOrThrow();
+    const std::vector<DeformableBodyId> deformable_ids =
+        model.GetDeformableBodyIds();
+
+    for (const auto id : deformable_ids) {
+      const FemState<T>& fem_state = EvalFreeMotionFemState(context, id);
+      const int num_dofs = fem_state.num_dofs();
+      VectorX<T> discrete_value(num_dofs * 3);
+      discrete_value.head(num_dofs) = fem_state.GetPositions();
+      discrete_value.segment(num_dofs, num_dofs) = fem_state.GetVelocities();
+      discrete_value.tail(num_dofs) = fem_state.GetAccelerations();
+      updates->set_value(model.GetDiscreteStateIndex(id), discrete_value);
+    }
+  }
 }
 
 // TODO(xuchenhan-tri): Consider a scalar converting constructor to cut down
