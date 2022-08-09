@@ -40,6 +40,17 @@ drake_cc_package_library(
 )
 
 drake_cc_library(
+    name = "contact_pair_kinematics",
+    hdrs = [
+        "contact_pair_kinematics.h",
+    ],
+    deps = [
+        "//common:default_scalars",
+        "//common:essential",
+    ],
+)
+
+drake_cc_library(
     name = "constraint_specs",
     srcs = [
         "constraint_specs.cc",
@@ -110,6 +121,7 @@ drake_cc_library(
     name = "multibody_plant_core",
     srcs = [
         "compliant_contact_manager.cc",
+        "deformable_driver.cc",
         "deformable_model.cc",
         "discrete_update_manager.cc",
         "make_discrete_update_manager.cc",
@@ -118,6 +130,7 @@ drake_cc_library(
     ],
     hdrs = [
         "compliant_contact_manager.h",
+        "deformable_driver.h",
         "deformable_model.h",
         "discrete_update_manager.h",
         "make_discrete_update_manager.h",
@@ -131,12 +144,14 @@ drake_cc_library(
     deps = [
         ":constraint_specs",
         ":contact_jacobians",
+        ":contact_pair_kinematics",
         ":contact_results",
         ":coulomb_friction",
         ":discrete_contact_pair",
         ":externally_applied_spatial_force",
         ":hydroelastic_traction",
         ":multibody_plant_config",
+        ":proximity_property_queries",
         ":tamsi_solver",
         "//common:default_scalars",
         "//common:essential",
@@ -335,6 +350,18 @@ drake_cc_library(
         ":multibody_plant_core",
     ],
 )
+
+drake_cc_library(
+    name = "proximity_property_queries",
+    hdrs = [
+        "proximity_property_queries.h",
+    ],
+    deps = [
+        "//common:default_scalars",
+        "//geometry:scene_graph_inspector",
+    ],
+)
+
 
 drake_cc_library(
     name = "wing",

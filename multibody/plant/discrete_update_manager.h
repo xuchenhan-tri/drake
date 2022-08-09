@@ -85,6 +85,18 @@ class DiscreteUpdateManager : public ScalarConvertibleComponent<T> {
     return *plant_;
   }
 
+  const MultibodyTree<T>& internal_tree() const;
+
+  const MultibodyTreeTopology& tree_topology() const {
+    return internal_tree().get_topology();
+  }
+
+  const std::unordered_map<geometry::GeometryId, BodyIndex>&
+  geometry_id_to_body_index() const;
+
+  const contact_solvers::internal::ContactSolverResults<T>&
+  EvalContactSolverResults(const systems::Context<T>& context) const;
+
   /* (Internal) Sets the given `plant` as the MultibodyPlant owning this
    DiscreteUpdateManager. This method is meant to be called by
    MultibodyPlant::SetDiscreteUpdateManager() only. A non-const pointer to
@@ -132,6 +144,14 @@ class DiscreteUpdateManager : public ScalarConvertibleComponent<T> {
     DoCalcDiscreteValues(context, updates);
   }
 
+  systems::CacheEntry& DeclareCacheEntry(std::string description,
+                                         systems::ValueProducer,
+                                         std::set<systems::DependencyTicket>);
+
+  double default_contact_stiffness() const;
+  double default_contact_dissipation() const;
+  double default_dissipation_time_constant() const;
+
  protected:
   /* Derived classes that support making a clone that uses double as a scalar
    type must implement this so that it creates a copy of the object with double
@@ -173,15 +193,6 @@ class DiscreteUpdateManager : public ScalarConvertibleComponent<T> {
   // N.B. Keep the spelling and order of declarations here identical to the
   // MultibodyPlantDiscreteUpdateManagerAttorney spelling and order of same.
 
-  const MultibodyTree<T>& internal_tree() const;
-
-  systems::CacheEntry& DeclareCacheEntry(std::string description,
-                                         systems::ValueProducer,
-                                         std::set<systems::DependencyTicket>);
-
-  const contact_solvers::internal::ContactSolverResults<T>&
-  EvalContactSolverResults(const systems::Context<T>& context) const;
-
   const internal::ContactJacobians<T>& EvalContactJacobians(
       const systems::Context<T>& context) const;
 
@@ -211,12 +222,6 @@ class DiscreteUpdateManager : public ScalarConvertibleComponent<T> {
   //  geometries.
   const std::vector<std::vector<geometry::GeometryId>>& collision_geometries()
       const;
-
-  double default_contact_stiffness() const;
-  double default_contact_dissipation() const;
-
-  const std::unordered_map<geometry::GeometryId, BodyIndex>&
-  geometry_id_to_body_index() const;
 
   const std::vector<internal::CouplerConstraintSpecs<T>>&
   coupler_constraints_specs() const;

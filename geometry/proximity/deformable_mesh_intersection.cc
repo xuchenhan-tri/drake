@@ -97,26 +97,33 @@ void AppendDeformableRigidContact(
     /* Compute the penetration distance at the centroid of each contact polygon
      using the signed distance field. */
     std::vector<double> penetration_distances(num_faces);
+    std::vector<Vector3<double>> contact_points_W(num_faces);
     for (int i = 0; i < num_faces; ++i) {
       /* `signed_distance_field` has a gradient, therefore `EvaluateCartesian()`
        should be cheap. */
       penetration_distances[i] = signed_distance_field.EvaluateCartesian(
           i, contact_mesh_W->element_centroid(i));
+      contact_points_W[i] = contact_mesh_W->element_centroid(i);
     }
 
     const VolumeMesh<double>& mesh = deformable_D.deformable_mesh().mesh();
     std::vector<int>& participating_tetrahedra =
         intersect.mutable_tetrahedron_index_of_polygons();
     std::unordered_set<int> participating_vertices;
+    std::vector<Vector4<int>> contact_vertex_indexes;
     for (int e : participating_tetrahedra) {
+      Vector4<int> tet_vertices;
       for (int v = 0; v < VolumeMesh<double>::kVertexPerElement; ++v) {
         participating_vertices.insert(mesh.element(e).vertex(v));
+        tet_vertices(v) = mesh.element(e).vertex(v);
       }
+      contact_vertex_indexes.emplace_back(tet_vertices);
     }
 
     deformable_rigid_contact->Append(
         rigid_id, participating_vertices, std::move(*contact_mesh_W),
-        std::move(penetration_distances), std::move(participating_tetrahedra),
+        std::move(penetration_distances), std::move(contact_vertex_indexes),
+        std::move(contact_points_W),
         std::move(intersect.mutable_barycentric_centroids()));
   }
 }

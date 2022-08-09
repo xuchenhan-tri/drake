@@ -155,6 +155,11 @@ double DiscreteUpdateManager<T>::default_contact_dissipation() const {
 }
 
 template <typename T>
+double DiscreteUpdateManager<T>::default_dissipation_time_constant() const {
+  return plant().time_step();
+}
+
+template <typename T>
 const std::unordered_map<geometry::GeometryId, BodyIndex>&
 DiscreteUpdateManager<T>::geometry_id_to_body_index() const {
   return MultibodyPlantDiscreteUpdateManagerAttorney<

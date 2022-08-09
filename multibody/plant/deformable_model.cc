@@ -58,6 +58,7 @@ DeformableBodyId DeformableModel<T>::RegisterDeformableBody(
   /* Do the book-keeping. */
   reference_positions_.emplace(body_id, std::move(reference_position));
   body_id_to_geometry_id_.emplace(body_id, geometry_id);
+  geometry_id_to_body_id_.emplace(geometry_id, body_id);
   return body_id;
 }
 
@@ -172,6 +173,18 @@ int DeformableModel<T>::GetNumDofs() const {
     total_dofs += fem_model->num_dofs();
   }
   return total_dofs;
+}
+
+template <typename T>
+DeformableBodyId DeformableModel<T>::GetBodyIdOrThrow(
+    geometry::GeometryId geometry_id) const {
+  if (geometry_id_to_body_id_.count(geometry_id) == 0) {
+    throw std::runtime_error(
+        fmt::format("The given GeometryId {} does not correspond to a "
+                    "deformable body registered with this model.",
+                    geometry_id));
+  }
+  return geometry_id_to_body_id_.at(geometry_id);
 }
 
 template <typename T>

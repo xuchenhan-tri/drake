@@ -106,6 +106,11 @@ class DeformableModel final : public multibody::internal::PhysicalModel<T> {
     return plant_->get_output_port(vertex_positions_port_index_);
   }
 
+  /* Returns the DeformableBodyId associated with the given `geometry_id`.
+   @throws std::exception if the given `geometry_id` does not correspond to a
+   deformable body registered with this model. */
+  DeformableBodyId GetBodyIdOrThrow(geometry::GeometryId geometry_id) const;
+
  private:
   // TODO(xuchenhan-tri): Implement CloneToDouble() and CloneToAutoDiffXd()
   // and the corresponding is_cloneable methods.
@@ -144,6 +149,8 @@ class DeformableModel final : public multibody::internal::PhysicalModel<T> {
       discrete_state_indexes_;
   std::unordered_map<DeformableBodyId, geometry::GeometryId>
       body_id_to_geometry_id_;
+  std::unordered_map<geometry::GeometryId, DeformableBodyId>
+      geometry_id_to_body_id_;
   std::unordered_map<DeformableBodyId, std::unique_ptr<fem::FemModel<T>>>
       fem_models_;
   systems::OutputPortIndex vertex_positions_port_index_;

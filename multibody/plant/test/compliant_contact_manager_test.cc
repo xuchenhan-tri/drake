@@ -476,14 +476,15 @@ class SpheresStack : public ::testing::Test {
       const int row_offset = 3 * i;
       const ContactPairKinematics<double>& pair_kinematics =
           contact_kinematics[i];
-      for (const ContactPairKinematics<double>::JacobianTreeBlock&
-               tree_jacobian : pair_kinematics.jacobian) {
+      for (const ContactPairKinematics<double>::JacobianCliqueBlock&
+               clique_jacobian : pair_kinematics.jacobian) {
         // If added to the Jacobian, it must have a valid index.
-        EXPECT_TRUE(tree_jacobian.tree.is_valid());
+        EXPECT_GE(clique_jacobian.clique, 0);
         const int col_offset =
-            topology().tree_velocities_start(tree_jacobian.tree);
-        const int tree_nv = topology().num_tree_velocities(tree_jacobian.tree);
-        J_AcBc_C.block(row_offset, col_offset, 3, tree_nv) = tree_jacobian.J;
+            topology().tree_velocities_start(TreeIndex(clique_jacobian.clique));
+        const int tree_nv =
+            topology().num_tree_velocities(TreeIndex(clique_jacobian.clique));
+        J_AcBc_C.block(row_offset, col_offset, 3, tree_nv) = clique_jacobian.J;
       }
     }
     return J_AcBc_C;
@@ -766,11 +767,12 @@ TEST_F(SpheresStack, EvalContactProblemCache) {
     EXPECT_EQ(constraint->constraint_function(),
               Vector3d(0., 0., pair_kinematics.phi));
     EXPECT_EQ(constraint->num_cliques(), pair_kinematics.jacobian.size());
-    EXPECT_EQ(constraint->first_clique(), pair_kinematics.jacobian[0].tree);
+    EXPECT_EQ(constraint->first_clique(), pair_kinematics.jacobian[0].clique);
     EXPECT_EQ(constraint->first_clique_jacobian(),
               pair_kinematics.jacobian[0].J);
     if (constraint->num_cliques() == 2) {
-      EXPECT_EQ(constraint->second_clique(), pair_kinematics.jacobian[1].tree);
+      EXPECT_EQ(constraint->second_clique(),
+                pair_kinematics.jacobian[1].clique);
       EXPECT_EQ(constraint->second_clique_jacobian(),
                 pair_kinematics.jacobian[1].J);
     }

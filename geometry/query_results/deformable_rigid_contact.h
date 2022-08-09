@@ -56,15 +56,19 @@ class DeformableRigidContact {
    @param[in] signed_distances
       _Approximate_ signed distances of penetration sampled on `contact_mesh_W`.
       These values are non-positive.
-   @param[in] tetrahedra_indexes
-      The indexes of the tetrahedra containing each contact point with the same
-      index semantics as `signed_distances`.
+   @param[in] contact_vertex_indexes
+      The indexes of the vertices making up the tetrahedra containing each
+      contact point with the same index semantics as `signed_distances`.
+   @param[in] contact_points_W
+      The world frame positions of the contact points with the same index
+      semantics as `signed_distances`.
    @param[in] barycentric_coordinates
       Barycentric coordinates of centroids of contact polygons with respect to
       their containing tetrahedra with the same index semantics as
       `signed_distances`.
    @pre contact_mesh_W.num_faces() == signed_distances.size().
-   @pre contact_mesh_W.num_faces() == tetrahedra_indexes.size().
+   @pre contact_mesh_W.num_faces() == contact_vertex_indexes.size().
+   @pre contact_mesh_W.num_faces() == contact_points_W.size().
    @pre contact_mesh_W.num_faces() == barycentric_coordinates.size().
    @pre each entry in `participating_vertices` is non-negative and less than
    `num_vertices` supplied in the constructor.
@@ -74,7 +78,8 @@ class DeformableRigidContact {
               const std::unordered_set<int>& participating_vertices,
               PolygonSurfaceMesh<T>&& contact_mesh_W,
               std::vector<T>&& signed_distances,
-              std::vector<int>&& tetrahedra_indexes,
+              std::vector<Vector4<int>>&& contact_vertex_indexes,
+              std::vector<Vector3<T>>&& contact_points_W,
               std::vector<Vector4<T>>&& barycentric_coordinates);
 
   /* A 2D analog of a deformable geometry D in contact with a rigid
@@ -129,6 +134,15 @@ class DeformableRigidContact {
   multibody::contact_solvers::internal::PartialPermutation
   CalcVertexPermutation() const;
 
+  multibody::contact_solvers::internal::PartialPermutation
+  CalcVertexPartialPermutation() const;
+
+  multibody::contact_solvers::internal::PartialPermutation
+  CalcDofPartialPermutation() const;
+
+  multibody::contact_solvers::internal::PartialPermutation
+  CalcDofFullPermutation() const;
+
   /* Returns the number of vertices of the deformable body that participate in
    contact. */
   int num_vertices_in_contact() const { return num_vertices_in_contact_; }
@@ -165,12 +179,23 @@ class DeformableRigidContact {
    2. The signed distance values for all contact points are non-positive. */
   const std::vector<T>& signed_distances() const { return signed_distances_; }
 
-  /* Returns the indexes of the tetrahedra containing the contact points in the
-   deformable geometry's mesh. The ordering of contact points is the same as
-   that in `signed_distances()`. */
-  const std::vector<int>& tetrahedra_indexes() const {
-    return tetrahedra_indexes_;
+  /* Returns the indexes of the 4 vertices forming the tetrahedra containing the
+   contact points in the deformable geometry's mesh. The ordering of contact
+   points is the same as that in `signed_distances()`. */
+  const std::vector<Vector4<int>>& contact_vertex_indexes() const {
+    return contact_vertex_indexes_;
   }
+
+  /* Returns the world frame positions of the contact_points. The ordering of
+   contact points is the same as that in `signed_distances()`.*/
+  const std::vector<Vector3<T>>& contact_points_W() const {
+    return contact_points_W_;
+  }
+
+  /* Returns the world frame contact normals pointing from the rigid geometry
+   into the deformable geometry. The ordering of contact normals is the same as
+   that in `signed_distances()`.*/
+  const std::vector<Vector3<T>>& nhats_W() const { return nhats_W_; }
 
   /* Returns the barycentric coordinates of each contact point in its containing
    tetrahedron in the deformable geometry's mesh. The ordering of contact points
@@ -195,9 +220,11 @@ class DeformableRigidContact {
   std::vector<bool> participation_;
 
   /* per-contact point data. */
-  std::vector<int> tetrahedra_indexes_;
+  std::vector<Vector4<int>> contact_vertex_indexes_;
+  std::vector<Vector3<T>> contact_points_W_;
   std::vector<T> signed_distances_;
   std::vector<Vector4<T>> barycentric_coordinates_;
+  std::vector<Vector3<T>> nhats_W_;
   std::vector<math::RotationMatrix<T>> R_CWs_;
   /* per-rigid geometry data. */
   std::vector<PolygonSurfaceMesh<T>> contact_meshes_W_;
@@ -209,4 +236,3 @@ class DeformableRigidContact {
 }  // namespace internal
 }  // namespace geometry
 }  // namespace drake
-
