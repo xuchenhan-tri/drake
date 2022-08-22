@@ -122,6 +122,7 @@ class CompliantContactManager final
   struct CacheIndexes {
     systems::CacheIndex contact_problem;
     systems::CacheIndex discrete_contact_pairs;
+    systems::CacheIndex rigid_discrete_contact_pairs;
     systems::CacheIndex non_contact_forces_accelerations;
   };
 
@@ -167,9 +168,8 @@ class CompliantContactManager final
       std::vector<internal::DiscreteContactPair<T>>* pairs) const;
 
   // Given the configuration stored in `context`, this method computes all
-  // discrete contact pairs, including point and hydroelastic contact, into
-  // `pairs.`
-  // Throws an exception if `pairs` is nullptr.
+  // discrete contact pairs, including point, deformable, and hydroelastic
+  // contact, into `pairs.`
   void CalcDiscreteContactPairs(
       const systems::Context<T>& context,
       std::vector<internal::DiscreteContactPair<T>>* pairs) const;
@@ -177,6 +177,17 @@ class CompliantContactManager final
   // Eval version of CalcDiscreteContactPairs().
   const std::vector<internal::DiscreteContactPair<T>>& EvalDiscreteContactPairs(
       const systems::Context<T>& context) const;
+
+  // Given the configuration stored in `context`, computes all _rigid_
+  // discrete contact pairs, including point and hydroelastic contact, into
+  // `pairs.`
+  void CalcRigidDiscreteContactPairs(
+      const systems::Context<T>& context,
+      std::vector<internal::DiscreteContactPair<T>>* pairs) const;
+
+  // Eval version of CalcRigidDiscreteContactPairs().
+  const std::vector<internal::DiscreteContactPair<T>>&
+  EvalRigidDiscreteContactPairs(const systems::Context<T>& context) const;
 
   // This method computes the kinematics information for each contact pair at
   // the given configuration stored in `context`.
@@ -186,14 +197,7 @@ class CompliantContactManager final
   // Computes the kinematics information for each rigid-rigid contact pair at
   // the given configuration stored in `context` and appends to the results.
   // @pre contact_kinematics != nullptr.
-  void AppendNonDeformableContactKinematics(
-      const systems::Context<T>& context,
-      std::vector<ContactPairKinematics<T>>* contact_kinematics) const;
-
-  // Computes the kinematics information for each deformable-rigid contact pair
-  // at the given configuration stored in `context` and appends to the results.
-  // @pre contact_kinematics != nullptr.
-  void AppendDeformableContactKinematics(
+  void AppendContactKinematics(
       const systems::Context<T>& context,
       std::vector<ContactPairKinematics<T>>* contact_kinematics) const;
 

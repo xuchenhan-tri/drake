@@ -83,10 +83,13 @@ void AppendDeformableRigidContact(
   DRAKE_DEMAND(deformable_rigid_contact != nullptr);
 
   DeformableSurfaceVolumeIntersector intersect;
+  std::vector<double> sdf_values =
+      deformable_D.signed_distance_field().values();
+  MeshFieldLinear<double, VolumeMesh<double>> sdf(
+      std::move(sdf_values), &deformable_D.deformable_mesh().mesh());
   intersect.SampleVolumeFieldOnSurface(
-      deformable_D.signed_distance_field(),
-      deformable_D.deformable_mesh().bvh(), rigid_mesh_R, rigid_bvh_R, X_DR,
-      false /* don't filter face normal along field gradient */);
+      sdf, deformable_D.deformable_mesh().bvh(), rigid_mesh_R, rigid_bvh_R,
+      X_DR, false /* don't filter face normal along field gradient */);
 
   if (intersect.has_intersection()) {
     std::unique_ptr<PolygonSurfaceMesh<double>> contact_mesh_W =

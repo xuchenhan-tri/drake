@@ -238,6 +238,7 @@ class PetscSymmetricBlockSparseMatrix::Impl {
     MatrixXd neg_Dinv_B_transpose;  // -D⁻¹Bᵀ.
 
     if (D_block_indexes.size() == 0) {
+      AssembleIfNecessary();
       D_complement = MakeDenseMatrix();
       neg_Dinv_B_transpose.resize(0, size_);
       return SchurComplement(move(D_complement), move(neg_Dinv_B_transpose));

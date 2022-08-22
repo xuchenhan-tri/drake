@@ -1,4 +1,5 @@
 #include "drake/multibody/fem/fem_model.h"
+#include <iostream>
 
 namespace drake {
 namespace multibody {
@@ -47,6 +48,7 @@ void FemModel<T>::CalcTangentMatrix(
     ThrowIfModelStateIncompatible(__func__, fem_state);
     DoCalcTangentMatrix(fem_state, weights, tangent_matrix);
     dirichlet_bc_.ApplyBoundaryConditionToTangentMatrix(tangent_matrix);
+    tangent_matrix->AssembleIfNecessary();
   } else {
     throw std::logic_error(
         "FemModel::CalcTangentMatrix() only supports double at the moment.");

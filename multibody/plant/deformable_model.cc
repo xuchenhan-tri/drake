@@ -31,6 +31,8 @@ DeformableBodyId DeformableModel<T>::RegisterDeformableBody(
     const fem::DeformableBodyConfig<T>& config, double resolution_hint) {
   this->ThrowIfSystemResourcesDeclared(__func__);
 
+  const math::RigidTransformd pose = geometry_instance->pose();
+
   /* Register the geometry with SceneGraph. */
   SceneGraph<T>& scene_graph = this->mutable_scene_graph(plant_);
   SourceId source_id = plant_->get_source_id().value();
@@ -46,19 +48,25 @@ DeformableBodyId DeformableModel<T>::RegisterDeformableBody(
       inspector.GetReferenceMesh(geometry_id);
   DRAKE_DEMAND(mesh_ptr != nullptr);
   const auto& mesh = *mesh_ptr;
+
+  std::vector<Vector3<double>> p_WVs(mesh.num_vertices());
   VectorX<T> reference_position(3 * mesh.num_vertices());
   for (int v = 0; v < mesh.num_vertices(); ++v) {
     reference_position.template segment<3>(3 * v) = mesh.vertex(v);
+    p_WVs[v] = pose * mesh.vertex(v);
   }
+  auto elements = mesh.tetrahedra();
+  geometry::VolumeMesh<double> mesh_W(std::move(elements), std::move(p_WVs));
 
   const DeformableBodyId body_id = DeformableBodyId::get_new_id();
   /* Build FEM model for the deformable body. */
-  BuildLinearVolumetricModel(body_id, mesh, config);
+  BuildLinearVolumetricModel(body_id, mesh_W, config);
 
   /* Do the book-keeping. */
   reference_positions_.emplace(body_id, std::move(reference_position));
   body_id_to_geometry_id_.emplace(body_id, geometry_id);
   geometry_id_to_body_id_.emplace(geometry_id, body_id);
+  body_ids_.emplace_back(body_id);
   return body_id;
 }
 
@@ -85,15 +93,29 @@ const VectorX<T>& DeformableModel<T>::GetReferencePositions(
 }
 
 template <typename T>
-std::vector<DeformableBodyId> DeformableModel<T>::GetDeformableBodyIds() const {
-  std::vector<DeformableBodyId> all_deformable_ids;
-  all_deformable_ids.reserve(num_bodies());
-  for (const auto& [body_id, geometry_id] : body_id_to_geometry_id_) {
-    unused(geometry_id);
-    all_deformable_ids.emplace_back(body_id);
+const std::vector<DeformableBodyId>& DeformableModel<T>::GetBodyIds() const {
+  this->ThrowIfSystemResourcesNotDeclared(__func__);
+  return body_ids_;
+}
+
+template <typename T>
+DeformableBodyId DeformableModel<T>::GetBodyId(
+    DeformableBodyIndex index) const {
+  this->ThrowIfSystemResourcesNotDeclared(__func__);
+  DRAKE_THROW_UNLESS(index < num_bodies());
+  return body_ids_[index];
+}
+
+template <typename T>
+DeformableBodyId DeformableModel<T>::GetBodyIdOrThrow(
+    geometry::GeometryId geometry_id) const {
+  if (geometry_id_to_body_id_.count(geometry_id) == 0) {
+    throw std::runtime_error(
+        fmt::format("The given GeometryId {} does not correspond to a "
+                    "deformable body registered with this model.",
+                    geometry_id));
   }
-  std::sort(all_deformable_ids.begin(), all_deformable_ids.end());
-  return all_deformable_ids;
+  return geometry_id_to_body_id_.at(geometry_id);
 }
 
 template <typename T>
@@ -166,28 +188,6 @@ void DeformableModel<T>::BuildLinearVolumetricModelHelper(
 }
 
 template <typename T>
-int DeformableModel<T>::GetNumDofs() const {
-  int total_dofs = 0;
-  for (const auto& [id, fem_model] : fem_models_) {
-    unused(id);
-    total_dofs += fem_model->num_dofs();
-  }
-  return total_dofs;
-}
-
-template <typename T>
-DeformableBodyId DeformableModel<T>::GetBodyIdOrThrow(
-    geometry::GeometryId geometry_id) const {
-  if (geometry_id_to_body_id_.count(geometry_id) == 0) {
-    throw std::runtime_error(
-        fmt::format("The given GeometryId {} does not correspond to a "
-                    "deformable body registered with this model.",
-                    geometry_id));
-  }
-  return geometry_id_to_body_id_.at(geometry_id);
-}
-
-template <typename T>
 void DeformableModel<T>::DoDeclareSystemResources(MultibodyPlant<T>* plant) {
   /* Ensure that the owning plant is the one declaring system resources. */
   DRAKE_DEMAND(plant == plant_);
@@ -233,6 +233,8 @@ void DeformableModel<T>::DoDeclareSystemResources(MultibodyPlant<T>* plant) {
               },
               {systems::System<double>::xd_ticket()})
           .get_index();
+
+  std::sort(body_ids_.begin(), body_ids_.end());
 }
 
 template <typename T>

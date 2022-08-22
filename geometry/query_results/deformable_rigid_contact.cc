@@ -27,7 +27,7 @@ void DeformableRigidContact<T>::Append(
                static_cast<int>(signed_distances.size()));
   DRAKE_DEMAND(contact_mesh_W.num_faces() ==
                static_cast<int>(barycentric_coordinates.size()));
-  rigid_ids_.emplace_back(rigid_id);
+  const int num_contact_points = contact_mesh_W.num_faces();
 
   for (int v : participating_vertices) {
     DRAKE_DEMAND(0 <= v && v < static_cast<int>(participation_.size()));
@@ -62,6 +62,7 @@ void DeformableRigidContact<T>::Append(
       barycentric_coordinates_.end(),
       std::make_move_iterator(barycentric_coordinates.begin()),
       std::make_move_iterator(barycentric_coordinates.end()));
+  rigid_ids_.insert(rigid_ids_.end(), num_contact_points, rigid_id);
 }
 
 template <typename T>
@@ -97,9 +98,9 @@ PartialPermutation DeformableRigidContact<T>::CalcDofPartialPermutation()
   std::vector<int> permuted_dof_indexes(3 * participation_.size(), -1);
   for (int v = 0; v < static_cast<int>(participation_.size()); ++v) {
     if (participation_[v]) {
-      permuted_dof_indexes[v] = 3 * permuted_vertex_index;
-      permuted_dof_indexes[v] = 3 * permuted_vertex_index + 1;
-      permuted_dof_indexes[v] = 3 * permuted_vertex_index + 2;
+      permuted_dof_indexes[3 * v] = 3 * permuted_vertex_index;
+      permuted_dof_indexes[3 * v + 1] = 3 * permuted_vertex_index + 1;
+      permuted_dof_indexes[3 * v + 2] = 3 * permuted_vertex_index + 2;
       ++permuted_vertex_index;
     }
   }

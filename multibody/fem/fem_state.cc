@@ -1,4 +1,5 @@
 #include "drake/multibody/fem/fem_state.h"
+#include <iostream>
 
 namespace drake {
 namespace multibody {
