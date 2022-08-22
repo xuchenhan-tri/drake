@@ -1,6 +1,7 @@
 #include "drake/multibody/plant/compliant_contact_manager.h"
 
 #include <algorithm>
+#include <iostream>
 #include <limits>
 #include <memory>
 #include <string>
@@ -77,6 +78,16 @@ void CompliantContactManager<T>::DeclareCacheEntries() {
   cache_indexes_.discrete_contact_pairs =
       discrete_contact_pairs_cache_entry.cache_index();
 
+  const auto& rigid_discrete_contact_pairs_cache_entry =
+      this->DeclareCacheEntry(
+          "Rigid discrete contact pairs.",
+          systems::ValueProducer(
+              this, &CompliantContactManager<T>::CalcRigidDiscreteContactPairs),
+          {systems::System<T>::xd_ticket(),
+           systems::System<T>::all_parameters_ticket()});
+  cache_indexes_.rigid_discrete_contact_pairs =
+      rigid_discrete_contact_pairs_cache_entry.cache_index();
+
   // Accelerations due to non-contact forces.
   // We cache non-contact forces, ABA forces and accelerations into a
   // AccelerationsDueToExternalForcesCache.
@@ -114,7 +125,7 @@ std::vector<ContactPairKinematics<T>>
 CompliantContactManager<T>::CalcContactKinematics(
     const systems::Context<T>& context) const {
   std::vector<ContactPairKinematics<T>> contact_kinematics;
-  AppendNonDeformableContactKinematics(context, &contact_kinematics);
+  AppendContactKinematics(context, &contact_kinematics);
   if (deformable_driver_ != nullptr) {
     deformable_driver_->AppendContactKinematics(context, &contact_kinematics);
   }
@@ -122,12 +133,12 @@ CompliantContactManager<T>::CalcContactKinematics(
 }
 
 template <typename T>
-void CompliantContactManager<T>::AppendNonDeformableContactKinematics(
+void CompliantContactManager<T>::AppendContactKinematics(
     const systems::Context<T>& context,
     std::vector<ContactPairKinematics<T>>* contact_kinematics) const {
   DRAKE_DEMAND(contact_kinematics != nullptr);
   const std::vector<DiscreteContactPair<T>>& contact_pairs =
-      EvalDiscreteContactPairs(context);
+      EvalRigidDiscreteContactPairs(context);
   const int num_contacts = contact_pairs.size();
   contact_kinematics->reserve(contact_kinematics->size() + num_contacts);
 
@@ -216,6 +227,26 @@ template <typename T>
 void CompliantContactManager<T>::CalcDiscreteContactPairs(
     const systems::Context<T>& context,
     std::vector<DiscreteContactPair<T>>* contact_pairs) const {
+  DRAKE_DEMAND(contact_pairs != nullptr);
+  *contact_pairs = EvalRigidDiscreteContactPairs(context);
+  if (deformable_driver_ != nullptr) {
+    deformable_driver_->AppendDiscreteContactPairs(context, contact_pairs);
+  }
+}
+
+template <typename T>
+const std::vector<DiscreteContactPair<T>>&
+CompliantContactManager<T>::EvalDiscreteContactPairs(
+    const systems::Context<T>& context) const {
+  return plant()
+      .get_cache_entry(cache_indexes_.discrete_contact_pairs)
+      .template Eval<std::vector<DiscreteContactPair<T>>>(context);
+}
+
+template <typename T>
+void CompliantContactManager<T>::CalcRigidDiscreteContactPairs(
+    const systems::Context<T>& context,
+    std::vector<DiscreteContactPair<T>>* contact_pairs) const {
   plant().ValidateContext(context);
   DRAKE_DEMAND(contact_pairs != nullptr);
 
@@ -262,9 +293,15 @@ void CompliantContactManager<T>::CalcDiscreteContactPairs(
       contact_model == ContactModel::kHydroelasticWithFallback) {
     AppendDiscreteContactPairsForHydroelasticContact(context, contact_pairs);
   }
-  if (deformable_driver_ != nullptr) {
-    deformable_driver_->AppendDiscreteContactPairs(context, contact_pairs);
-  }
+}
+
+template <typename T>
+const std::vector<DiscreteContactPair<T>>&
+CompliantContactManager<T>::EvalRigidDiscreteContactPairs(
+    const systems::Context<T>& context) const {
+  return plant()
+      .get_cache_entry(cache_indexes_.rigid_discrete_contact_pairs)
+      .template Eval<std::vector<DiscreteContactPair<T>>>(context);
 }
 
 template <typename T>
@@ -537,10 +574,11 @@ void CompliantContactManager<T>::CalcFreeMotionVelocities(
   DRAKE_DEMAND(v_star != nullptr);
   CalcRigidFreeMotionVelocities(context, v_star);
   if (deformable_driver_ != nullptr) {
-    VectorX<T> deformable_v_star;
-    deformable_driver_->CalcFreeMotionVelocities(context, &deformable_v_star);
+    VectorX<T> deformable_v_star =
+        deformable_driver_->EvalParticipatingFreeMotionVelocities(context)
+            .stacked_vector();
     v_star->conservativeResize(v_star->size() + deformable_v_star.size());
-    *v_star << deformable_v_star;
+    v_star->tail(deformable_v_star.size()) = std::move(deformable_v_star);
   }
 }
 
@@ -594,15 +632,6 @@ void CompliantContactManager<T>::CalcLinearDynamicsMatrix(
 }
 
 template <typename T>
-const std::vector<DiscreteContactPair<T>>&
-CompliantContactManager<T>::EvalDiscreteContactPairs(
-    const systems::Context<T>& context) const {
-  return plant()
-      .get_cache_entry(cache_indexes_.discrete_contact_pairs)
-      .template Eval<std::vector<DiscreteContactPair<T>>>(context);
-}
-
-template <typename T>
 const multibody::internal::AccelerationKinematicsCache<T>&
 CompliantContactManager<T>::EvalAccelerationsDueToNonContactForcesCache(
     const systems::Context<T>& context) const {
@@ -621,9 +650,19 @@ void CompliantContactManager<T>::DoCalcContactSolverResults(
   const SapContactProblem<T>& sap_problem = *contact_problem_cache.sap_problem;
 
   // We use the velocity stored in the current context as initial guess.
-  const VectorX<T>& x0 =
+  const VectorX<T>& x0_rigid =
       context.get_discrete_state(this->multibody_state_index()).value();
-  const auto v0 = x0.bottomRows(this->plant().num_velocities());
+  const auto v0_rigid = x0_rigid.bottomRows(this->plant().num_velocities());
+  VectorX<T> v0;
+  if (deformable_driver_ != nullptr) {
+    const VectorX<T>& v0_deformable =
+        deformable_driver_->EvalParticipatingVelocities(context)
+            .stacked_vector();
+    v0.resize(v0_rigid.size() + v0_deformable.size());
+    v0 << v0_rigid, v0_deformable;
+  } else {
+    v0 = v0_rigid;
+  }
 
   // Solve contact problem.
   SapSolver<T> sap;
@@ -652,11 +691,16 @@ void CompliantContactManager<T>::DoCalcContactSolverResults(
   }
 
   const std::vector<DiscreteContactPair<T>>& discrete_pairs =
-      EvalDiscreteContactPairs(context);
+      EvalRigidDiscreteContactPairs(context);
   const int num_contacts = discrete_pairs.size();
 
   PackContactSolverResults(sap_problem, num_contacts, sap_results,
                            contact_results);
+  fmt::print("v = {}\n", contact_results->v_next.transpose());
+  fmt::print("v0 = {}\n", v0.transpose());
+  fmt::print("dv = {}\n", (contact_results->v_next - v0).transpose());
+  fmt::print("tau = {}\n", (sap_results.gamma).transpose());
+  fmt::print("---------------------------------\n\n");
 }
 
 template <typename T>
@@ -683,6 +727,7 @@ void CompliantContactManager<T>::PackContactSolverResults(
 
   auto& tau_contact = contact_results->tau_contact;
   tau_contact.setZero();
+  // TODO(xuchenhan-tri): resolve tau_contact write out for deformable.
   for (int i = 0; i < num_contacts; ++i) {
     const SapConstraint<T>& c = problem.get_constraint(i);
     {
@@ -978,7 +1023,7 @@ void CompliantContactManager<T>::DoCalcDiscreteValues(
   const VectorX<T> q_next = q0 + plant().time_step() * qdot_next;
 
   VectorX<T> x_next(plant().num_multibody_states());
-  x_next << q_next, v_next;
+  x_next << q_next, v_next_rigid;
   updates->set_value(this->multibody_state_index(), x_next);
 
   if (deformable_driver_ != nullptr) {
@@ -1038,7 +1083,7 @@ void CompliantContactManager<T>::DoCalcAccelerationKinematicsCache(
   // Next state.
   const ContactSolverResults<T>& results =
       this->EvalContactSolverResults(context0);
-  const VectorX<T>& v_next = results.v_next;
+  const VectorX<T>& v_next = results.v_next.head(v0.size());
 
   ac->get_mutable_vdot() = (v_next - v0) / plant().time_step();
 

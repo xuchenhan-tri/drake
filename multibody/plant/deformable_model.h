@@ -17,6 +17,7 @@ namespace multibody {
 namespace internal {
 
 using DeformableBodyId = Identifier<class DeformableBodyTag>;
+using DeformableBodyIndex = TypeSafeIndex<class DeformableBodyTag>;
 
 /* DeformableModel implements the interface in PhysicalModel and provides the
  functionalities to specify deformable bodies. Unlike rigid bodies, the shape of
@@ -92,13 +93,18 @@ class DeformableModel final : public multibody::internal::PhysicalModel<T> {
    registered in this model. */
   const VectorX<T>& GetReferencePositions(DeformableBodyId id) const;
 
-  /* Returns a vector registered DeformableBodyIds sorted in increasing order.
+  /* Returns a vector registered DeformableBodyIds sorted in increasing order
+   that can be used as a mapping from DeformableBodyIndex to DeformableBodyId.
+   @throws std::exception if MultibodyPlant::Finalize() has not been called yet.
    */
-  std::vector<DeformableBodyId> GetDeformableBodyIds() const;
+  const std::vector<DeformableBodyId>& GetBodyIds() const;
 
-  /* Returns the number of dofs of all bodies registered in this
-   DeformableModel. */
-  int GetNumDofs() const;
+  /* Returns the DeformableBodyId of the body with the given body index.
+   Equivalent to `GetBodyIds()[index]`.
+   @throws std::exception if MultibodyPlant::Finalize() has not been called yet
+   or if index is larger than or equal to the total number of registered
+   deformable bodies. */
+  DeformableBodyId GetBodyId(DeformableBodyIndex index) const;
 
   /* Returns the output port of the vertex positions for all registered
    deformable geometries. */
@@ -153,6 +159,7 @@ class DeformableModel final : public multibody::internal::PhysicalModel<T> {
       geometry_id_to_body_id_;
   std::unordered_map<DeformableBodyId, std::unique_ptr<fem::FemModel<T>>>
       fem_models_;
+  std::vector<DeformableBodyId> body_ids_;
   systems::OutputPortIndex vertex_positions_port_index_;
 };
 
