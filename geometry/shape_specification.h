@@ -320,6 +320,32 @@ class Convex final : public Shape {
   double scale_{};
 };
 
+/** Definition of a volume mesh.
+ The mesh is defined in a canonical frame C, implicit in the file parsed. Upon
+ loading it in SceneGraph it can be scaled around the origin of C by a given
+ `scale` amount. */
+class VolumeMeshShape final : public Shape {
+ public:
+  DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(VolumeMeshShape)
+
+  /** Constructs a mesh specification from the mesh file located at the given
+   _absolute_ file path. Optionally uniformly scaled by the given scale factor.
+   @throws std::exception if |scale| < 1e-8. Note that a negative scale is
+   considered valid. We want to preclude scales near zero but recognise that
+   scale is a convenience tool for "tweaking" models. 8 orders of magnitude
+   should be plenty without considering revisiting the model itself. */
+  explicit VolumeMeshShape(const std::string& absolute_filename,
+                           double scale = 1.0);
+
+  const std::string& filename() const { return filename_; }
+  double scale() const { return scale_; }
+
+ private:
+  // NOTE: Cannot be const to support default copy/move semantics.
+  std::string filename_;
+  double scale_{};
+};
+
 // TODO(russt): Rename this to `Cone` if/when it is supported by more of the
 // geometry engine.
 /** Definition of a cone. Its point is at the origin, its height extends in the
@@ -415,6 +441,8 @@ class ShapeReifier {
   virtual void ImplementGeometry(const Mesh& mesh, void* user_data);
   virtual void ImplementGeometry(const Convex& convex, void* user_data);
   virtual void ImplementGeometry(const MeshcatCone& cone, void* user_data);
+  virtual void ImplementGeometry(const VolumeMeshShape& volume_mesh,
+                                 void* user_data);
 
  protected:
   DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(ShapeReifier)

@@ -56,6 +56,10 @@ class ReifierTest : public ShapeReifier, public ::testing::Test {
     received_user_data_ = data;
     meshcat_cone_made_ = true;
   }
+  void ImplementGeometry(const VolumeMeshShape&, void* data) override {
+    received_user_data_ = data;
+    volume_mesh_made_ = true;
+  }
   void Reset() {
     box_made_ = false;
     capsule_made_ = false;
@@ -66,6 +70,7 @@ class ReifierTest : public ShapeReifier, public ::testing::Test {
     convex_made_ = false;
     mesh_made_ = false;
     meshcat_cone_made_ = false;
+    volume_mesh_made_ = false;
     received_user_data_ = nullptr;
   }
 
@@ -79,6 +84,7 @@ class ReifierTest : public ShapeReifier, public ::testing::Test {
   bool convex_made_{false};
   bool mesh_made_{false};
   bool meshcat_cone_made_{false};
+  bool volume_mesh_made_{false};
   void* received_user_data_{nullptr};
 };
 
@@ -104,6 +110,7 @@ TEST_F(ReifierTest, ReificationDifferentiation) {
   EXPECT_FALSE(ellipsoid_made_);
   EXPECT_FALSE(mesh_made_);
   EXPECT_FALSE(meshcat_cone_made_);
+  EXPECT_FALSE(volume_mesh_made_);
   EXPECT_EQ(s.radius(), 1.0);
 
   Reset();
@@ -119,6 +126,7 @@ TEST_F(ReifierTest, ReificationDifferentiation) {
   EXPECT_FALSE(ellipsoid_made_);
   EXPECT_FALSE(mesh_made_);
   EXPECT_FALSE(meshcat_cone_made_);
+  EXPECT_FALSE(volume_mesh_made_);
 
   Reset();
 
@@ -135,6 +143,7 @@ TEST_F(ReifierTest, ReificationDifferentiation) {
   EXPECT_EQ(cylinder.radius(), 1);
   EXPECT_EQ(cylinder.length(), 2);
   EXPECT_FALSE(meshcat_cone_made_);
+  EXPECT_FALSE(volume_mesh_made_);
 
   Reset();
 
@@ -152,6 +161,7 @@ TEST_F(ReifierTest, ReificationDifferentiation) {
   EXPECT_EQ(box.depth(), 2);
   EXPECT_EQ(box.height(), 3);
   EXPECT_FALSE(meshcat_cone_made_);
+  EXPECT_FALSE(volume_mesh_made_);
 
   Reset();
 
@@ -168,6 +178,7 @@ TEST_F(ReifierTest, ReificationDifferentiation) {
   EXPECT_EQ(capsule.radius(), 2);
   EXPECT_EQ(capsule.length(), 1);
   EXPECT_FALSE(meshcat_cone_made_);
+  EXPECT_FALSE(volume_mesh_made_);
 
   Reset();
 
@@ -182,6 +193,7 @@ TEST_F(ReifierTest, ReificationDifferentiation) {
   EXPECT_FALSE(ellipsoid_made_);
   EXPECT_FALSE(mesh_made_);
   EXPECT_FALSE(meshcat_cone_made_);
+  EXPECT_FALSE(volume_mesh_made_);
 
   Reset();
 
@@ -199,6 +211,7 @@ TEST_F(ReifierTest, ReificationDifferentiation) {
   EXPECT_EQ(ellipsoid.b(), 2);
   EXPECT_EQ(ellipsoid.c(), 3);
   EXPECT_FALSE(meshcat_cone_made_);
+  EXPECT_FALSE(volume_mesh_made_);
 
   Reset();
 
@@ -215,6 +228,7 @@ TEST_F(ReifierTest, ReificationDifferentiation) {
   EXPECT_EQ(mesh.filename(), std::string("fictitious_mesh_name.obj"));
   EXPECT_EQ(mesh.scale(), 1.4);
   EXPECT_FALSE(meshcat_cone_made_);
+  EXPECT_FALSE(volume_mesh_made_);
 
   Reset();
 
@@ -229,9 +243,28 @@ TEST_F(ReifierTest, ReificationDifferentiation) {
   EXPECT_FALSE(ellipsoid_made_);
   EXPECT_FALSE(mesh_made_);
   EXPECT_TRUE(meshcat_cone_made_);
+  EXPECT_FALSE(volume_mesh_made_);
   EXPECT_EQ(cone.height(), 1.2);
   EXPECT_EQ(cone.a(), 3.4);
   EXPECT_EQ(cone.b(), 5.6);
+
+  Reset();
+
+  VolumeMeshShape volume_mesh{"fictitious_volume_mesh_name.vtk", 1.4};
+  volume_mesh.Reify(this);
+  EXPECT_FALSE(sphere_made_);
+  EXPECT_FALSE(half_space_made_);
+  EXPECT_FALSE(cylinder_made_);
+  EXPECT_FALSE(box_made_);
+  EXPECT_FALSE(capsule_made_);
+  EXPECT_FALSE(convex_made_);
+  EXPECT_FALSE(ellipsoid_made_);
+  EXPECT_FALSE(mesh_made_);
+  EXPECT_FALSE(meshcat_cone_made_);
+  EXPECT_TRUE(volume_mesh_made_);
+  EXPECT_EQ(volume_mesh.filename(),
+            std::string("fictitious_volume_mesh_name.vtk"));
+  EXPECT_EQ(volume_mesh.scale(), 1.4);
 }
 
 // Confirms that the ReifiableShape properly clones the right types.

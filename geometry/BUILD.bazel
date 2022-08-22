@@ -272,6 +272,7 @@ drake_cc_library(
         ":shape_specification",
         "//geometry/proximity:make_sphere_mesh",
         "//geometry/proximity:volume_mesh",
+        "//geometry/proximity:vtk_to_volume_mesh",
     ],
 )
 

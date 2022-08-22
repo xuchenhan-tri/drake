@@ -138,6 +138,16 @@ Convex::Convex(const std::string& absolute_filename, double scale)
   }
 }
 
+VolumeMeshShape::VolumeMeshShape(const std::string& absolute_filename,
+                                 double scale)
+    : Shape(ShapeTag<VolumeMeshShape>()),
+      filename_(absolute_filename),
+      scale_(scale) {
+  if (std::abs(scale) < 1e-8) {
+    throw std::logic_error("VolumeMeshShape |scale| cannot be < 1e-8.");
+  }
+}
+
 MeshcatCone::MeshcatCone(double height, double a, double b)
     : Shape(ShapeTag<MeshcatCone>()), height_(height), a_(a), b_(b) {
   if (height <= 0 || a <= 0 || b <= 0) {
@@ -183,6 +193,10 @@ void ShapeReifier::ImplementGeometry(const Convex&, void*) {
 
 void ShapeReifier::ImplementGeometry(const MeshcatCone&, void*) {
   ThrowUnsupportedGeometry("MeshcatCone");
+}
+
+void ShapeReifier::ImplementGeometry(const VolumeMeshShape&, void*) {
+  ThrowUnsupportedGeometry("VolumeMeshShape");
 }
 
 void ShapeReifier::ThrowUnsupportedGeometry(const std::string& shape_name) {

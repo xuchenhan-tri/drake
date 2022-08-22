@@ -135,6 +135,14 @@ void Geometries::ImplementGeometry(const MeshcatCone&, void*) {
       "be reported.");
 }
 
+void Geometries::ImplementGeometry(const VolumeMeshShape&, void*) {
+  static const logging::Warn log_once(
+      "Rigid (non-deformable) volume meshes are not currently supported for "
+      "deformable contact; registration is allowed, but no contact data will "
+      "be reported.");
+}
+
+
 template <typename ShapeType>
 void Geometries::AddRigidGeometry(const ShapeType& shape,
                                   const ReifyData& data) {
