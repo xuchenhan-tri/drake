@@ -534,8 +534,7 @@ void CompliantContactManager<T>::CalcNonContactForcesExcludingJointLimits(
 template <typename T>
 void CompliantContactManager<T>::CalcAccelerationsDueToNonContactForcesCache(
     const systems::Context<T>& context,
-    AccelerationsDueToExternalForcesCache<T>* forward_dynamics_cache)
-    const {
+    AccelerationsDueToExternalForcesCache<T>* forward_dynamics_cache) const {
   DRAKE_DEMAND(forward_dynamics_cache != nullptr);
   ScopeExit guard = this->ThrowIfNonContactForceInProgress(context);
 
@@ -1052,8 +1051,10 @@ void CompliantContactManager<T>::ExtractModelInfo() {
   // Collect information from each PhysicalModel owned by the plant.
   const std::vector<std::unique_ptr<multibody::internal::PhysicalModel<T>>>&
       physical_models = this->plant().physical_models();
-  for (const auto& model : physical_models) {
-    model->AddToManager(this);
+  for (const auto& physical_model : physical_models) {
+    ModelVariant<T> model_variant = ToModelVariant(physical_model.get());
+    std::visit([this](const auto&& model) { ExtractPhysicalModel(model); },
+               model_variant);
   }
 }
 

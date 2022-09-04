@@ -110,9 +110,6 @@ class DeformableModel final : public multibody::internal::PhysicalModel<T> {
 
   void DoDeclareSystemResources(MultibodyPlant<T>* plant) final;
 
-  void DoAddToManager(
-      CompliantContactManager<T>* manager) final;
-
   /* Builds a FEM model for the body with `id` with linear tetrahedral elements
    and a single quadrature point. The reference positions as well as the
    connectivity of the elements are given by `mesh`, and physical properties

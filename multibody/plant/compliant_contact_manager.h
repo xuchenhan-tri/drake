@@ -14,7 +14,6 @@
 #include "drake/multibody/contact_solvers/sap/sap_solver.h"
 #include "drake/multibody/contact_solvers/sap/sap_solver_results.h"
 #include "drake/multibody/plant/deformable_driver.h"
-#include "drake/multibody/plant/deformable_model.h"
 #include "drake/multibody/plant/discrete_update_manager.h"
 #include "drake/systems/framework/context.h"
 
@@ -177,14 +176,27 @@ class CompliantContactManager final
     return internal::GetInternalTree(this->plant()).get_topology();
   }
 
-  std::unique_ptr<DiscreteUpdateManager<double>> CloneToDouble()
-      const final;
+  std::unique_ptr<DiscreteUpdateManager<double>> CloneToDouble() const final;
   std::unique_ptr<DiscreteUpdateManager<AutoDiffXd>> CloneToAutoDiffXd()
       const final;
 
   // Extracts non state dependent model information from MultibodyPlant. See
   // DiscreteUpdateManager for details.
   void ExtractModelInfo() final;
+
+  void ExtractPhysicalModel(const DeformableModel<T>* model) {
+    if constexpr (std::is_same_v<T, double>) {
+      SetDeformableModel(model);
+    }
+  }
+
+  void ExtractPhysicalModel(const std::monostate&) {
+      DRAKE_DEMAND(false);
+  }
+
+  void ExtractPhysicalModel(std::monostate&) {
+      DRAKE_DEMAND(false);
+  }
 
   void DeclareCacheEntries() final;
 

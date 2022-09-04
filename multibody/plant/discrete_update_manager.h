@@ -27,6 +27,16 @@ class MultibodyPlant;
 namespace internal {
 template <typename T>
 class AccelerationKinematicsCache;
+template <typename T>
+class PhysicalModel;
+template <typename T>
+class DeformableModel;
+
+template <typename T>
+using ModelVariant = std::variant<std::monostate, const DeformableModel<T>*>;
+
+template <typename T>
+ModelVariant<T> ToModelVariant(const PhysicalModel<T>* model);
 
 /* This class is used to perform all calculations needed to advance state for a
  MultibodyPlant with discrete state.

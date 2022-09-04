@@ -9,7 +9,6 @@
 #include "drake/multibody/fem/linear_simplex_element.h"
 #include "drake/multibody/fem/simplex_gaussian_quadrature.h"
 #include "drake/multibody/fem/volumetric_model.h"
-#include "drake/multibody/plant/compliant_contact_manager.h"
 
 namespace drake {
 namespace multibody {
@@ -95,12 +94,6 @@ template <typename T>
 GeometryId DeformableModel<T>::GetGeometryIdOrThrow(DeformableBodyId id) const {
   ThrowUnlessRegistered(__func__, id);
   return body_id_to_geometry_id_.at(id);
-}
-
-template <typename T>
-void DeformableModel<T>::DoAddToManager(
-    CompliantContactManager<T>* manager) {
-  manager->SetDeformableModel(this);
 }
 
 template <typename T>

@@ -83,17 +83,6 @@ class PhysicalModel : public ScalarConvertibleComponent<T> {
     system_resources_declared_ = true;
   }
 
-  /* Configures the given CompliantContactManager with `this` model so that the
-   physical model can be discretely advanced in time by the
-   CompliantContactManager. This function can only be called after system
-   resources have been declared, otherwise an exception in thrown.
-   @pre manager != nullptr. */
-  void AddToManager(CompliantContactManager<T>* manager) {
-    DRAKE_DEMAND(manager != nullptr);
-    ThrowIfSystemResourcesNotDeclared(__func__);
-    DoAddToManager(manager);
-  }
-
  protected:
   /* Derived classes that support making a clone that uses double as a scalar
    type must implement this so that it creates a copy of the object with double
@@ -117,10 +106,6 @@ class PhysicalModel : public ScalarConvertibleComponent<T> {
   /* Derived class must override this to declare system resources for its
    specific model. */
   virtual void DoDeclareSystemResources(MultibodyPlant<T>* plant) = 0;
-
-  /* Derived class may override this to set up compliant contact manager.
-   Defaults to no-op. */
-  virtual void DoAddToManager(CompliantContactManager<T>*) {}
 
   /* Helper method for throwing an exception within public methods that should
    not be called after system resources are declared. The invoking method should

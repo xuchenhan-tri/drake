@@ -9,6 +9,15 @@ namespace multibody {
 namespace internal {
 
 template <typename T>
+ModelVariant<T> ToModelVariant(const PhysicalModel<T>* model) {
+  const DeformableModel<T>* deformable_model =
+      dynamic_cast<const DeformableModel<T>*>(model);
+  ModelVariant<T> result;
+  result = deformable_model;
+  return result;
+}
+
+template <typename T>
 systems::CacheEntry& DiscreteUpdateManager<T>::DeclareCacheEntry(
     std::string description, systems::ValueProducer value_producer,
     std::set<systems::DependencyTicket> prerequisites_of_calc) {
