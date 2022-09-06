@@ -104,9 +104,7 @@ class Geometries final : public ShapeReifier {
    and poses of all registered deformable and rigid geometries are up to date.
    The results are sorted according to deformable id.
    @pre deformable_rigid_contact != nullptr. */
-  void ComputeDeformableRigidContact(
-      std::vector<DeformableRigidContact<double>>* deformable_rigid_contact)
-      const;
+  DeformableContact<double> ComputeDeformableContact() const;
 
  private:
   friend class GeometriesTester;

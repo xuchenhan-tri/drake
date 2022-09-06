@@ -279,8 +279,7 @@ class ProximityEngine {
    are up-to-date. */
   template <typename T1 = T>
   typename std::enable_if_t<std::is_same_v<T1, double>, void>
-  ComputeDeformableRigidContact(
-      std::vector<DeformableRigidContact<T>>* deformable_rigid_contact) const;
+  DeformableContact<T> ComputeDeformableRigidContact() const;
 
   /* Implementation of GeometryState::FindCollisionCandidates().  */
   std::vector<SortedPair<GeometryId>> FindCollisionCandidates() const;

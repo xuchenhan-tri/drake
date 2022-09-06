@@ -76,11 +76,12 @@ class DeformableSurfaceVolumeIntersector
 
 void AppendDeformableRigidContact(
     const deformable::DeformableGeometry& deformable_D,
-    const GeometryId rigid_id, const TriangleSurfaceMesh<double>& rigid_mesh_R,
+    const GeometryId deformable_id, const GeometryId rigid_id,
+    const TriangleSurfaceMesh<double>& rigid_mesh_R,
     const Bvh<Obb, TriangleSurfaceMesh<double>>& rigid_bvh_R,
     const math::RigidTransform<double>& X_DR,
-    DeformableRigidContact<double>* deformable_rigid_contact) {
-  DRAKE_DEMAND(deformable_rigid_contact != nullptr);
+    DeformableContact<double>* deformable_contact) {
+  DRAKE_DEMAND(deformable_contact != nullptr);
 
   DeformableSurfaceVolumeIntersector intersect;
   std::vector<double> sdf_values =
@@ -123,10 +124,10 @@ void AppendDeformableRigidContact(
       contact_vertex_indexes.emplace_back(tet_vertices);
     }
 
-    deformable_rigid_contact->Append(
-        rigid_id, participating_vertices, std::move(*contact_mesh_W),
-        std::move(penetration_distances), std::move(contact_vertex_indexes),
-        std::move(contact_points_W),
+    deformable_contact->AddContactSurface(
+        deformable_id, rigid_id, participating_vertices,
+        std::move(*contact_mesh_W), std::move(penetration_distances),
+        std::move(contact_vertex_indexes), std::move(contact_points_W),
         std::move(intersect.mutable_barycentric_centroids()));
   }
 }

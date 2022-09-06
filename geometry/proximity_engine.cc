@@ -717,11 +717,8 @@ class ProximityEngine<T>::Impl : public ShapeReifier {
     std::sort(point_pairs->begin(), point_pairs->end(), OrderPointPair<T>);
   }
 
-  void ComputeDeformableRigidContact(
-      std::vector<DeformableRigidContact<double>>* deformable_contact_data)
-      const {
-    geometries_for_deformable_contact_.ComputeDeformableRigidContact(
-        deformable_contact_data);
+  DeformableContact<double> ComputeDeformableContact() const {
+    return geometries_for_deformable_contact_.ComputeDeformableContact();
   }
 
   // Testing utilities
@@ -1086,9 +1083,8 @@ ProximityEngine<T>::ComputeContactSurfacesWithFallback(
 template <typename T>
 template <typename T1>
 typename std::enable_if_t<std::is_same_v<T1, double>, void>
-ProximityEngine<T>::ComputeDeformableRigidContact(
-    std::vector<DeformableRigidContact<T>>* deformable_rigid_contact) const {
-  impl_->ComputeDeformableRigidContact(deformable_rigid_contact);
+DeformableContact<T> ProximityEngine<T>::ComputeDeformableContact() const {
+  impl_->ComputeDeformableContact();
 }
 
 template <typename T>
