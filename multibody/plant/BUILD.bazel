@@ -813,6 +813,13 @@ drake_cc_googletest(
 )
 
 drake_cc_googletest(
+    name = "ref_vs_block_test",
+    deps = [
+        "//common:essential",
+    ],
+)
+
+drake_cc_googletest(
     name = "deformable_driver_contact_test",
     deps = [
         ":multibody_plant_core",
