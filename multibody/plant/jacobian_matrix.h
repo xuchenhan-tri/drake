@@ -1,5 +1,7 @@
 #pragma once
 
+#include <tuple>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -42,6 +44,17 @@ class Matrix3BlockMatrix {
     }
   }
 
+  MatrixX<T> MakeDenseMatrix() const {
+    MatrixX<T> result = MatrixX<T>::Zero(rows(), cols());
+    for (const auto& triplet : data_) {
+      const int block_row = std::get<0>(triplet);
+      const int block_col = std::get<1>(triplet);
+      const Matrix3<T>& m = std::get<2>(triplet);
+      result.template block<3, 3>(3 * block_row, 3 * block_col) = m;
+    }
+    return result;
+  }
+
  private:
   std::vector<Triplet> data_;
   int row_blocks_{};
@@ -53,18 +66,23 @@ class JacobianBlock {
  public:
   DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(JacobianBlock);
 
-  JacobianBlock(Matrix3BlockMatrix<T> data)
+  JacobianBlock() : JacobianBlock(MatrixX<T>::Zero(0, 0)) {}
+
+  explicit JacobianBlock(Matrix3BlockMatrix<T> data)
       : data_(std::move(data)), is_dense_(false) {}
 
+  // NOLINTNEXTLINE(runtime/explicit)
   JacobianBlock(MatrixX<T> data) : data_(std::move(data)), is_dense_(true) {}
 
   /* We need the static_cast here because Eigen's rows() and cols() are long. */
   int rows() const {
-    return std::visit([](auto&& arg) { return static_cast<int>(arg.rows()); }, data_);
+    return std::visit([](auto&& arg) { return static_cast<int>(arg.rows()); },
+                      data_);
   }
 
   int cols() const {
-    return std::visit([](auto&& arg) { return static_cast<int>(arg.cols()); }, data_);
+    return std::visit([](auto&& arg) { return static_cast<int>(arg.cols()); },
+                      data_);
   }
 
   /* Performs *y += A * M, where M is `this` matrix. */
@@ -77,6 +95,13 @@ class JacobianBlock {
           std::get<Matrix3BlockMatrix<T>>(data_);
       matrix.LeftMultiplyAndAddTo(A, y);
     }
+  }
+
+  MatrixX<T> MakeDenseMatrix() const {
+    if (is_dense_) {
+      return std::get<MatrixX<T>>(data_);
+    }
+    return std::get<Matrix3BlockMatrix<T>>(data_).MakeDenseMatrix();
   }
 
  private:

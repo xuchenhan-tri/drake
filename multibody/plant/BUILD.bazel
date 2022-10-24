@@ -30,6 +30,7 @@ drake_cc_package_library(
         ":hydroelastic_quadrature_point_data",
         ":hydroelastic_traction",
         ":internal_geometry_names",
+        ":jacobian_matrix",
         ":multibody_plant_config",
         ":multibody_plant_config_functions",
         ":multibody_plant_core",
@@ -177,6 +178,7 @@ drake_cc_library(
         "contact_pair_kinematics.h",
     ],
     deps = [
+        ":jacobian_matrix",
         "//common:default_scalars",
         "//math:geometric_transform",
         "//multibody/tree:multibody_tree_indexes",

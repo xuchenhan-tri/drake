@@ -58,6 +58,7 @@ drake_cc_library(
     deps = [
         "//common:default_scalars",
         "//common:essential",
+        "//multibody/plant:jacobian_matrix",
     ],
 )
 

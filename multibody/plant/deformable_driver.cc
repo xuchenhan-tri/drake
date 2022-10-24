@@ -344,7 +344,8 @@ void DeformableDriver<T>::AppendContactKinematics(
         Jv_v_WAc_W.template middleCols<3>(3 * participating_vertices(v)) =
             b(v) * Matrix3<T>::Identity();
       }
-      jacobian_blocks.emplace_back(clique_index_A, -R_CW.matrix() * Jv_v_WAc_W);
+      jacobian_blocks.emplace_back(
+          clique_index_A, JacobianBlock<T>(-R_CW.matrix() * Jv_v_WAc_W));
 
       /* Calculate the jacobian block for the rigid body B if it's not static.
        */
@@ -361,7 +362,8 @@ void DeformableDriver<T>::AppendContactKinematics(
             R_CW.matrix() * Jv_v_WBc_W.middleCols(
                                 tree_topology.tree_velocities_start(tree_index),
                                 tree_topology.num_tree_velocities(tree_index));
-        jacobian_blocks.emplace_back(tree_index, std::move(J));
+        jacobian_blocks.emplace_back(tree_index,
+                                     JacobianBlock<T>(std::move(J)));
       }
       result->emplace_back(surface.signed_distances()[i],
                            std::move(jacobian_blocks), std::move(R_WC));
