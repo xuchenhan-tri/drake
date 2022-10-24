@@ -104,6 +104,8 @@ class JacobianBlock {
     return std::get<Matrix3BlockMatrix<T>>(data_).MakeDenseMatrix();
   }
 
+  operator MatrixX<T>() const { return MakeDenseMatrix(); }
+
  private:
   std::variant<MatrixX<T>, Matrix3BlockMatrix<T>> data_;
   bool is_dense_{};

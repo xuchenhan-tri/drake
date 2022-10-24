@@ -149,19 +149,18 @@ class SapConstraint {
 
   const VectorX<T>& constraint_function() const { return g_; }
 
-  // TODO(xuchenhan-tri): Return a JacobianBlock here.
   /* Returns the Jacobian with respect to the DOFs of the first clique. */
-  MatrixX<T> first_clique_jacobian() const {
-    return first_clique_jacobian_.MakeDenseMatrix();
+  const JacobianBlock<T>& first_clique_jacobian() const {
+    return first_clique_jacobian_;
   }
 
   /* Returns the Jacobian with respect to the DOFs of the second clique.
    It throws an exception if num_cliques() == 1. */
-  MatrixX<T> second_clique_jacobian() const {
+  const JacobianBlock<T>& second_clique_jacobian() const {
     if (num_cliques() == 1)
       throw std::logic_error(
           "This constraint only involves a single clique.");
-    return second_clique_jacobian_.MakeDenseMatrix();
+    return second_clique_jacobian_;
   }
 
   /* Computes the projection γ = P(y) onto the convex set specific to a

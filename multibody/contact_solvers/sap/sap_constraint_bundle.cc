@@ -101,12 +101,12 @@ void SapConstraintBundle<T>::MakeConstraintBundleJacobian(
       // the group's cliques correspond to.
 
       J0.middleRows(row_start, ni) = c0 == c.first_clique()
-                                         ? c.first_clique_jacobian()
-                                         : c.second_clique_jacobian();
+                                         ? c.first_clique_jacobian().MakeDenseMatrix()
+                                         : c.second_clique_jacobian().MakeDenseMatrix();
       if (c1 != c0) {
         J1.middleRows(row_start, ni) = c1 == c.first_clique()
-                                           ? c.first_clique_jacobian()
-                                           : c.second_clique_jacobian();
+                                           ? c.first_clique_jacobian().MakeDenseMatrix()
+                                           : c.second_clique_jacobian().MakeDenseMatrix();
       }
       row_start += ni;
     }
