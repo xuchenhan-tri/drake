@@ -55,6 +55,64 @@ GTEST_TEST(JacobianMatrixTest, SparseDenseParity) {
   EXPECT_TRUE(CompareMatrices(y, y2));
 }
 
+GTEST_TEST(JacobianMatrixTest, StackDenseMatrix) {
+  Matrix6<double> A1;
+  for (int i = 0; i < 6; ++i) {
+    for (int j = 0; j < 6; ++j) {
+      A1(i, j) = 3 * i + 4 * j;
+    }
+  }
+  Matrix6<double> A2;
+  for (int i = 0; i < 6; ++i) {
+    for (int j = 0; j < 6; ++j) {
+      A2(i, j) = 30 * i + 40 * j;
+    }
+  }
+
+  std::vector<JacobianBlock<double>> blocks;
+  blocks.emplace_back(A1);
+  blocks.emplace_back(A2);
+
+  const JacobianBlock<double> stack = StackJacobianBlocks(blocks);
+  MatrixXd expected_result(12, 6);
+  expected_result.topRows<6>() = A1;
+  expected_result.bottomRows<6>() = A2;
+  EXPECT_EQ(stack.MakeDenseMatrix(), expected_result);
+}
+
+GTEST_TEST(JacobianMatrixTest, StackSparseMatrix) {
+  Matrix3d M00;
+  M00 << 1, 2, 3, 5, 3, 6, 2, 5, 7;
+  Matrix3d M12;
+  M12 << 0, 2, 0, 1, 8, 2, 6, 2, 2;
+
+  Matrix3d N01 = M00;
+  Matrix3d N10 = M12;
+  Matrix3d N22 = Matrix3d::Identity();
+
+  Matrix3BlockMatrix<double> sparse_M(2, 3);
+  sparse_M.AddTriplet(0, 0, M00);
+  sparse_M.AddTriplet(1, 2, M12);
+  MatrixXd dense_M = sparse_M.MakeDenseMatrix();
+
+  Matrix3BlockMatrix<double> sparse_N(3, 3);
+  sparse_N.AddTriplet(0, 1, N01);
+  sparse_N.AddTriplet(1, 0, N10);
+  sparse_N.AddTriplet(2, 2, N22);
+  MatrixXd dense_N = sparse_N.MakeDenseMatrix();
+
+  std::vector<JacobianBlock<double>> sparse_blocks;
+  sparse_blocks.emplace_back(sparse_M);
+  sparse_blocks.emplace_back(sparse_N);
+  const JacobianBlock<double> sparse_stack = StackJacobianBlocks(sparse_blocks);
+
+  std::vector<JacobianBlock<double>> dense_blocks;
+  dense_blocks.emplace_back(dense_M);
+  dense_blocks.emplace_back(dense_N);
+  const JacobianBlock<double> dense_stack = StackJacobianBlocks(dense_blocks);
+  EXPECT_EQ(sparse_stack, dense_stack);
+}
+
 }  // namespace
 }  // namespace internal
 }  // namespace multibody

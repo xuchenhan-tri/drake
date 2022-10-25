@@ -55,6 +55,8 @@ class Matrix3BlockMatrix {
     return result;
   }
 
+  const std::vector<Triplet>& get_triplets() const { return data_; }
+
  private:
   std::vector<Triplet> data_;
   int row_blocks_{};
@@ -97,6 +99,9 @@ class JacobianBlock {
     }
   }
 
+  bool is_dense() const { return is_dense_; }
+
+  /* Functions to satisfy existing tests. */
   MatrixX<T> MakeDenseMatrix() const {
     if (is_dense_) {
       return std::get<MatrixX<T>>(data_);
@@ -106,10 +111,67 @@ class JacobianBlock {
 
   operator MatrixX<T>() const { return MakeDenseMatrix(); }
 
+  bool operator==(const JacobianBlock<T>& other) const {
+    return this->MakeDenseMatrix() == other.MakeDenseMatrix();
+  }
+
  private:
+  template <class U>
+  friend JacobianBlock<U> StackJacobianBlocks(
+      const std::vector<JacobianBlock<U>>& blocks);
   std::variant<MatrixX<T>, Matrix3BlockMatrix<T>> data_;
   bool is_dense_{};
 };
+
+template <typename T>
+JacobianBlock<T> StackJacobianBlocks(
+    const std::vector<JacobianBlock<T>>& blocks) {
+  if (blocks.empty()) {
+    return {};
+  }
+
+  const bool is_dense = blocks[0].is_dense();
+  const int cols = blocks[0].cols();
+  int rows = 0;
+  for (const auto& b : blocks) {
+    /* Don't allow mixing dense and sparse matrices.*/
+    DRAKE_THROW_UNLESS(is_dense == b.is_dense());
+    DRAKE_THROW_UNLESS(cols == b.cols());
+    rows += b.rows();
+  }
+
+  if (is_dense) {
+    MatrixX<T> result(rows, cols);
+    int row_offset = 0;
+    for (const auto& b : blocks) {
+      result.middleRows(row_offset, b.rows()) = std::get<MatrixX<T>>(b.data_);
+      row_offset += b.rows();
+    }
+    return JacobianBlock<T>(std::move(result));
+  }
+
+  /* If this is a stack of sparse 3x3 blocks, then the total number of rows and
+   cols are multiples of 3. */
+  DRAKE_DEMAND(rows % 3 == 0);
+  DRAKE_DEMAND(cols % 3 == 0);
+  const int row_blocks = rows / 3;
+  const int col_blocks = cols / 3;
+  int block_row_offset = 0;
+  Matrix3BlockMatrix<T> result(row_blocks, col_blocks);
+  for (const auto& b : blocks) {
+    const Matrix3BlockMatrix<T>& entry =
+        std::get<Matrix3BlockMatrix<T>>(b.data_);
+    for (const typename Matrix3BlockMatrix<T>::Triplet& t :
+         entry.get_triplets()) {
+      const int block_row = std::get<0>(t) + block_row_offset;
+      const int block_col = std::get<1>(t);
+      const Matrix3<T>& m = std::get<2>(t);
+      result.AddTriplet(block_row, block_col, m);
+    }
+    block_row_offset += entry.rows() / 3;
+  }
+  return JacobianBlock<T>(std::move(result));
+}
 
 }  // namespace internal
 }  // namespace multibody

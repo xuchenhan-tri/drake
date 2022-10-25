@@ -124,7 +124,8 @@ GTEST_TEST(SapConstraint, SingleCliqueConstraintClone) {
   EXPECT_THROW(clone->second_clique(), std::exception);
   EXPECT_EQ(clone->constraint_function(), Vector3d(1., 2., 3));
   EXPECT_EQ(clone->first_clique_jacobian().MakeDenseMatrix(), J32);
-  EXPECT_THROW(clone->second_clique_jacobian().MakeDenseMatrix(), std::exception);
+  EXPECT_THROW(clone->second_clique_jacobian().MakeDenseMatrix(),
+               std::exception);
 }
 
 GTEST_TEST(SapConstraint, TwoCliquesConstraintClone) {

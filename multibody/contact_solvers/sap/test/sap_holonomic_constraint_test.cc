@@ -52,7 +52,8 @@ TEST_F(SapHolonomicConstraintTests, SingleCliqueConstruction) {
   EXPECT_THROW(dut_->second_clique(), std::exception);
   EXPECT_EQ(dut_->constraint_function(), g_);
   EXPECT_EQ(dut_->first_clique_jacobian().MakeDenseMatrix(), J_);
-  EXPECT_THROW(dut_->second_clique_jacobian().MakeDenseMatrix(), std::exception);
+  EXPECT_THROW(dut_->second_clique_jacobian().MakeDenseMatrix(),
+               std::exception);
   const SapHolonomicConstraint<double>::Parameters p =
       MakeArbitraryParameters();
   EXPECT_EQ(dut_->parameters().impulse_lower_limits(),
@@ -234,7 +235,8 @@ TEST_F(SapHolonomicConstraintTests, Clone) {
   EXPECT_EQ(clone->first_clique(), clique1_);
   EXPECT_THROW(clone->second_clique(), std::exception);
   EXPECT_EQ(clone->constraint_function(), dut_->constraint_function());
-  EXPECT_EQ(clone->first_clique_jacobian().MakeDenseMatrix(), dut_->first_clique_jacobian().MakeDenseMatrix());
+  EXPECT_EQ(clone->first_clique_jacobian().MakeDenseMatrix(),
+            dut_->first_clique_jacobian().MakeDenseMatrix());
   EXPECT_THROW(clone->second_clique_jacobian(), std::exception);
   const SapHolonomicConstraint<double>::Parameters& p = dut_->parameters();
   EXPECT_EQ(clone->parameters().num_constraint_equations(),

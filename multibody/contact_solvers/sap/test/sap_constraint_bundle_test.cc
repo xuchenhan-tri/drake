@@ -143,7 +143,7 @@ TEST_F(SapConstraintBundleTest, VerifyJacobian) {
   MatrixXd J_cluster0_clique0(3, 1);
   J_cluster0_clique0
       << problem_->get_constraint(0).first_clique_jacobian().MakeDenseMatrix(),
-      problem_->get_constraint(1).second_clique_jacobian();
+      problem_->get_constraint(1).second_clique_jacobian().MakeDenseMatrix();
   builder.PushBlock(0, p.permuted_index(0), J_cluster0_clique0);
   MatrixXd J_cluster0_clique2(3, 3);
   J_cluster0_clique2
@@ -159,9 +159,10 @@ TEST_F(SapConstraintBundleTest, VerifyJacobian) {
       problem_->get_constraint(4).first_clique_jacobian().MakeDenseMatrix();
   builder.PushBlock(1, p.permuted_index(0), J_cluster1_clique0);
   MatrixXd J_cluster1_clique1(8, 2);
-  J_cluster1_clique1 << problem_->get_constraint(2).second_clique_jacobian(),
-      problem_->get_constraint(3).second_clique_jacobian(),
-      problem_->get_constraint(4).second_clique_jacobian();
+  J_cluster1_clique1
+      << problem_->get_constraint(2).second_clique_jacobian().MakeDenseMatrix(),
+      problem_->get_constraint(3).second_clique_jacobian().MakeDenseMatrix(),
+      problem_->get_constraint(4).second_clique_jacobian().MakeDenseMatrix();
   builder.PushBlock(1, p.permuted_index(1), J_cluster1_clique1);
 
   // Cluster with only clique1.
