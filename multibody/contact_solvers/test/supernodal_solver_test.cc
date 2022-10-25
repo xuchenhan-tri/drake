@@ -106,9 +106,9 @@ std::vector<BlockMatrixTriplet> MakeBlockTriplets(
   for (int b = 0; b < num_blocks; ++b) {
     get<0>(triplets[b]) = block_positions[b].first;
     get<1>(triplets[b]) = block_positions[b].second;
-    get<2>(triplets[b]) =
+    get<2>(triplets[b]) = JacobianBlock<double>(
         A.block(dense_positions[b].first, dense_positions[b].second,
-                block_sizes[b].first, block_sizes[b].second);
+                block_sizes[b].first, block_sizes[b].second));
   }
   return triplets;
 }

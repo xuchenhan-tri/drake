@@ -1,5 +1,7 @@
 #include "drake/multibody/contact_solvers/sap/sap_constraint_bundle.h"
 
+#include <utility>
+
 #include "drake/common/default_scalars.h"
 #include "drake/multibody/contact_solvers/sap/contact_problem_graph.h"
 
@@ -112,13 +114,13 @@ void SapConstraintBundle<T>::MakeConstraintBundleJacobian(
     DRAKE_DEMAND(J0.cols() == nv0);
     DRAKE_DEMAND(J0.rows() == num_rows);
     const int participating_c0 = cliques_permutation.permuted_index(c0);
-    builder.PushBlock(block_row, participating_c0, J0.MakeDenseMatrix());
+    builder.PushBlock(block_row, participating_c0, std::move(J0));
     if (c1 != c0) {
       JacobianBlock<T> J1 = StackJacobianBlocks(J1_blocks);
       DRAKE_DEMAND(J1.cols() == nv1);
       DRAKE_DEMAND(J1.rows() == num_rows);
       const int participating_c1 = cliques_permutation.permuted_index(c1);
-      builder.PushBlock(block_row, participating_c1, J1.MakeDenseMatrix());
+      builder.PushBlock(block_row, participating_c1, std::move(J1));
     }
   }
 

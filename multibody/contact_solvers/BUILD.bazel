@@ -151,6 +151,7 @@ drake_cc_library(
     hdrs = ["supernodal_solver.h"],
     interface_deps = [
         "//common:essential",
+        "//multibody/plant:jacobian_matrix",
     ],
     deps = [
         "@conex//conex:supernodal_solver",

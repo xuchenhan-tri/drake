@@ -14,7 +14,7 @@ using Eigen::MatrixXd;
 
 /* Create two versions of M, one dense one sparse, and test y += A * M for each.
  */
-GTEST_TEST(JacobianMatrixTest, SparseDenseParity) {
+GTEST_TEST(JacobianMatrixTest, LeftMultiplyAndAddTo) {
   Matrix3d M00;
   M00 << 1, 2, 3, 5, 3, 6, 2, 5, 7;
   Matrix3d M12;
@@ -37,7 +37,7 @@ GTEST_TEST(JacobianMatrixTest, SparseDenseParity) {
   sparse.AddTriplet(0, 0, M00);
   sparse.AddTriplet(1, 2, M12);
 
-  MatrixXd dense(6, 9);
+  MatrixXd dense = MatrixXd::Zero(6, 9);
   dense.topLeftCorner<3, 3>() = M00;
   dense.bottomRightCorner<3, 3>() = M12;
 
@@ -53,6 +53,89 @@ GTEST_TEST(JacobianMatrixTest, SparseDenseParity) {
   sparse_jacobian.LeftMultiplyAndAddTo(A, &y2);
 
   EXPECT_TRUE(CompareMatrices(y, y2));
+}
+
+GTEST_TEST(JacobianMatrixTest, TransposeAndRightMultiply) {
+  Matrix3d M00;
+  M00 << 1, 2, 3, 5, 3, 6, 2, 5, 7;
+  Matrix3d M12;
+  M12 << 0, 2, 0, 1, 8, 2, 6, 2, 2;
+
+  Matrix6<double> A;
+  for (int i = 0; i < 6; ++i) {
+    for (int j = 0; j < 6; ++j) {
+      A(i, j) = 3 * i + 4 * j;
+    }
+  }
+
+  Matrix3BlockMatrix<double> sparse(2, 3);
+  sparse.AddTriplet(0, 0, M00);
+  sparse.AddTriplet(1, 2, M12);
+
+  MatrixXd dense = MatrixXd::Zero(6, 9);
+  dense.topLeftCorner<3, 3>() = M00;
+  dense.bottomRightCorner<3, 3>() = M12;
+
+  JacobianBlock<double> dense_jacobian(dense);
+  EXPECT_EQ(dense_jacobian.TransposeAndRightMultiply(A), dense.transpose() * A);
+
+  JacobianBlock<double> sparse_jacobian(sparse);
+  EXPECT_EQ(sparse_jacobian.TransposeAndRightMultiply(A),
+            sparse.TransposeAndRightMultiply(A));
+
+  EXPECT_EQ(dense_jacobian.TransposeAndRightMultiply(A),
+            sparse_jacobian.TransposeAndRightMultiply(A));
+}
+
+GTEST_TEST(JacobianMatrixTest, LeftMultiplyByBlockDiagonal) {
+  Matrix3d M00;
+  M00 << 1, 2, 3, 5, 3, 6, 2, 5, 7;
+  Matrix3d M12;
+  M12 << 0, 2, 0, 1, 8, 2, 6, 2, 2;
+
+  Matrix6<double> A;
+  for (int i = 0; i < 6; ++i) {
+    for (int j = 0; j < 6; ++j) {
+      A(i, j) = 3 * i + 4 * j;
+    }
+  }
+
+  Matrix3BlockMatrix<double> sparse(2, 3);
+  sparse.AddTriplet(0, 0, M00);
+  sparse.AddTriplet(1, 2, M12);
+
+  MatrixXd dense = MatrixXd::Zero(6, 9);
+  dense.topLeftCorner<3, 3>() = M00;
+  dense.bottomRightCorner<3, 3>() = M12;
+
+  JacobianBlock<double> dense_jacobian(dense);
+  JacobianBlock<double> sparse_jacobian(sparse);
+
+  std::vector<MatrixXd> G1;
+  G1.emplace_back(A);
+  const MatrixXd expected_result1 = A * dense;
+  const MatrixXd dense_result1 =
+      dense_jacobian.LeftMultiplyByBlockDiagonal(G1, 0, 0);
+  const MatrixXd sparse_result1 =
+      sparse_jacobian.LeftMultiplyByBlockDiagonal(G1, 0, 0);
+
+  EXPECT_EQ(expected_result1, dense_result1);
+  EXPECT_EQ(expected_result1, sparse_result1);
+
+  MatrixXd A2(6, 6);
+  A2.setZero();
+  A2.topLeftCorner<3, 3>() = A.topLeftCorner<3, 3>();
+  A2.bottomRightCorner<3, 3>() = A.bottomRightCorner<3, 3>();
+  const MatrixXd expected_result2 = A2 * dense;
+  std::vector<MatrixXd> G2;
+  G2.emplace_back(Matrix3d(A2.topLeftCorner<3, 3>()));
+  G2.emplace_back(Matrix3d(A2.bottomRightCorner<3, 3>()));
+  const MatrixXd dense_result2 =
+      dense_jacobian.LeftMultiplyByBlockDiagonal(G2, 0, 1);
+  const MatrixXd sparse_result2 =
+      sparse_jacobian.LeftMultiplyByBlockDiagonal(G2, 0, 1);
+  EXPECT_EQ(expected_result2, dense_result2);
+  EXPECT_EQ(expected_result2, sparse_result2);
 }
 
 GTEST_TEST(JacobianMatrixTest, StackDenseMatrix) {

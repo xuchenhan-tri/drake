@@ -1,5 +1,6 @@
 #pragma once
 
+#include <iostream>
 #include <tuple>
 #include <utility>
 #include <variant>
@@ -24,16 +25,21 @@ class Matrix3BlockMatrix {
   Matrix3BlockMatrix(int row_blocks, int col_blocks)
       : row_blocks_(row_blocks), col_blocks_(col_blocks) {}
 
+  /* @pre block_row >= all existing block rows. */
   void AddTriplet(int block_row, int block_col, Matrix3<T> m) {
     DRAKE_DEMAND(0 <= block_row && block_row < row_blocks_);
     DRAKE_DEMAND(0 <= block_col && block_col < col_blocks_);
+    if (!data_.empty()) {
+      DRAKE_DEMAND(std::get<0>(data_.back()) <= block_row);
+    }
     data_.emplace_back(block_row, block_col, std::move(m));
   }
 
   int rows() const { return row_blocks_ * 3; }
   int cols() const { return col_blocks_ * 3; }
 
-  void LeftMultiplyAndAddTo(const MatrixX<T>& A, MatrixX<T>* y) const {
+  void LeftMultiplyAndAddTo(const Eigen::Ref<const MatrixX<T>>& A,
+                            EigenPtr<MatrixX<T>> y) const {
     DRAKE_DEMAND(A.cols() == rows());
     for (const auto& triplet : data_) {
       const int block_row = std::get<0>(triplet);
@@ -42,6 +48,19 @@ class Matrix3BlockMatrix {
       y->template middleCols<3>(3 * block_col) +=
           A.template middleCols<3>(3 * block_row) * m;
     }
+  }
+
+  MatrixX<T> TransposeAndRightMultiply(const MatrixX<T>& A) const {
+    DRAKE_DEMAND(rows() == A.rows());
+    MatrixX<T> result = MatrixX<T>::Zero(cols(), A.cols());
+    for (const auto& triplet : data_) {
+      const int block_row = std::get<0>(triplet);
+      const int block_col = std::get<1>(triplet);
+      const Matrix3<T>& m = std::get<2>(triplet);
+      result.template middleRows<3>(3 * block_col) +=
+          m.transpose() * A.template middleRows<3>(3 * block_row);
+    }
+    return result;
   }
 
   MatrixX<T> MakeDenseMatrix() const {
@@ -87,16 +106,84 @@ class JacobianBlock {
                       data_);
   }
 
-  /* Performs *y += A * M, where M is `this` matrix. */
-  void LeftMultiplyAndAddTo(const MatrixX<T>& A, MatrixX<T>* y) const {
+  /* Performs *y += A * J, where J is `this` Jacobian block. */
+  void LeftMultiplyAndAddTo(const Eigen::Ref<const MatrixX<T>>& A,
+                            EigenPtr<MatrixX<T>> y) const {
     if (is_dense_) {
       const MatrixX<T>& matrix = std::get<MatrixX<T>>(data_);
       *y += A * matrix;
-    } else {
-      const Matrix3BlockMatrix<T>& matrix =
-          std::get<Matrix3BlockMatrix<T>>(data_);
-      matrix.LeftMultiplyAndAddTo(A, y);
+      return;
     }
+    const Matrix3BlockMatrix<T>& matrix =
+        std::get<Matrix3BlockMatrix<T>>(data_);
+    matrix.LeftMultiplyAndAddTo(A, y);
+  }
+
+  MatrixX<T> TransposeAndRightMultiply(const MatrixX<T>& A) const {
+    DRAKE_DEMAND(rows() == A.rows());
+    if (is_dense()) {
+      const MatrixX<T>& J = std::get<MatrixX<T>>(data_);
+      return J.transpose() * A;
+    }
+    const Matrix3BlockMatrix<T>& J = std::get<Matrix3BlockMatrix<T>>(data_);
+    return J.TransposeAndRightMultiply(A);
+  }
+
+  MatrixX<T> LeftMultiplyByBlockDiagonal(const std::vector<MatrixX<T>>& G,
+                                         int G_start, int G_end) const {
+    /* Verify that the sizes of G and this Jacobian is compatible. */
+    int G_size = 0;
+    bool is_G_block_multiple_of_3 = true;
+    for (int i = G_start; i <= G_end; ++i) {
+      DRAKE_DEMAND(G[i].rows() == G[i].cols());
+      G_size += G[i].rows();
+      if (G[i].rows() % 3 != 0) {
+        is_G_block_multiple_of_3 = false;
+      }
+    }
+    DRAKE_DEMAND(G_size == rows());
+    if (!is_dense()) {
+      DRAKE_DEMAND(is_G_block_multiple_of_3);
+    }
+
+    if (is_dense()) {
+      const MatrixX<T>& J = std::get<MatrixX<T>>(data_);
+      MatrixX<T> GJ(rows(), cols());
+      int row_offset = 0;
+      for (int index = G_start; index <= G_end; ++index) {
+        const int num_rows = G[index].rows();
+        GJ.middleRows(row_offset, num_rows).noalias() =
+            G[index] * J.middleRows(row_offset, num_rows);
+        row_offset += num_rows;
+      }
+      return GJ;
+    }
+    const Matrix3BlockMatrix<T>& J = std::get<Matrix3BlockMatrix<T>>(data_);
+    MatrixX<T> GJ = MatrixX<T>::Zero(J.rows(), J.cols());
+    const auto& triplets = J.get_triplets();
+    int G_offset = 0;
+    int G_index = G_start;
+    /* Gk is a block within G. */
+    const MatrixX<T>* Gk_ptr = &G[G_index];
+    for (const auto& t : triplets) {
+      const int block_row = std::get<0>(t);
+      const int block_col = std::get<1>(t);
+      const Matrix3<T>& m = std::get<2>(t);
+      /* Since m blocks are sorted according to block rows, we can safely skip
+       columns of G that won't hit this m block. */
+      while (3 * block_row >= G_offset + Gk_ptr->cols()) {
+        G_offset += Gk_ptr->cols();
+        if (++G_index > G_end) {
+          return GJ;
+        }
+        Gk_ptr = &G[G_index];
+      }
+      /* Column offset _into_ Gk. */
+      int Gk_offset = 3 * block_row - G_offset;
+      GJ.block(G_offset, 3 * block_col, Gk_ptr->rows(), 3) +=
+          Gk_ptr->template middleCols<3>(Gk_offset) * m;
+    }
+    return GJ;
   }
 
   bool is_dense() const { return is_dense_; }

@@ -50,7 +50,7 @@ void BlockSparseMatrix<T>::Multiply(const Eigen::Ref<const VectorX<T>>& x,
     auto yi = y->segment(row_start_[ib], block_row_size_[ib]);
     // N.B. noalias() is necessary to remove Eigen's aliasing assumption and
     // avoid evaluation into a temporary.
-    yi.noalias() += Bij * xj;
+    yi.noalias() += Bij.MakeDenseMatrix() * xj;
   }
 }
 
@@ -66,7 +66,7 @@ void BlockSparseMatrix<T>::MultiplyByTranspose(
     auto yj = y->segment(col_start_[jb], block_col_size_[jb]);
     // N.B. noalias() is necessary to remove Eigen's aliasing assumption and
     // avoid evaluation into a temporary.
-    yj.noalias() += Bij.transpose() * xi;
+    yj.noalias() += Bij.MakeDenseMatrix().transpose() * xi;
   }
 }
 
@@ -79,20 +79,20 @@ MatrixX<T> BlockSparseMatrix<T>::MakeDenseMatrix() const {
     const int rows = block_row_size_[ib];
     const int js = col_start_[jb];
     const int cols = block_col_size_[jb];
-    A.block(is, js, rows, cols) = Bij;
+    A.block(is, js, rows, cols) = Bij.MakeDenseMatrix();
   }
   return A;
 }
 
 template <typename T>
 void BlockSparseMatrixBuilder<T>::PushBlock(int i, int j,
-                                            const MatrixX<T>& Bij) {
+                                            JacobianBlock<T> Bij) {
   if (blocks_.size() == blocks_.capacity()) {
     throw std::runtime_error(
         "Exceeded the maximum number of non-zero blocks capacity specified at "
         "construction.");
   }
-  if (Bij.size() > 0) {
+  if (Bij.rows() > 0 && Bij.cols() > 0) {
     if (block_row_size_[i] >= 0) {
       // A block was added before to this row. Verify that Bij.rows() ==
       // block_row_size_[i].
@@ -110,9 +110,9 @@ void BlockSparseMatrixBuilder<T>::PushBlock(int i, int j,
       throw std::runtime_error(
           fmt::format("Block ({}, {}) already added.", i, j));
     }
-    blocks_.push_back({i, j, Bij});
     block_row_size_[i] = Bij.rows();
     block_col_size_[j] = Bij.cols();
+    blocks_.emplace_back(i, j, std::move(Bij));
   }
 }
 
