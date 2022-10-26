@@ -186,6 +186,49 @@ class JacobianBlock {
     return GJ;
   }
 
+  /* Special fast routine that requires G blocks are 3x3 when the jacobian is
+   sparse. */
+  JacobianMatrix<T> LeftMultiplyByBlockDiagonalFast(
+      const std::vector<MatrixX<T>>& G, int G_start, int G_end) const {
+    /* Verify that the sizes of G and this Jacobian is compatible. */
+    int G_size = 0;
+    bool is_G_block_3_by_3 = true;
+    for (int i = G_start; i <= G_end; ++i) {
+      DRAKE_DEMAND(G[i].rows() == G[i].cols());
+      G_size += G[i].rows();
+      if (G[i].rows() != 3) {
+        is_G_block_3_by_3 = false;
+      }
+    }
+    DRAKE_DEMAND(G_size == rows());
+    if (!is_dense()) {
+      DRAKE_DEMAND(is_G_block_3_by_3);
+    }
+
+    if (is_dense()) {
+      const MatrixX<T>& J = std::get<MatrixX<T>>(data_);
+      MatrixX<T> GJ(rows(), cols());
+      int row_offset = 0;
+      for (int index = G_start; index <= G_end; ++index) {
+        const int num_rows = G[index].rows();
+        GJ.middleRows(row_offset, num_rows).noalias() =
+            G[index] * J.middleRows(row_offset, num_rows);
+        row_offset += num_rows;
+      }
+      return JacobianBlock<T>(std::move(GJ));
+    }
+    const Matrix3BlockMatrix<T>& J = std::get<Matrix3BlockMatrix<T>>(data_);
+    Matrix3BlockMatrix<T> GJ(J.rows() / 3, J.cols() / 3);
+    const auto& triplets = J.get_triplets();
+    for (const auto& t : triplets) {
+      const int block_row = std::get<0>(t);
+      const int block_col = std::get<1>(t);
+      const Matrix3<T>& m = std::get<2>(t);
+      GJ.AddTriplet(block_row, block_col, G[G_start + block_row] * m);
+    }
+    return JacobianBlock<T>(std::move(GJ));
+  }
+
   bool is_dense() const { return is_dense_; }
 
   /* Functions to satisfy existing tests. */
