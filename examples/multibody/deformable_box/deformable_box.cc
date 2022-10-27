@@ -47,6 +47,7 @@ using drake::systems::BasicVector;
 using drake::systems::Context;
 using Eigen::Vector2d;
 using Eigen::Vector4d;
+using Eigen::VectorXd;
 
 namespace drake {
 namespace examples {
@@ -89,7 +90,7 @@ class GripperPositionControl : public systems::LeafSystem<double> {
  private:
   void SetAppliedForce(const Context<double>& context,
                        BasicVector<double>* output) const {
-    const Vector4d gripper_state =
+    const VectorXd gripper_state =
         EvalVectorInput(context, GetInputPort("gripper state").get_index())
             ->get_value();
     /* There are 6 dofs in the state, corresponding to
@@ -133,8 +134,8 @@ class GripperPositionControl : public systems::LeafSystem<double> {
   Vector2d closed_state_;
   Vector2d lifted_state_;
   Vector2d open_state_;
-  const double kp_{4000};
-  const double kd_{150.0};
+  const double kp_{1000};
+  const double kd_{60.0};
 };
 
 int do_main() {
