@@ -23,7 +23,7 @@ void ComputeWeightMatrixTerms(
     const vector<JacobianBlock<double>>& jacobian_row_data,
     const vector<MatrixXd>& weight_matrix, int w_start, int w_end,
     MatrixType* yptr) {
-    std::vector<MatrixXd> GJs;
+  std::vector<MatrixXd> GJs;
   for (size_t j = 0; j < jacobian_row_data.size(); ++j) {
     const JacobianBlock<double>& J = jacobian_row_data[j];
     GJs.emplace_back(
@@ -39,7 +39,39 @@ void ComputeWeightMatrixTerms(
     for (size_t j = 0; j < jacobian_row_data.size(); ++j) {
       const MatrixXd& GJ = GJs[j];
       y.block(r_offset, c_offset, J.cols(), GJ.cols()).noalias() +=
-          J.TransposeAndRightMultiply(GJ);
+          J.TransposeAndRightMultiply(Eigen::Ref<const MatrixXd>(GJ));
+      c_offset += GJ.cols();
+    }
+    r_offset += J.cols();
+  }
+}
+
+/* Compute y = J^T * weight_matrix * J. */
+template <typename MatrixType>
+void ComputeWeightMatrixTermsFast(
+    const vector<JacobianBlock<double>>& jacobian_row_data,
+    const vector<MatrixXd>& weight_matrix, int w_start, int w_end,
+    MatrixType* yptr) {
+  std::vector<JacobianBlock<double>> GJs;
+  for (size_t j = 0; j < jacobian_row_data.size(); ++j) {
+    const JacobianBlock<double>& J = jacobian_row_data[j];
+    GJs.emplace_back(
+        J.LeftMultiplyByBlockDiagonalFast(weight_matrix, w_start, w_end));
+  }
+
+  MatrixType& y = *yptr;
+  y.setZero();
+  int r_offset = 0;
+  for (size_t i = 0; i < jacobian_row_data.size(); ++i) {
+    int c_offset = 0;
+    const JacobianBlock<double>& J = jacobian_row_data[i];
+    for (size_t j = 0; j < jacobian_row_data.size(); ++j) {
+      const JacobianBlock<double>& GJ = GJs[j];
+      const JacobianBlock<double> JTGJ =
+          J.TransposeAndRightMultiply(JacobianBlock<double>(GJ));
+      Eigen::Ref<MatrixXd> block =
+          y.block(r_offset, c_offset, J.cols(), GJ.cols());
+      JTGJ.AddTo(&block);
       c_offset += GJ.cols();
     }
     r_offset += J.cols();
@@ -224,8 +256,8 @@ void SuperNodalSolver::CliqueAssembler::SetDenseData() {
     throw std::runtime_error("Failed to add mass matrix.");
   }
 
-  ComputeWeightMatrixTerms(jacobian_row_data_, *weight_matrix_, weight_start_,
-                           weight_end_, &submatrix_data_.G);
+  ComputeWeightMatrixTermsFast(jacobian_row_data_, *weight_matrix_,
+                               weight_start_, weight_end_, &submatrix_data_.G);
   int i = 0;
   for (const auto& pos : mass_matrix_position_) {
     submatrix_data_.G.block(pos, pos, mass_matrix_[i].rows(),

@@ -87,6 +87,47 @@ GTEST_TEST(JacobianMatrixTest, TransposeAndRightMultiply) {
             sparse_jacobian.TransposeAndRightMultiply(A));
 }
 
+GTEST_TEST(JacobianMatrixTest, TransposeAndRightMultiplyByJacobianBlock) {
+  Matrix3d M0;
+  M0 << 1, 2, 3, 5, 3, 6, 2, 5, 7;
+  Matrix3d M1;
+  M1 << 0, 2, 0, 1, 8, 2, 6, 2, 2;
+  Matrix3d M2;
+  M2 << 1, 2, 2, 1, 8, 2, 6, 2, 2;
+
+  Matrix3BlockMatrix<double> matrix(3, 2);
+  matrix.AddTriplet(0, 0, M1);
+  matrix.AddTriplet(0, 1, M1);
+  matrix.AddTriplet(2, 1, M1);
+
+  const JacobianBlock<double> A(matrix);
+  const JacobianBlock<double> B(matrix);
+
+  const MatrixXd A_dense = A.MakeDenseMatrix();
+  const MatrixXd B_dense = B.MakeDenseMatrix();
+  const MatrixXd expected_result = A_dense.transpose() * B_dense;
+  // sparse sparse
+  EXPECT_EQ(A.TransposeAndRightMultiply(B).MakeDenseMatrix(), expected_result);
+  std::cout << "sparse sparse pass" << std::endl;
+  // sparse dense
+  EXPECT_EQ(A.TransposeAndRightMultiply(JacobianBlock<double>(B_dense))
+                .MakeDenseMatrix(),
+            A_dense.transpose() * B_dense);
+  std::cout << "sparse dense pass" << std::endl;
+  // dense dense
+  EXPECT_EQ(JacobianBlock<double>(A_dense)
+                .TransposeAndRightMultiply(JacobianBlock<double>(B_dense))
+                .MakeDenseMatrix(),
+            A_dense.transpose() * B_dense);
+  std::cout << "dense dense pass" << std::endl;
+  // dense sparse
+  EXPECT_EQ(JacobianBlock<double>(A_dense)
+                .TransposeAndRightMultiply(B)
+                .MakeDenseMatrix(),
+            A_dense.transpose() * B_dense);
+  std::cout << "dense sparse pass" << std::endl;
+}
+
 GTEST_TEST(JacobianMatrixTest, LeftMultiplyByBlockDiagonal) {
   Matrix3d M00;
   M00 << 1, 2, 3, 5, 3, 6, 2, 5, 7;
