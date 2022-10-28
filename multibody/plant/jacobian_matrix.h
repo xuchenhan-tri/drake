@@ -38,6 +38,20 @@ class Matrix3BlockMatrix {
   int rows() const { return row_blocks_ * 3; }
   int cols() const { return col_blocks_ * 3; }
 
+  /* Performs *y += M * x, where M is this matrix. */
+  void RightMultiplyAndAddTo(const Eigen::Ref<const VectorX<T>>& x,
+                             EigenPtr<VectorX<T>> y) const {
+    DRAKE_DEMAND(x.size() == cols());
+    for (const auto& triplet : data_) {
+      const int block_row = std::get<0>(triplet);
+      const int block_col = std::get<1>(triplet);
+      const Matrix3<T>& m = std::get<2>(triplet);
+      y->template segment<3>(3 * block_row) +=
+          m * x.template segment<3>(3 * block_col);
+    }
+  }
+
+  /* Performs *y += A * M, where M is this matrix. */
   void LeftMultiplyAndAddTo(const Eigen::Ref<const MatrixX<T>>& A,
                             EigenPtr<MatrixX<T>> y) const {
     DRAKE_DEMAND(A.cols() == rows());
@@ -47,17 +61,6 @@ class Matrix3BlockMatrix {
       const Matrix3<T>& m = std::get<2>(triplet);
       y->template middleCols<3>(3 * block_col) +=
           A.template middleCols<3>(3 * block_row) * m;
-    }
-  }
-
-  void AddTo(EigenPtr<MatrixX<T>> y) const {
-    DRAKE_DEMAND(y->rows() == rows());
-    DRAKE_DEMAND(y->cols() == cols());
-    for (const auto& triplet : data_) {
-      const int block_row = std::get<0>(triplet);
-      const int block_col = std::get<1>(triplet);
-      const Matrix3<T>& m = std::get<2>(triplet);
-      y->template block<3, 3>(3 * block_row, 3 * block_col) += m;
     }
   }
 
@@ -202,15 +205,15 @@ class JacobianBlock {
     matrix.LeftMultiplyAndAddTo(A, y);
   }
 
-  void AddTo(EigenPtr<MatrixX<T>> y) const {
-    if (is_dense_) {
-      const MatrixX<T>& matrix = std::get<MatrixX<T>>(data_);
-      *y += matrix;
+  void RightMultiplyAndAddTo(const Eigen::Ref<const VectorX<T>>& x,
+                             EigenPtr<VectorX<T>> y) const {
+    if (is_dense()) {
+      const MatrixX<T>& J = std::get<MatrixX<T>>(data_);
+      *y += J * x;
       return;
     }
-    const Matrix3BlockMatrix<T>& matrix =
-        std::get<Matrix3BlockMatrix<T>>(data_);
-    matrix.AddTo(y);
+    const Matrix3BlockMatrix<T>& J = std::get<Matrix3BlockMatrix<T>>(data_);
+    J.RightMultiplyAndAddTo(x, y);
   }
 
   void TransposeAndRightMultiplyAndAddTo(const Eigen::Ref<const MatrixX<T>>& A,
