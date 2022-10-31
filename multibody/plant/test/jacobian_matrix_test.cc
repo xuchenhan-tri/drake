@@ -55,7 +55,7 @@ GTEST_TEST(JacobianMatrixTest, LeftMultiplyAndAddTo) {
   EXPECT_TRUE(CompareMatrices(y, y2));
 }
 
-GTEST_TEST(JacobianMatrixTest, TransposeAndRightMultiply) {
+GTEST_TEST(JacobianMatrixTest, TransposeMultiplyAndAddTo) {
   Matrix3d M00;
   M00 << 1, 2, 3, 5, 3, 6, 2, 5, 7;
   Matrix3d M12;
@@ -76,18 +76,27 @@ GTEST_TEST(JacobianMatrixTest, TransposeAndRightMultiply) {
   dense.topLeftCorner<3, 3>() = M00;
   dense.bottomRightCorner<3, 3>() = M12;
 
+  MatrixXd result = MatrixXd::Zero(9, 6);
+
   JacobianBlock<double> dense_jacobian(dense);
-  EXPECT_EQ(dense_jacobian.TransposeAndRightMultiply(A), dense.transpose() * A);
+  dense_jacobian.TransposeMultiplyAndAddTo(A, &result);
+  EXPECT_EQ(result, dense.transpose() * A);
+  result.setZero();
 
+  MatrixXd expected_result = result;
   JacobianBlock<double> sparse_jacobian(sparse);
-  EXPECT_EQ(sparse_jacobian.TransposeAndRightMultiply(A),
-            sparse.TransposeAndRightMultiply(A));
+  sparse_jacobian.TransposeMultiplyAndAddTo(A, &result);
+  sparse.TransposeMultiplyAndAddTo(A, &expected_result);
+  EXPECT_EQ(result, expected_result);
 
-  EXPECT_EQ(dense_jacobian.TransposeAndRightMultiply(A),
-            sparse_jacobian.TransposeAndRightMultiply(A));
+  result.setZero();
+  expected_result.setZero();
+  dense_jacobian.TransposeMultiplyAndAddTo(A, &result);
+  sparse_jacobian.TransposeMultiplyAndAddTo(A, &expected_result);
+  EXPECT_EQ(result, expected_result);
 }
 
-GTEST_TEST(JacobianMatrixTest, TransposeAndRightMultiplyByJacobianBlock) {
+GTEST_TEST(JacobianMatrixTest, TransposeMultiplyByJacobianBlock) {
   Matrix3d M0;
   M0 << 1, 2, 3, 5, 3, 6, 2, 5, 7;
   Matrix3d M1;
@@ -106,26 +115,26 @@ GTEST_TEST(JacobianMatrixTest, TransposeAndRightMultiplyByJacobianBlock) {
   const MatrixXd A_dense = A.MakeDenseMatrix();
   const MatrixXd B_dense = B.MakeDenseMatrix();
   const MatrixXd expected_result = A_dense.transpose() * B_dense;
+  MatrixXd result;
+  result.resizeLike(expected_result);
+
   // sparse sparse
-  EXPECT_EQ(A.TransposeAndRightMultiply(B).MakeDenseMatrix(), expected_result);
-  std::cout << "sparse sparse pass" << std::endl;
+  result.setZero();
+  A.TransposeMultiplyAndAddTo(B, &result);
+  EXPECT_EQ(result, expected_result);
   // sparse dense
-  EXPECT_EQ(A.TransposeAndRightMultiply(JacobianBlock<double>(B_dense))
-                .MakeDenseMatrix(),
-            A_dense.transpose() * B_dense);
-  std::cout << "sparse dense pass" << std::endl;
+  result.setZero();
+  A.TransposeMultiplyAndAddTo(JacobianBlock<double>(B_dense), &result);
+  EXPECT_EQ(result, expected_result);
   // dense dense
-  EXPECT_EQ(JacobianBlock<double>(A_dense)
-                .TransposeAndRightMultiply(JacobianBlock<double>(B_dense))
-                .MakeDenseMatrix(),
-            A_dense.transpose() * B_dense);
-  std::cout << "dense dense pass" << std::endl;
+  result.setZero();
+  JacobianBlock<double>(A_dense).TransposeMultiplyAndAddTo(
+      JacobianBlock<double>(B_dense), &result);
+  EXPECT_EQ(result, expected_result);
   // dense sparse
-  EXPECT_EQ(JacobianBlock<double>(A_dense)
-                .TransposeAndRightMultiply(B)
-                .MakeDenseMatrix(),
-            A_dense.transpose() * B_dense);
-  std::cout << "dense sparse pass" << std::endl;
+  result.setZero();
+  JacobianBlock<double>(A_dense).TransposeMultiplyAndAddTo(B, &result);
+  EXPECT_EQ(result, expected_result);
 }
 
 GTEST_TEST(JacobianMatrixTest, LeftMultiplyByBlockDiagonal) {
@@ -151,17 +160,6 @@ GTEST_TEST(JacobianMatrixTest, LeftMultiplyByBlockDiagonal) {
 
   JacobianBlock<double> dense_jacobian(dense);
   JacobianBlock<double> sparse_jacobian(sparse);
-
-  std::vector<MatrixXd> G1;
-  G1.emplace_back(A);
-  const MatrixXd expected_result1 = A * dense;
-  const MatrixXd dense_result1 =
-      dense_jacobian.LeftMultiplyByBlockDiagonal(G1, 0, 0);
-  const MatrixXd sparse_result1 =
-      sparse_jacobian.LeftMultiplyByBlockDiagonal(G1, 0, 0);
-
-  EXPECT_EQ(expected_result1, dense_result1);
-  EXPECT_EQ(expected_result1, sparse_result1);
 
   MatrixXd A2(6, 6);
   A2.setZero();

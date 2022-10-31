@@ -40,7 +40,7 @@ void ComputeWeightMatrixTerms(
       const MatrixXd& GJ = GJs[j];
       Eigen::Ref<MatrixXd> block =
           y.block(r_offset, c_offset, J.cols(), GJ.cols());
-      J.TransposeAndRightMultiplyAndAddTo(Eigen::Ref<const MatrixXd>(GJ),
+      J.TransposeMultiplyAndAddTo(Eigen::Ref<const MatrixXd>(GJ),
                                           &block);
       c_offset += GJ.cols();
     }
@@ -58,7 +58,7 @@ void ComputeWeightMatrixTermsFast(
   for (size_t j = 0; j < jacobian_row_data.size(); ++j) {
     const JacobianBlock<double>& J = jacobian_row_data[j];
     GJs.emplace_back(
-        J.LeftMultiplyByBlockDiagonalFast(weight_matrix, w_start, w_end));
+        J.LeftMultiplyByBlockDiagonal(weight_matrix, w_start, w_end));
   }
 
   MatrixType& y = *yptr;
@@ -71,7 +71,7 @@ void ComputeWeightMatrixTermsFast(
       const JacobianBlock<double>& GJ = GJs[j];
       Eigen::Ref<MatrixXd> block =
           y.block(r_offset, c_offset, J.cols(), GJ.cols());
-      J.TransposeAndRightMultiplyAndAddTo(JacobianBlock<double>(GJ), &block);
+      J.TransposeMultiplyAndAddTo(JacobianBlock<double>(GJ), &block);
       c_offset += GJ.cols();
     }
     r_offset += J.cols();

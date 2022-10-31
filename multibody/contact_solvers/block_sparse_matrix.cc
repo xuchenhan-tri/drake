@@ -48,7 +48,7 @@ void BlockSparseMatrix<T>::Multiply(const Eigen::Ref<const VectorX<T>>& x,
   for (const auto& [ib, jb, Bij] : blocks_) {
     const auto xj = x.segment(col_start_[jb], block_col_size_[jb]);
     auto yi = y->segment(row_start_[ib], block_row_size_[ib]);
-    Bij.RightMultiplyAndAddTo(xj, &yi);
+    Bij.MultiplyAndAddTo(xj, &yi);
   }
 }
 
@@ -62,7 +62,7 @@ void BlockSparseMatrix<T>::MultiplyByTranspose(
   for (const auto& [ib, jb, Bij] : blocks_) {
     const auto xi = x.segment(row_start_[ib], block_row_size_[ib]);
     auto yj = y->segment(col_start_[jb], block_col_size_[jb]);
-    Bij.TransposeAndRightMultiplyAndAddTo(xi, &yj);
+    Bij.TransposeMultiplyAndAddTo(xi, &yj);
   }
 }
 

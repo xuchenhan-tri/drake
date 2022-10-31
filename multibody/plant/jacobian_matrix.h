@@ -1,6 +1,5 @@
 #pragma once
 
-#include <iostream>
 #include <tuple>
 #include <utility>
 #include <variant>
@@ -13,6 +12,9 @@ namespace drake {
 namespace multibody {
 namespace internal {
 
+/* Block sparse matrix with 3*3 blocks. The size of the matrix is
+ 3*row_blocks-by-3*col_blocks. The blocks are sorted according to block row
+ indices. We use M to denote `this` matrix throughout this class. */
 template <class T>
 class Matrix3BlockMatrix {
  public:
@@ -29,18 +31,16 @@ class Matrix3BlockMatrix {
   void AddTriplet(int block_row, int block_col, Matrix3<T> m) {
     DRAKE_DEMAND(0 <= block_row && block_row < row_blocks_);
     DRAKE_DEMAND(0 <= block_col && block_col < col_blocks_);
-    if (!data_.empty()) {
-      DRAKE_DEMAND(std::get<0>(data_.back()) <= block_row);
-    }
+    DRAKE_DEMAND(data_.empty() || std::get<0>(data_.back()) <= block_row);
     data_.emplace_back(block_row, block_col, std::move(m));
   }
 
   int rows() const { return row_blocks_ * 3; }
   int cols() const { return col_blocks_ * 3; }
 
-  /* Performs *y += M * x, where M is this matrix. */
-  void RightMultiplyAndAddTo(const Eigen::Ref<const VectorX<T>>& x,
-                             EigenPtr<VectorX<T>> y) const {
+  /* Performs *y += M * x. */
+  void MultiplyAndAddTo(const Eigen::Ref<const VectorX<T>>& x,
+                        EigenPtr<VectorX<T>> y) const {
     DRAKE_DEMAND(x.size() == cols());
     for (const auto& triplet : data_) {
       const int block_row = std::get<0>(triplet);
@@ -51,7 +51,7 @@ class Matrix3BlockMatrix {
     }
   }
 
-  /* Performs *y += A * M, where M is this matrix. */
+  /* Performs *y += A * M. */
   void LeftMultiplyAndAddTo(const Eigen::Ref<const MatrixX<T>>& A,
                             EigenPtr<MatrixX<T>> y) const {
     DRAKE_DEMAND(A.cols() == rows());
@@ -64,30 +64,40 @@ class Matrix3BlockMatrix {
     }
   }
 
-  void TransposeAndRightMultiplyAndAddTo(
-      const Eigen::Ref<const MatrixX<T>>& A, EigenPtr<MatrixX<T>> result) const {
+  /* Performs *y += Mᵀ * A, where A is dense. */
+  void TransposeMultiplyAndAddTo(const Eigen::Ref<const MatrixX<T>>& A,
+                                 EigenPtr<MatrixX<T>> y) const {
     DRAKE_DEMAND(rows() == A.rows());
     for (const auto& triplet : data_) {
       const int block_row = std::get<0>(triplet);
       const int block_col = std::get<1>(triplet);
       const Matrix3<T>& m = std::get<2>(triplet);
-      result->template middleRows<3>(3 * block_col) +=
+      y->template middleRows<3>(3 * block_col) +=
           m.transpose() * A.template middleRows<3>(3 * block_row);
     }
   }
 
-  void TransposeAndRightMultiplyAndAddTo(const Matrix3BlockMatrix<T>& A,
-                                         EigenPtr<MatrixX<T>> result) const {
+  /* Performs *y += Mᵀ * A, where A is also 3x3 block sparse. */
+  void TransposeMultiplyAndAddTo(const Matrix3BlockMatrix<T>& A,
+                                 EigenPtr<MatrixX<T>> y) const {
     DRAKE_DEMAND(rows() == A.rows());
-    DRAKE_DEMAND(result->rows() == this->cols());
-    DRAKE_DEMAND(result->cols() == A.cols());
-    DRAKE_DEMAND(A.is_row_sorted());
-    DRAKE_DEMAND(this->is_row_sorted());
+    DRAKE_DEMAND(y->rows() == this->cols());
+    DRAKE_DEMAND(y->cols() == A.cols());
 
     if (A.data_.empty() || this->data_.empty()) {
       return;
     }
 
+    /* We are performing *y_ij += M_ki * A_kj in this function. For each ij
+     entry in y, we need to sum over row indices, k, where M_ki and A_kj both
+     have non-zero blocks. We do this by looping over row indices. For each k,
+     we find all blocks of A and M that have k as row index. Then we loop over
+     their column indices (i for M and j for A), perform the dense
+     multiplication, and add to the corresponding entry in y. */
+
+    /* Find the `A_start` and `A_end` such that
+     the blocks in A with flat index inside internal [A_start, A_end) all have
+     the same row index, `A_row`. */
     int A_start = 0;
     int A_row = std::get<0>(A.data_[A_start]);
     int A_index = A_start + 1;
@@ -95,21 +105,29 @@ class Matrix3BlockMatrix {
       ++A_index;
     }
     int A_end = A_index;
-    // The blocks with index in [A_start, A_end) all have the row index `A_row`.
-    for (int i = 0; i < num_blocks(); ++i) {
-      int row = std::get<0>(data_[i]);
-      // Find the next interval [A_start, A_end) where all A_blocks in the
-      // interval has row index equal to >= `row`.
-      if (row > A_row) {
+
+    for (int m = 0; m < num_blocks(); ++m) {
+      int M_row = std::get<0>(data_[m]);
+      if (M_row > A_row) {
+        /* If we are here, it means that we have exhausted blocks in M that will
+         multiply with blocks in A with row index `A_row`. It's time to find the
+         next interval [A_start, A_end) such that blocks in A with flat index
+         falling in this interval has the same block row index (aka the next
+         `A_row`). Since blocks in A and M are sorted according to block row
+         indexes, we can skip intervals [A_start, A_end) where `A_row < M_row`,
+         because we have already gone past all possible M blocks that can
+         multiply with those A blocks. */
         while (A_index < A.num_blocks() &&
-               std::get<0>(A.data_[A_index]) < row) {
+               std::get<0>(A.data_[A_index]) < M_row) {
           ++A_index;
         }
         if (A_index == A.num_blocks()) {
-          // If there's no more A with row index >= `row`, we can return
+          /* If there's no more A with `A_row >= M_row`, we've done all the
+           * multiplication we need to do. */
           return;
         } else {
-          // Capture the internal [A_start, A_end) with uniform row index.
+          /* Otherwise, update the internal [A_start, A_end) as well as `A_row`.
+           */
           A_start = A_index;
           A_row = std::get<0>(A.data_[A_start]);
           while (A_index < A.num_blocks() &&
@@ -120,23 +138,27 @@ class Matrix3BlockMatrix {
         }
       }
 
-      // Skip blocks until the row number match A_row.
-      if (row < A_row) continue;
+      /* Skip blocks of M until either
+       1. M_row > A_row, then we need to find the next interval with the same
+          A_row (see above), or
+       2. M_row == A_row, then we can actually start doing some multiplications
+          (see below). */
+      if (M_row < A_row) continue;
 
-      DRAKE_DEMAND(row == A_row);
-      // M_ij += J_ki * A_kj where J is `this` matrix. Notice that J is
-      // transposed, the col index of J, i, is the row index of the result.
-      // The col index of A, j, is the col index of the result.
-      const Matrix3<T>& Jt = std::get<2>(data_[i]).transpose();
-      const int J_col = std::get<1>(data_[i]);
+      DRAKE_DEMAND(M_row == A_row);
+      /* *y_ij += M_ki * A_kj. The col index of M, i, is the row index of y.
+       The col index of A, j, is the col index of y. In addition, don't forget
+       to transpose the blocks of M. */
+      const Matrix3<T>& Mt = std::get<2>(data_[m]).transpose();
+      const int i = std::get<1>(data_[m]);
       for (int a = A_start; a < A_end; ++a) {
-        const int A_col = std::get<1>(A.data_[a]);
-        result->template block<3, 3>(3 * J_col, 3 * A_col) +=
-            Jt * std::get<2>(A.data_[a]);
+        const int j = std::get<1>(A.data_[a]);
+        y->template block<3, 3>(3 * i, 3 * j) += Mt * std::get<2>(A.data_[a]);
       }
     }
   }
 
+  /* For debugging. */
   MatrixX<T> MakeDenseMatrix() const {
     MatrixX<T> result = MatrixX<T>::Zero(rows(), cols());
     for (const auto& triplet : data_) {
@@ -152,34 +174,29 @@ class Matrix3BlockMatrix {
 
   int num_blocks() const { return data_.size(); }
 
-  /* Returns true if data triplets are sorted according to block row index. */
-  bool is_row_sorted() const {
-    for (int i = 1; i < static_cast<int>(data_.size()); ++i) {
-      int row = std::get<0>(data_[i]);
-      int prev_row = std::get<0>(data_[i - 1]);
-      if (row < prev_row) return false;
-    }
-    return true;
-  }
-
  private:
   std::vector<Triplet> data_;
   int row_blocks_{};
   int col_blocks_{};
 };
 
+/* Data structure to store the jacobian matrix for a particular tree and patch.
+ It's eventually stored as a block in the block sparse jacobian matrix and
+ thus the name. It can either be a dense Eigen matrix or a block sparse 3x3
+ matrix. We use J to denote `this` jacobian block throughout this class. */
 template <class T>
 class JacobianBlock {
  public:
   DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(JacobianBlock);
 
+  /* Default constructs an empty JacobianBlock as a dense 0x0 matrix. */
   JacobianBlock() : JacobianBlock(MatrixX<T>::Zero(0, 0)) {}
 
   explicit JacobianBlock(Matrix3BlockMatrix<T> data)
       : data_(std::move(data)), is_dense_(false) {}
 
-  // NOLINTNEXTLINE(runtime/explicit)
-  JacobianBlock(MatrixX<T> data) : data_(std::move(data)), is_dense_(true) {}
+  explicit JacobianBlock(MatrixX<T> data)
+      : data_(std::move(data)), is_dense_(true) {}
 
   /* We need the static_cast here because Eigen's rows() and cols() are long. */
   int rows() const {
@@ -192,7 +209,7 @@ class JacobianBlock {
                       data_);
   }
 
-  /* Performs *y += A * J, where J is `this` Jacobian block. */
+  /* Performs *y += A * J. */
   void LeftMultiplyAndAddTo(const Eigen::Ref<const MatrixX<T>>& A,
                             EigenPtr<MatrixX<T>> y) const {
     if (is_dense_) {
@@ -205,45 +222,47 @@ class JacobianBlock {
     matrix.LeftMultiplyAndAddTo(A, y);
   }
 
-  void RightMultiplyAndAddTo(const Eigen::Ref<const VectorX<T>>& x,
-                             EigenPtr<VectorX<T>> y) const {
+  /* Performs *y += J * x. */
+  void MultiplyAndAddTo(const Eigen::Ref<const VectorX<T>>& x,
+                        EigenPtr<VectorX<T>> y) const {
     if (is_dense()) {
       const MatrixX<T>& J = std::get<MatrixX<T>>(data_);
       *y += J * x;
       return;
     }
     const Matrix3BlockMatrix<T>& J = std::get<Matrix3BlockMatrix<T>>(data_);
-    J.RightMultiplyAndAddTo(x, y);
+    J.MultiplyAndAddTo(x, y);
   }
 
-  void TransposeAndRightMultiplyAndAddTo(const Eigen::Ref<const MatrixX<T>>& A,
-                                         EigenPtr<MatrixX<T>> result) const {
+  /* Performs *y += Jᵀ * A. */
+  void TransposeMultiplyAndAddTo(const Eigen::Ref<const MatrixX<T>>& A,
+                                 EigenPtr<MatrixX<T>> y) const {
     if (is_dense()) {
       const MatrixX<T>& J = std::get<MatrixX<T>>(data_);
-      *result += J.transpose() * A;
+      *y += J.transpose() * A;
       return;
     }
     const Matrix3BlockMatrix<T>& J = std::get<Matrix3BlockMatrix<T>>(data_);
-    J.TransposeAndRightMultiplyAndAddTo(A, result);
+    J.TransposeMultiplyAndAddTo(A, y);
   }
 
-  void TransposeAndRightMultiplyAndAddTo(const JacobianBlock<T>& A,
-                                         EigenPtr<MatrixX<T>> result) const {
-    DRAKE_DEMAND(result != nullptr);
+  void TransposeMultiplyAndAddTo(const JacobianBlock<T>& A,
+                                 EigenPtr<MatrixX<T>> y) const {
+    DRAKE_DEMAND(y != nullptr);
     DRAKE_DEMAND(rows() == A.rows());
     DRAKE_DEMAND(rows() == A.rows());
-    DRAKE_DEMAND(cols() == result->rows());
-    DRAKE_DEMAND(A.cols() == result->cols());
+    DRAKE_DEMAND(cols() == y->rows());
+    DRAKE_DEMAND(A.cols() == y->cols());
 
     if (A.is_dense()) {
       const MatrixX<T>& A_matrix = std::get<MatrixX<T>>(A.data_);
-      this->TransposeAndRightMultiplyAndAddTo(
-          Eigen::Ref<const MatrixX<T>>(A_matrix), result);
+      this->TransposeMultiplyAndAddTo(Eigen::Ref<const MatrixX<T>>(A_matrix),
+                                      y);
       return;
     }
     if (this->is_dense()) {
       const MatrixX<T>& J = std::get<MatrixX<T>>(this->data_);
-      A.LeftMultiplyAndAddTo(J.transpose(), result);
+      A.LeftMultiplyAndAddTo(J.transpose(), y);
       return;
     }
     /* A and J both sparse. */
@@ -251,70 +270,17 @@ class JacobianBlock {
         std::get<Matrix3BlockMatrix<T>>(this->data_);
     const Matrix3BlockMatrix<T>& A_matrix =
         std::get<Matrix3BlockMatrix<T>>(A.data_);
-    J.TransposeAndRightMultiplyAndAddTo(A_matrix, result);
+    J.TransposeMultiplyAndAddTo(A_matrix, y);
   }
 
-  MatrixX<T> LeftMultiplyByBlockDiagonal(const std::vector<MatrixX<T>>& G,
-                                         int G_start, int G_end) const {
-    /* Verify that the sizes of G and this Jacobian is compatible. */
-    int G_size = 0;
-    bool is_G_block_multiple_of_3 = true;
-    for (int i = G_start; i <= G_end; ++i) {
-      DRAKE_DEMAND(G[i].rows() == G[i].cols());
-      G_size += G[i].rows();
-      if (G[i].rows() % 3 != 0) {
-        is_G_block_multiple_of_3 = false;
-      }
-    }
-    DRAKE_DEMAND(G_size == rows());
-    if (!is_dense()) {
-      DRAKE_DEMAND(is_G_block_multiple_of_3);
-    }
-
-    if (is_dense()) {
-      const MatrixX<T>& J = std::get<MatrixX<T>>(data_);
-      MatrixX<T> GJ(rows(), cols());
-      int row_offset = 0;
-      for (int index = G_start; index <= G_end; ++index) {
-        const int num_rows = G[index].rows();
-        GJ.middleRows(row_offset, num_rows).noalias() =
-            G[index] * J.middleRows(row_offset, num_rows);
-        row_offset += num_rows;
-      }
-      return GJ;
-    }
-    const Matrix3BlockMatrix<T>& J = std::get<Matrix3BlockMatrix<T>>(data_);
-    MatrixX<T> GJ = MatrixX<T>::Zero(J.rows(), J.cols());
-    const auto& triplets = J.get_triplets();
-    int G_offset = 0;
-    int G_index = G_start;
-    /* Gk is a block within G. */
-    const MatrixX<T>* Gk_ptr = &G[G_index];
-    for (const auto& t : triplets) {
-      const int block_row = std::get<0>(t);
-      const int block_col = std::get<1>(t);
-      const Matrix3<T>& m = std::get<2>(t);
-      /* Since m blocks are sorted according to block rows, we can safely skip
-       columns of G that won't hit this m block. */
-      while (3 * block_row >= G_offset + Gk_ptr->cols()) {
-        G_offset += Gk_ptr->cols();
-        if (++G_index > G_end) {
-          return GJ;
-        }
-        Gk_ptr = &G[G_index];
-      }
-      /* Column offset _into_ Gk. */
-      int Gk_offset = 3 * block_row - G_offset;
-      GJ.block(G_offset, 3 * block_col, Gk_ptr->rows(), 3) +=
-          Gk_ptr->template middleCols<3>(Gk_offset) * m;
-    }
-    return GJ;
-  }
-
-  /* Special fast routine that requires G blocks are 3x3 when the jacobian is
-   sparse. */
-  JacobianBlock<T> LeftMultiplyByBlockDiagonalFast(
-      const std::vector<MatrixX<T>>& G, int G_start, int G_end) const {
+  /* Computes G*J where G is a block diagonal matrix with the diagonal blocks
+   specified as a vector of dense matrices. In particular, the diagonal blocks
+   are the [G_start, G_end] entries in the given `G`. */
+  JacobianBlock<T> LeftMultiplyByBlockDiagonal(const std::vector<MatrixX<T>>& G,
+                                               int G_start, int G_end) const {
+    DRAKE_DEMAND(G_start >= 0);
+    DRAKE_DEMAND(G_end >= G_start);
+    DRAKE_DEMAND(static_cast<int>(G.size()) > G_end);
     /* Verify that the sizes of G and this Jacobian is compatible. */
     int G_size = 0;
     bool is_G_block_3_by_3 = true;
@@ -326,9 +292,6 @@ class JacobianBlock {
       }
     }
     DRAKE_DEMAND(G_size == rows());
-    if (!is_dense()) {
-      DRAKE_DEMAND(is_G_block_3_by_3);
-    }
 
     if (is_dense()) {
       const MatrixX<T>& J = std::get<MatrixX<T>>(data_);
@@ -342,10 +305,13 @@ class JacobianBlock {
       }
       return JacobianBlock<T>(std::move(GJ));
     }
+
+    /* J is sparse. We abort if not all blocks of G is 3x3 and we can't easily
+     exploit the sparsity of the Jacobian. */
+    DRAKE_DEMAND(is_G_block_3_by_3);
     const Matrix3BlockMatrix<T>& J = std::get<Matrix3BlockMatrix<T>>(data_);
     Matrix3BlockMatrix<T> GJ(J.rows() / 3, J.cols() / 3);
-    const auto& triplets = J.get_triplets();
-    for (const auto& t : triplets) {
+    for (const auto& t : J.get_triplets()) {
       const int block_row = std::get<0>(t);
       const int block_col = std::get<1>(t);
       const Matrix3<T>& m = std::get<2>(t);
@@ -356,7 +322,6 @@ class JacobianBlock {
 
   bool is_dense() const { return is_dense_; }
 
-  /* Functions to satisfy existing tests. */
   MatrixX<T> MakeDenseMatrix() const {
     if (is_dense_) {
       return std::get<MatrixX<T>>(data_);
