@@ -158,6 +158,36 @@ class Matrix3BlockMatrix {
     }
   }
 
+  /* Returns M * scale.asDiagonal() * M.transpose() */
+  MatrixX<T> MultiplyByScaledTranspose(const VectorX<T>& scale) const {
+    /* We need to sum M_ik * scale_k * M_jk and the sum is over column index.
+     For efficiency, we first build a map from block column index to a vector of
+     flat index for all blocks.  */
+    std::unordered_map<int, std::vector<int>> col_to_flat;
+    for (int flat = 0; flat < num_blocks(); ++flat) {
+      const int col = std::get<1>(data_[flat]);
+      col_to_flat[col].emplace_back(flat);
+    }
+
+    MatrixX<T> result = MatrixX<T>::Zero(rows(), rows());
+    /* We use the notation m1_ik * scale_k * m2_jk. */
+    for (const auto& t1 : data_) {
+      const int i = std::get<0>(t1);
+      const int k = std::get<1>(t1);
+      const Matrix3<T>& m1 = std::get<2>(t1);
+      for (int flat : col_to_flat[k]) {
+        const auto& t2 = data_[flat];
+        const int j = std::get<0>(t2);
+        DRAKE_ASSERT(k == std::get<1>(t2));
+        const Matrix3<T>& m2 = std::get<2>(t2);
+        const auto scale_block = scale.template segment<3>(3 * k);
+        result.template block<3, 3>(3 * i, 3 * j) +=
+            m1 * scale_block.asDiagonal() * m2.transpose();
+      }
+    }
+    return result;
+  }
+
   /* For debugging. */
   MatrixX<T> MakeDenseMatrix() const {
     MatrixX<T> result = MatrixX<T>::Zero(rows(), cols());
@@ -318,6 +348,17 @@ class JacobianBlock {
       GJ.AddTriplet(block_row, block_col, G[G_start + block_row] * m);
     }
     return JacobianBlock<T>(std::move(GJ));
+  }
+
+  /* Returns J * scale.asDiagonal() * J.transpose() */
+  MatrixX<T> MultiplyByScaledTranspose(const VectorX<T>& scale) const {
+    DRAKE_DEMAND(cols() == scale.size());
+    if (is_dense()) {
+      const MatrixX<T>& J = std::get<MatrixX<T>>(data_);
+      return J * scale.asDiagonal() * J.transpose();
+    }
+    const Matrix3BlockMatrix<T>& J = std::get<Matrix3BlockMatrix<T>>(data_);
+    return J.MultiplyByScaledTranspose(scale);
   }
 
   bool is_dense() const { return is_dense_; }

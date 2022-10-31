@@ -435,18 +435,18 @@ void SapModel<T>::CalcDelassusDiagonalApproximation(
       {
         const int c =
             cliques_permutation.permuted_index(constraint.first_clique());
-        const MatrixX<T>& Jic = constraint.first_clique_jacobian();
-        // W[i] += Jic * A_ldlt[c].Solve(Jic.transpose());
-        W[i] += Jic * A_diag_inv[c].asDiagonal() * Jic.transpose();
+        const JacobianBlock<T>& Jic = constraint.first_clique_jacobian();
+        // W[i] += Jic * A_diag_inv[c].asDiagonal() * Jic.transpose();
+        W[i] += Jic.MultiplyByScaledTranspose(A_diag_inv[c]);
       }
 
       // Adds clique 1 contribution, if present.
       if (constraint.num_cliques() == 2) {
         const int c =
             cliques_permutation.permuted_index(constraint.second_clique());
-        const MatrixX<T>& Jic = constraint.second_clique_jacobian();
-        // W[i] += Jic * A_ldlt[c].Solve(Jic.transpose());
-        W[i] += Jic * A_diag_inv[c].asDiagonal() * Jic.transpose();
+        const JacobianBlock<T>& Jic = constraint.second_clique_jacobian();
+        // W[i] += Jic * A_diag_inv[c].asDiagonal() * Jic.transpose();
+        W[i] += Jic.MultiplyByScaledTranspose(A_diag_inv[c]);
       }
     }
   }
