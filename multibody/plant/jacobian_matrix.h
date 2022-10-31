@@ -126,10 +126,8 @@ class JacobianBlock {
 
   bool is_dense() const { return is_dense_; }
 
+  /* Testing and debugging utilities. */
   MatrixX<T> MakeDenseMatrix() const;
-
-  operator MatrixX<T>() const { return MakeDenseMatrix(); }
-
   bool operator==(const JacobianBlock<T>& other) const {
     return this->MakeDenseMatrix() == other.MakeDenseMatrix();
   }

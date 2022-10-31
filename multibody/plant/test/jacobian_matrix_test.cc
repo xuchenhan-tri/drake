@@ -170,9 +170,9 @@ GTEST_TEST(JacobianMatrixTest, LeftMultiplyByBlockDiagonal) {
   G2.emplace_back(Matrix3d(A2.topLeftCorner<3, 3>()));
   G2.emplace_back(Matrix3d(A2.bottomRightCorner<3, 3>()));
   const MatrixXd dense_result2 =
-      dense_jacobian.LeftMultiplyByBlockDiagonal(G2, 0, 1);
+      dense_jacobian.LeftMultiplyByBlockDiagonal(G2, 0, 1).MakeDenseMatrix();
   const MatrixXd sparse_result2 =
-      sparse_jacobian.LeftMultiplyByBlockDiagonal(G2, 0, 1);
+      sparse_jacobian.LeftMultiplyByBlockDiagonal(G2, 0, 1).MakeDenseMatrix();
   EXPECT_EQ(expected_result2, dense_result2);
   EXPECT_EQ(expected_result2, sparse_result2);
 }
