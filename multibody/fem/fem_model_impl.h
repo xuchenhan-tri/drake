@@ -5,9 +5,13 @@
 #include <memory>
 #include <string>
 #include <type_traits>
+#include <iostream>
 #include <unordered_set>
 #include <utility>
 #include <vector>
+#if defined(_OPENMP)
+#include <omp.h>
+#endif
 
 #include "drake/common/eigen_types.h"
 #include "drake/multibody/fem/fem_element.h"
@@ -84,7 +88,7 @@ class FemModelImpl : public FemModel<typename Element::T> {
     for (int e = 0; e < num_elements(); ++e) {
       /* residual = Ma-fₑ(x)-fᵥ(x, v)-fₑₓₜ. */
       /* The Ma-fₑ(x)-fᵥ(x, v) term. */
-      elements_[e].CalcInverseDynamics(element_data[e], &element_residual);
+      element_residual = element_data[e].inverse_dynamics_force;
       /* The -fₑₓₜ term. Currently the only type of external force is gravity.
        */
       elements_[e].AddScaledGravityForce(
@@ -205,6 +209,9 @@ class FemModelImpl : public FemModel<typename Element::T> {
     DRAKE_DEMAND(data != nullptr);
     data->resize(num_elements());
     const FemState<T> fem_state(&(this->fem_state_system()), &context);
+#if defined(_OPENMP)
+#pragma omp parallel for num_threads(1) 
+#endif
     for (int i = 0; i < num_elements(); ++i) {
       (*data)[i] = elements_[i].ComputeData(fem_state);
     }

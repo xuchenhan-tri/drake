@@ -52,6 +52,9 @@ DeformableBodyId DeformableModel<T>::RegisterDeformableBody(
     reference_position.template segment<3>(3 * v) = mesh_W.vertex(v);
   }
 
+  std::cout << mesh_W.num_vertices() << std::endl;
+  std::cout << mesh_W.num_elements() << std::endl;
+
   const DeformableBodyId body_id = DeformableBodyId::get_new_id();
   /* Build FEM model for the deformable body. */
   BuildLinearVolumetricModel(body_id, mesh_W, config);

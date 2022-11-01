@@ -11,9 +11,11 @@ namespace internal {
 
 template <typename T>
 void FemSolverScratchData<T>::Resize(const FemModel<T>& model) {
-  b_.resize(model.num_dofs());
-  dz_.resize(model.num_dofs());
-  tangent_matrix_ = model.MakePetscSymmetricBlockSparseTangentMatrix();
+  if (model.num_dofs() != num_dofs()) {
+    b_.resize(model.num_dofs());
+    dz_.resize(model.num_dofs());
+    tangent_matrix_ = model.MakePetscSymmetricBlockSparseTangentMatrix();
+  }
 }
 
 template <typename T>
