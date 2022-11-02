@@ -29,6 +29,7 @@ DEFINE_double(beta, 0.005,
 
 using drake::geometry::AddContactMaterial;
 using drake::geometry::Box;
+using drake::geometry::Sphere;
 using drake::geometry::GeometryInstance;
 using drake::geometry::IllustrationProperties;
 using drake::geometry::Mesh;
@@ -204,7 +205,7 @@ int do_main() {
   /* Load the geometry and scale it up by 20% (to showcase the scaling
    capability). */
   const double scale = 1.2;
-  auto box_mesh = std::make_unique<Mesh>(box_vtk, scale);
+  auto box_mesh = std::make_unique<Sphere>(0.04);
   /* Side length of the deformable box inferred from the vtk file. */
   const double kL = 0.06 * scale;
   /* Set the initial pose of the box such that its bottom face is touching the
@@ -225,7 +226,7 @@ int do_main() {
    tessellated. */
   // TODO(xuchenhan-tri): Though unused, we still asserts the resolution hint is
   // positive. Remove the requirement of a resolution hint for meshed shapes.
-  const double unused_resolution_hint = 1.0;
+  const double unused_resolution_hint = 0.02 ;
   owned_deformable_model->RegisterDeformableBody(
       std::move(box_instance), deformable_config, unused_resolution_hint);
   const DeformableModel<double>* deformable_model =
