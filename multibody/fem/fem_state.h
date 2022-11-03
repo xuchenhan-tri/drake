@@ -86,6 +86,11 @@ class FemState {
   /** Returns an identical copy of `this` FemState. */
   std::unique_ptr<FemState<T>> Clone() const;
 
+  void DisableCaching() {
+    DRAKE_DEMAND(owned_context_ != nullptr);
+    owned_context_->DisableCaching();
+  }
+
  private:
   const systems::Context<T>& get_context() const {
     DRAKE_DEMAND((owned_context_ == nullptr) ^ (context_ == nullptr));

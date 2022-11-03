@@ -206,6 +206,8 @@ class FemModel {
   void ThrowIfModelStateIncompatible(const char* func,
                                      const FemState<T>& fem_state) const;
 
+  virtual void ComputeData(const FemState<T>& fem_state) const = 0;
+
  protected:
   /** Constructs an empty FEM model. */
   FemModel();

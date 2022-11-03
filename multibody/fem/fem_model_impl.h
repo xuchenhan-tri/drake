@@ -2,10 +2,10 @@
 
 #include <algorithm>
 #include <array>
+#include <iostream>
 #include <memory>
 #include <string>
 #include <type_traits>
-#include <iostream>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -74,6 +74,10 @@ class FemModelImpl : public FemModel<typename Element::T> {
   systems::CacheIndex element_data_index() const { return element_data_index_; }
 
  private:
+  void ComputeData(const FemState<T>& fem_state) const final {
+    fem_state.template EvalElementData<Data>(element_data_index_);
+  }
+
   void DoCalcResidual(const FemState<T>& fem_state,
                       EigenPtr<VectorX<T>> residual) const final {
     /* The values are accumulated in the residual, so it is important to clear
@@ -210,7 +214,7 @@ class FemModelImpl : public FemModel<typename Element::T> {
     data->resize(num_elements());
     const FemState<T> fem_state(&(this->fem_state_system()), &context);
 #if defined(_OPENMP)
-#pragma omp parallel for num_threads(1) 
+#pragma omp parallel for
 #endif
     for (int i = 0; i < num_elements(); ++i) {
       (*data)[i] = elements_[i].ComputeData(fem_state);
