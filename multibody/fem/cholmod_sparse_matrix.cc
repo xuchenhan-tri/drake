@@ -11,6 +11,7 @@ namespace multibody {
 namespace fem {
 namespace internal {
 
+using Eigen::MatrixXd;
 using Eigen::VectorXd;
 using Eigen::VectorXi;
 
@@ -100,6 +101,37 @@ class CholmodSparseMatrix::Impl {
     return result;
   }
 
+  MatrixX<double> CalcSchurComplement(const MatrixX<double>& B,
+                                      const MatrixX<double>& C) const {
+    DRAKE_DEMAND(L_ != nullptr);
+    DRAKE_DEMAND(B.rows() > 0);
+    DRAKE_DEMAND(B.cols() > 0);
+    DRAKE_DEMAND(B.rows() == rows());
+    DRAKE_DEMAND(B.cols() == C.cols());
+
+    MatrixXd AinvB(B.rows(), B.cols());
+    /* Columns of B. */
+    cholmod_dense* b;
+    /* Columns of A⁻¹B. */
+    cholmod_dense* x;
+    b = cholmod_allocate_dense(rows(), 1, rows(), CHOLMOD_REAL, &cm_);
+    /* Hold on to memory */
+    void* bx = b->x;
+    for (int i = 0; i < B.cols(); ++i) {
+      /* We const_cast away here to satisfy compiler, but we don't really modify
+       the data here. */
+      b->x = static_cast<void*>(const_cast<double*>(B.col(i).data()));
+      x = cholmod_solve(CHOLMOD_A, L_.get(), b, &cm_);
+      memcpy(AinvB.col(i).data(), x->x, AinvB.rows() * sizeof(AinvB(0, 0)));
+    }
+    /* Clean up. */
+    b->x = bx;
+    cholmod_free_dense(&b, &cm_);
+    cholmod_free_dense(&x, &cm_);
+
+    return C - B.transpose() * AinvB;
+  }
+
   void Print() const { cholmod_print_sparse(A_.get(), "A", &cm_); }
 
  private:
@@ -128,6 +160,11 @@ void CholmodSparseMatrix::Factor() const { pimpl_->Factor(); }
 
 VectorX<double> CholmodSparseMatrix::Solve(const VectorX<double>& rhs) const {
   return pimpl_->Solve(rhs);
+}
+
+MatrixX<double> CholmodSparseMatrix::CalcSchurComplement(
+    const MatrixX<double>& B, const MatrixX<double>& C) const {
+  return pimpl_->CalcSchurComplement(B, C);
 }
 
 void CholmodSparseMatrix::Print() const { pimpl_->Print(); }

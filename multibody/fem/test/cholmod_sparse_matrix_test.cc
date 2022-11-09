@@ -74,7 +74,7 @@ unique_ptr<GeometryInstance> make_sphere_instance(double radius = 1.0) {
                                        make_unique<Sphere>(radius), "sphere");
 }
 
-GTEST_TEST(CholmodSparseMatrixTest, Constructor) {
+Eigen::SparseMatrix<double> MakeSparseTangentMatrix() {
   SceneGraph<double> scene_graph;
   SourceId s_id = scene_graph.RegisterSource();
   constexpr double kRezHint = 0.5;
@@ -84,7 +84,7 @@ GTEST_TEST(CholmodSparseMatrixTest, Constructor) {
       kRezHint);
   const SceneGraphInspector<double>& inspector = scene_graph.model_inspector();
   const VolumeMesh<double>* reference_mesh = inspector.GetReferenceMesh(g_id);
-  ASSERT_NE(reference_mesh, nullptr);
+  DRAKE_DEMAND(reference_mesh != nullptr);
 
   vector<Vector4i> elements;
   for (const auto element : reference_mesh->tetrahedra()) {
@@ -95,6 +95,11 @@ GTEST_TEST(CholmodSparseMatrixTest, Constructor) {
                                      3 * reference_mesh->num_vertices());
   MakeEigenSparseMatrix(elements, &matrix);
   matrix.makeCompressed();
+  return matrix;
+}
+
+GTEST_TEST(CholmodSparseMatrixTest, Solve) {
+  const Eigen::SparseMatrix<double> matrix = MakeSparseTangentMatrix();
 
   CholmodSparseMatrix cholmod_matrix(matrix);
   cholmod_matrix.Print();
@@ -108,6 +113,25 @@ GTEST_TEST(CholmodSparseMatrixTest, Constructor) {
   const VectorXd expected_x = llt.solve(b);
   EXPECT_TRUE(CompareMatrices(x, expected_x,
                               4.0 * std::numeric_limits<double>::epsilon()));
+}
+
+GTEST_TEST(CholmodSparseMatrixTest, CalcSchurComplement) {
+  const Eigen::SparseMatrix<double> matrix = MakeSparseTangentMatrix();
+  CholmodSparseMatrix cholmod_matrix(matrix);
+
+  const MatrixXd dense(matrix);
+  MatrixXd B(matrix.rows(), 2);
+  B.col(0) = VectorXd::LinSpaced(matrix.rows(), 0.0, 0.01);
+  B.col(1) = VectorXd::LinSpaced(matrix.rows(), 0.0, 0.02);
+  MatrixXd C = MatrixXd::Zero(2, 2);
+  C(0, 0) = 0.01 * B.rows();
+  C(1, 1) = 0.02 * B.rows();
+  cholmod_matrix.Factor();
+  const MatrixX<double> S = cholmod_matrix.CalcSchurComplement(B, C);
+  Eigen::LLT<MatrixXd> llt(dense);
+  const VectorXd expected_AinvB = llt.solve(B);
+  const MatrixXd expected_S = C - B.transpose() * expected_AinvB;
+  EXPECT_TRUE(CompareMatrices(S, expected_S, 1e-5));
 }
 
 }  // namespace

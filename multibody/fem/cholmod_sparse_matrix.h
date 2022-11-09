@@ -24,6 +24,12 @@ class CholmodSparseMatrix {
 
   VectorX<double> Solve(const VectorX<double>& rhs) const;
 
+  /* Given 2-by-2 block matrix
+    A  B
+    Bᵀ C,
+   where A is this matrix. Computes the Schur complement C - BᵀA⁻¹B.  */
+  MatrixX<double> CalcSchurComplement(const MatrixX<double>& B,
+                                     const MatrixX<double>& C) const;
   void Print() const;
 
  private:
