@@ -2,9 +2,14 @@
 
 #include <iostream>
 
+#if defined(_OPENMP)
+#include <omp.h>
+#endif
+
 #include <cholmod.h>
 
 #include "drake/common/drake_throw.h"
+#include "drake/multibody/fem/schur_complement.h"
 
 namespace drake {
 namespace multibody {
@@ -101,8 +106,8 @@ class CholmodSparseMatrix::Impl {
     return result;
   }
 
-  MatrixX<double> CalcSchurComplement(const MatrixX<double>& B,
-                                      const MatrixX<double>& C) const {
+  SchurComplement<double> CalcSchurComplement(const MatrixX<double>& B,
+                                              const MatrixX<double>& C) const {
     DRAKE_DEMAND(L_ != nullptr);
     DRAKE_DEMAND(B.rows() > 0);
     DRAKE_DEMAND(B.cols() > 0);
@@ -110,26 +115,32 @@ class CholmodSparseMatrix::Impl {
     DRAKE_DEMAND(B.cols() == C.cols());
 
     MatrixXd AinvB(B.rows(), B.cols());
-    /* Columns of B. */
-    cholmod_dense* b;
-    /* Columns of A⁻¹B. */
-    cholmod_dense* x;
-    b = cholmod_allocate_dense(rows(), 1, rows(), CHOLMOD_REAL, &cm_);
-    /* Hold on to memory */
-    void* bx = b->x;
+#if defined(_OPENMP)
+#pragma omp parallel for
+#endif
     for (int i = 0; i < B.cols(); ++i) {
+      /* Columns of B. */
+      cholmod_dense* b;
+      /* Columns of A⁻¹B. */
+      cholmod_dense* x;
+      b = cholmod_allocate_dense(rows(), 1, rows(), CHOLMOD_REAL, &cm_);
+      /* Hold on to memory */
+      void* bx = b->x;
       /* We const_cast away here to satisfy compiler, but we don't really modify
        the data here. */
       b->x = static_cast<void*>(const_cast<double*>(B.col(i).data()));
       x = cholmod_solve(CHOLMOD_A, L_.get(), b, &cm_);
       memcpy(AinvB.col(i).data(), x->x, AinvB.rows() * sizeof(AinvB(0, 0)));
+      /* Clean up. */
+      b->x = bx;
+      cholmod_free_dense(&b, &cm_);
+      cholmod_free_dense(&x, &cm_);
     }
-    /* Clean up. */
-    b->x = bx;
-    cholmod_free_dense(&b, &cm_);
-    cholmod_free_dense(&x, &cm_);
-
-    return C - B.transpose() * AinvB;
+    MatrixXd neg_AinvB = -AinvB;
+    Eigen::SparseMatrix<double> B_sparse = B.sparseView();
+    auto neg_BAinvB = neg_AinvB.transpose() * B_sparse;
+    MatrixXd complement = C + neg_BAinvB; 
+    return SchurComplement<double>(std::move(complement), std::move(neg_AinvB));
   }
 
   void Print() const { cholmod_print_sparse(A_.get(), "A", &cm_); }
@@ -162,7 +173,7 @@ VectorX<double> CholmodSparseMatrix::Solve(const VectorX<double>& rhs) const {
   return pimpl_->Solve(rhs);
 }
 
-MatrixX<double> CholmodSparseMatrix::CalcSchurComplement(
+SchurComplement<double> CholmodSparseMatrix::CalcSchurComplement(
     const MatrixX<double>& B, const MatrixX<double>& C) const {
   return pimpl_->CalcSchurComplement(B, C);
 }

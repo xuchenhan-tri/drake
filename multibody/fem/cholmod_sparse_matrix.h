@@ -5,6 +5,7 @@
 #include <Eigen/Sparse>
 
 #include "drake/common/eigen_types.h"
+#include "drake/multibody/fem/schur_complement.h"
 
 namespace drake {
 namespace multibody {
@@ -20,15 +21,17 @@ class CholmodSparseMatrix {
 
   ~CholmodSparseMatrix();
 
+  /* Performs sparse Cholesky decomposition. */
   void Factor() const;
 
   VectorX<double> Solve(const VectorX<double>& rhs) const;
 
   /* Given 2-by-2 block matrix
-    A  B
-    Bᵀ C,
-   where A is this matrix. Computes the Schur complement C - BᵀA⁻¹B.  */
-  MatrixX<double> CalcSchurComplement(const MatrixX<double>& B,
+      A  B
+      Bᵀ C,
+   where A is this matrix. Computes the Schur complement C - BᵀA⁻¹B.
+   @pre Factor() has been called. */
+  SchurComplement<double> CalcSchurComplement(const MatrixX<double>& B,
                                      const MatrixX<double>& C) const;
   void Print() const;
 

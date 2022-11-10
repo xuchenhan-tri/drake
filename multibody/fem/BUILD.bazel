@@ -2,6 +2,7 @@
 load("//tools/lint:lint.bzl", "add_lint_tests")
 load(
     "//tools/skylark:drake_cc.bzl",
+    "drake_cc_binary",
     "drake_cc_googletest",
     "drake_cc_library",
     "drake_cc_package_library",
@@ -379,6 +380,7 @@ drake_cc_library(
         "cholmod_sparse_matrix.h",
     ],
     deps = [
+        ":schur_complement",
         "//common:essential",
         "//common:unused",
         "@cholmod",
@@ -753,6 +755,21 @@ drake_cc_googletest(
         "//math:gradient",
         "//multibody/fem:linear_simplex_element",
         "//multibody/fem:simplex_gaussian_quadrature",
+    ],
+)
+
+drake_cc_binary(
+    name = "benchmark_schur_complement",
+    srcs = [
+        "benchmark_schur_complement.cc",
+    ],
+    deps = [
+        "cholmod_sparse_matrix",
+        "petsc_symmetric_block_sparse_matrix",
+        "//common:essential",
+        "//geometry/proximity:volume_mesh",
+        "//geometry:scene_graph",
+        "@gflags",
     ],
 )
 
