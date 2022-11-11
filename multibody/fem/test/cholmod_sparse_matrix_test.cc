@@ -127,7 +127,8 @@ GTEST_TEST(CholmodSparseMatrixTest, CalcSchurComplement) {
   C(0, 0) = 0.01 * B.rows();
   C(1, 1) = 0.02 * B.rows();
   cholmod_matrix.Factor();
-  const MatrixX<double> S = cholmod_matrix.CalcSchurComplement(B, C).get_D_complement();
+  const MatrixX<double> S =
+      cholmod_matrix.CalcSchurComplement(B, C).get_D_complement();
   Eigen::LLT<MatrixXd> llt(dense);
   const VectorXd expected_AinvB = llt.solve(B);
   const MatrixXd expected_S = C - B.transpose() * expected_AinvB;

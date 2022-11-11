@@ -1,6 +1,7 @@
 #include "drake/multibody/fem/cholmod_sparse_matrix.h"
 
 #include <iostream>
+#include <utility>
 
 #if defined(_OPENMP)
 #include <omp.h>
@@ -139,7 +140,7 @@ class CholmodSparseMatrix::Impl {
     MatrixXd neg_AinvB = -AinvB;
     Eigen::SparseMatrix<double> B_sparse = B.sparseView();
     auto neg_BAinvB = neg_AinvB.transpose() * B_sparse;
-    MatrixXd complement = C + neg_BAinvB; 
+    MatrixXd complement = C + neg_BAinvB;
     return SchurComplement<double>(std::move(complement), std::move(neg_AinvB));
   }
 

@@ -18,6 +18,7 @@ drake_cc_package_library(
     deps = [
         ":acceleration_newmark_scheme",
         ":calc_lame_parameters",
+        ":cholmod_sparse_matrix",
         ":constitutive_model",
         ":corotated_model",
         ":corotated_model_data",
@@ -41,6 +42,7 @@ drake_cc_package_library(
         ":quadrature",
         ":schur_complement",
         ":simplex_gaussian_quadrature",
+        ":symmetric_block_sparse_matrix",
         ":velocity_newmark_scheme",
         ":volumetric_element",
         ":volumetric_model",
@@ -372,6 +374,19 @@ drake_cc_library(
 )
 
 drake_cc_library(
+    name = "symmetric_block_sparse_matrix",
+    srcs = [
+        "symmetric_block_sparse_matrix.cc",
+    ],
+    hdrs = [
+        "symmetric_block_sparse_matrix.h",
+    ],
+    deps = [
+        "//common:essential",
+    ],
+)
+
+drake_cc_library(
     name = "cholmod_sparse_matrix",
     srcs = [
         "cholmod_sparse_matrix.cc",
@@ -381,6 +396,7 @@ drake_cc_library(
     ],
     deps = [
         ":schur_complement",
+        ":symmetric_block_sparse_matrix",
         "//common:essential",
         "//common:unused",
         "@cholmod",
@@ -703,7 +719,15 @@ drake_cc_googletest(
         ":cholmod_sparse_matrix",
         "//common/test_utilities:eigen_matrix_compare",
         "//common/test_utilities:expect_throws_message",
-        "//geometry"
+        "//geometry",
+    ],
+)
+
+drake_cc_googletest(
+    name = "symmetric_block_sparse_matrix_test",
+    deps = [
+        ":symmetric_block_sparse_matrix",
+        "//common/test_utilities:eigen_matrix_compare",
     ],
 )
 
@@ -767,8 +791,8 @@ drake_cc_binary(
         "cholmod_sparse_matrix",
         "petsc_symmetric_block_sparse_matrix",
         "//common:essential",
-        "//geometry/proximity:volume_mesh",
         "//geometry:scene_graph",
+        "//geometry/proximity:volume_mesh",
         "@gflags",
     ],
 )

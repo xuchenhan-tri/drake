@@ -2,10 +2,9 @@
 
 #include <memory>
 
-#include <Eigen/Sparse>
-
 #include "drake/common/eigen_types.h"
 #include "drake/multibody/fem/schur_complement.h"
+#include "drake/multibody/fem/symmetric_block_sparse_matrix.h"
 
 namespace drake {
 namespace multibody {
