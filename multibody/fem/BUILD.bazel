@@ -17,6 +17,7 @@ drake_cc_package_library(
     visibility = ["//visibility:public"],
     deps = [
         ":acceleration_newmark_scheme",
+        ":block_sparse_cholesky_solver",
         ":calc_lame_parameters",
         ":cholmod_sparse_matrix",
         ":constitutive_model",
@@ -387,6 +388,20 @@ drake_cc_library(
 )
 
 drake_cc_library(
+    name = "block_sparse_cholesky_solver",
+    srcs = [
+        "block_sparse_cholesky_solver.cc",
+    ],
+    hdrs = [
+        "block_sparse_cholesky_solver.h",
+    ],
+    deps = [
+        ":symmetric_block_sparse_matrix",
+        "//common:essential",
+    ],
+)
+
+drake_cc_library(
     name = "cholmod_sparse_matrix",
     srcs = [
         "cholmod_sparse_matrix.cc",
@@ -724,6 +739,18 @@ drake_cc_googletest(
 )
 
 drake_cc_googletest(
+    name = "block_sparse_cholesky_solver_test",
+    deps = [
+        ":block_sparse_cholesky_solver",
+        ":schur_complement",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//common/test_utilities:expect_throws_message",
+        "//geometry",
+    ],
+)
+
+
+drake_cc_googletest(
     name = "symmetric_block_sparse_matrix_test",
     deps = [
         ":symmetric_block_sparse_matrix",
@@ -788,6 +815,7 @@ drake_cc_binary(
         "benchmark_schur_complement.cc",
     ],
     deps = [
+        "block_sparse_cholesky_solver",
         "cholmod_sparse_matrix",
         "petsc_symmetric_block_sparse_matrix",
         "//common:essential",

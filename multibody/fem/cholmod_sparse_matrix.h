@@ -25,6 +25,8 @@ class CholmodSparseMatrix {
 
   VectorX<double> Solve(const VectorX<double>& rhs) const;
 
+  const std::vector<int>& permutation() const;
+
   /* Given 2-by-2 block matrix
       A  B
       Bᵀ C,

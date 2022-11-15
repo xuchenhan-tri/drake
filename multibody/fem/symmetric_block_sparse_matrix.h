@@ -65,6 +65,7 @@ class SymmetricBlockSparseMatrix {
   void Multiply(const VectorX<T>& x, VectorX<T>* y) const;
 
   MatrixX<T> MakeDenseMatrix() const;
+  MatrixX<T> MakeDenseBottomRightCorner(int size) const;
   Eigen::SparseMatrix<T> MakeEigenSparseMatrix() const;
 
   /* Returns true if there exists a ij-th block in this block sparse matrix.
@@ -79,9 +80,18 @@ class SymmetricBlockSparseMatrix {
 
   /* Returns the ij-th block.
    @pre has_block(i,j) == true. */
-  const Matrix3<T>& get_block(int i, int j) {
+  const Matrix3<T>& get_block(int i, int j) const {
     DRAKE_ASSERT(has_block(i, j));
     return blocks_[j][block_row_to_flat_[j][i]];
+  }
+
+  /* Returns the ii-th block.
+   @pre has_block(i,i) == true. */
+  const Matrix3<T>& get_diagonal_block(int i) const {
+    DRAKE_ASSERT(has_block(i, i));
+    /* Since block_rows are sorted with in each block column, the first entry is
+     necessarily the diagonal. */
+    return blocks_[i][0];
   }
 
   /* Returns the mutable ij-th block.
@@ -90,14 +100,22 @@ class SymmetricBlockSparseMatrix {
     return blocks_[j][block_row_to_flat_[j][i]];
   }
 
+  const std::vector<int>& get_col_blocks(int j) const {
+    DRAKE_DEMAND(0 <= j && j < num_column_blocks_);
+    return col_blocks_[j];
+  }
+
   int num_blocks() const { return num_blocks_; }
 
  private:
+  friend class BlockSparseCholeskySolver;
+
   /* sparsity_pattern_[c][i] gives the i-th row block in the c-th column block.
    */
   std::vector<std::vector<int>> sparsity_pattern_;
   int num_column_blocks_;
-  /* col_blocks[r][c] gives the c-th col block in the r-th row block. */
+  /* col_blocks[c][i] gives the block row index of the i-th block in the c-th
+   block column. */
   std::vector<std::vector<int>> col_blocks_;
   int num_blocks_;
   /* The 3x3 blocks stored in a 2d vector. The first index is the block column

@@ -10,6 +10,7 @@ A benchmark to compare Schur complement solvers.
 #include "drake/common/unused.h"
 #include "drake/geometry/proximity/volume_mesh.h"
 #include "drake/geometry/scene_graph.h"
+#include "drake/multibody/fem/block_sparse_cholesky_solver.h"
 #include "drake/multibody/fem/cholmod_sparse_matrix.h"
 #include "drake/multibody/fem/petsc_symmetric_block_sparse_matrix.h"
 
@@ -28,9 +29,11 @@ using geometry::SceneGraphInspector;
 using geometry::SourceId;
 using geometry::Sphere;
 using geometry::VolumeMesh;
+using internal::BlockSparseCholeskySolver;
 using internal::CholmodSparseMatrix;
 using internal::PetscSymmetricBlockSparseMatrix;
 using internal::SchurComplement;
+using internal::SymmetricBlockSparseMatrix;
 using math::RigidTransformd;
 using std::get;
 using std::make_unique;
@@ -40,6 +43,8 @@ using std::vector;
 using Clock = std::chrono::high_resolution_clock;
 using MatrixBlock = std::tuple<int, int, Matrix3d>;
 
+DEFINE_int32(block_cholesky_solve_iterations, 1,
+             "The number of times to run profiling solves.");
 DEFINE_int32(cholmod_solve_iterations, 1,
              "The number of times to run profiling solves.");
 DEFINE_int32(petsc_solve_iterations, 1,
@@ -204,6 +209,29 @@ void MakeIndices(int num_nodes, double percentage_in_contact,
   }
 }
 
+void CalcBlockCholeskySchurComplement(const std::vector<Vector4i>& elements,
+                                      const std::vector<int>& D_indices,
+                                      const std::vector<int>& A_indices) {
+  int num_verts = D_indices.size() + A_indices.size();
+  auto solver =
+      std::make_unique<BlockSparseCholeskySolver>(elements, num_verts);
+
+  SymmetricBlockSparseMatrix<double>& M = solver->GetMutableMatrix();
+  const Eigen::Matrix<double, 12, 12> element_matrix = dummy_matrix12x12();
+  /* Add in element matrices */
+  for (const Vector4i& element : elements) {
+    for (int a = 0; a < 4; ++a) {
+      for (int b = 0; b < 4; ++b) {
+        if (element(a) >= element(b)) {
+          M.AddToBlock(element(a), element(b),
+                       element_matrix.block<3, 3>(3 * a, 3 * b));
+        }
+      }
+    }
+  }
+  solver->CalcSchurComplement(D_indices.size());
+}
+
 SchurComplement<double> CalcCholmodSchurComplement(
     const std::vector<std::vector<MatrixBlock>>& matrix_blocks,
     const std::vector<int>& D_indices, const std::vector<int>& A_indices) {
@@ -315,6 +343,23 @@ void BenchmarkPerformance() {
     std::cout << "Cholmod Schur complement takes on average "
               << cholmod_run_time << " microseconds on average." << std::endl;
   }
+
+  starting_time = Clock::now();
+  for (int i = 0; i < FLAGS_block_cholesky_solve_iterations; ++i) {
+    CalcBlockCholeskySchurComplement(elements, D_indices, A_indices);
+  }
+  ending_time = Clock::now();
+  if (FLAGS_block_cholesky_solve_iterations > 0) {
+    int block_cholesky_run_time =
+        std::chrono::duration_cast<std::chrono::microseconds>(ending_time -
+                                                              starting_time)
+            .count() /
+        FLAGS_block_cholesky_solve_iterations;
+    std::cout << "Block Cholesky Schur complement takes on average "
+              << block_cholesky_run_time << " microseconds on average."
+              << std::endl;
+  }
+
 #if 0
   const MatrixXd cholmod_S =
       CalcCholmodSchurComplement(matrix_blocks, D_indices, A_indices)

@@ -83,10 +83,15 @@ class CholmodSparseMatrix::Impl {
     /* Forbid repeated factorization. */
     DRAKE_THROW_UNLESS(L_ == nullptr);
     L_ = std::unique_ptr<cholmod_factor>(cholmod_analyze(A_.get(), &cm_));
+    permutation_.resize(L_->n);
+    memcpy(permutation_.data(), L_->Perm, permutation_.size() * sizeof(permutation_[0]));
     cholmod_factorize(A_.get(), L_.get(), &cm_);
     /* Throw if factorization fails. */
     DRAKE_THROW_UNLESS(cm_.status != CHOLMOD_NOT_POSDEF);
   }
+
+  /* @pre Factor() has been called. */
+  const std::vector<int>& permutation() const { return permutation_; }
 
   VectorXd Solve(const VectorXd& rhs) const {
     DRAKE_DEMAND(rhs.size() == rows());
@@ -150,6 +155,7 @@ class CholmodSparseMatrix::Impl {
   mutable cholmod_common cm_;
   std::unique_ptr<cholmod_sparse> A_;
   std::unique_ptr<cholmod_factor> L_;
+  std::vector<int> permutation_;
   /* Temporary pointers to memory that CHOLMOD allocated that we won't use. */
   void* Ax_;
   void* Ap_;
@@ -169,6 +175,10 @@ CholmodSparseMatrix::CholmodSparseMatrix(
 CholmodSparseMatrix::~CholmodSparseMatrix() = default;
 
 void CholmodSparseMatrix::Factor() const { pimpl_->Factor(); }
+
+const std::vector<int>& CholmodSparseMatrix::permutation() const {
+  return pimpl_->permutation();
+}
 
 VectorX<double> CholmodSparseMatrix::Solve(const VectorX<double>& rhs) const {
   return pimpl_->Solve(rhs);

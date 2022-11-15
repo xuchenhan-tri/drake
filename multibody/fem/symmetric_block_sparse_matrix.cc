@@ -1,5 +1,7 @@
 #include "drake/multibody/fem/symmetric_block_sparse_matrix.h"
 
+#include <algorithm>
+#include <iostream>
 #include <utility>
 
 namespace drake {
@@ -12,10 +14,15 @@ SymmetricBlockSparseMatrix<T>::SymmetricBlockSparseMatrix(
     std::vector<std::vector<int>> sparsity_pattern)
     : sparsity_pattern_(std::move(sparsity_pattern)),
       num_column_blocks_(sparsity_pattern_.size()),
+      col_blocks_(num_column_blocks_),
       blocks_(num_column_blocks_),
       num_blocks_in_col_(num_column_blocks_),
       block_row_to_flat_(num_column_blocks_,
                          std::vector<int>(num_column_blocks_, -1)) {
+  /* Ensure block rows are sorted with in a block column. */
+  for (auto& block_row_indices : sparsity_pattern_) {
+    std::sort(block_row_indices.begin(), block_row_indices.end());
+  }
   num_blocks_ = 0;
   for (int c = 0; c < num_column_blocks_; ++c) {
     num_blocks_in_col_[c] = sparsity_pattern_[c].size();
@@ -23,6 +30,7 @@ SymmetricBlockSparseMatrix<T>::SymmetricBlockSparseMatrix(
       const int r = sparsity_pattern_[c][index];
       DRAKE_DEMAND(r >= c);
       block_row_to_flat_[c][r] = index;
+      col_blocks_[c].emplace_back(r);
       /* Add two blocks if the block is not on the diagonal (due to symmetry).
        */
       num_blocks_ += (r == c) ? 1 : 2;
@@ -89,6 +97,27 @@ MatrixX<T> SymmetricBlockSparseMatrix<T>::MakeDenseMatrix() const {
       A.template block<3, 3>(3 * r, 3 * c) = blocks_[c][index];
       if (r != c) {
         A.template block<3, 3>(3 * c, 3 * r) = blocks_[c][index].transpose();
+      }
+    }
+  }
+  return A;
+}
+
+template <typename T>
+MatrixX<T> SymmetricBlockSparseMatrix<T>::MakeDenseBottomRightCorner(
+    int block_columns_in_corner) const {
+  MatrixX<T> A = MatrixX<T>::Zero(3 * block_columns_in_corner,
+                                  3 * block_columns_in_corner);
+  const int offset = num_column_blocks_ - block_columns_in_corner;
+  for (int c = offset; c < num_column_blocks_; ++c) {
+    for (int index = 0; index < num_blocks_in_col_[c]; ++index) {
+      const int r = sparsity_pattern_[c][index];
+      const int new_r = r - offset;
+      const int new_c = c - offset;
+      A.template block<3, 3>(3 * new_r, 3 * new_c) = blocks_[c][index];
+      if (r != c) {
+        A.template block<3, 3>(3 * new_c, 3 * new_r) =
+            blocks_[c][index].transpose();
       }
     }
   }
