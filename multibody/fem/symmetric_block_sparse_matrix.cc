@@ -36,6 +36,7 @@ SymmetricBlockSparseMatrix<T>::SymmetricBlockSparseMatrix(
       num_blocks_ += (r == c) ? 1 : 2;
     }
   }
+  std::cout << "NumBlocks = " << num_blocks_ << std::endl;
   for (int c = 0; c < num_column_blocks_; ++c) {
     blocks_[c].resize(num_blocks_in_col_[c], Matrix3<T>::Zero());
   }

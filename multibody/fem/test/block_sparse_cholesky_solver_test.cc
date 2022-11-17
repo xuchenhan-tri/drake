@@ -67,8 +67,14 @@ std::unique_ptr<BlockSparseCholeskySolver> MakeSolver() {
     elements.emplace_back(element.vertex(0), element.vertex(1),
                           element.vertex(2), element.vertex(3));
   }
-  auto solver = std::make_unique<BlockSparseCholeskySolver>(
-      elements, reference_mesh->num_vertices());
+
+  std::vector<std::set<int>> adj =
+      BuildAdjacencyGraph(reference_mesh->num_vertices(), elements);
+  std::vector<int> ordering = CalcPermutationFromCholmod(adj);
+  std::vector<std::vector<int>> sparsity_pattern =
+      CalcSparsityPattern(adj, std::move(ordering));
+  auto solver =
+      std::make_unique<BlockSparseCholeskySolver>(std::move(sparsity_pattern));
 
   SymmetricBlockSparseMatrix<double>& A = solver->GetMutableMatrix();
   const Eigen::Matrix<double, 12, 12> element_matrix = dummy_matrix12x12();
@@ -87,7 +93,7 @@ std::unique_ptr<BlockSparseCholeskySolver> MakeSolver() {
   return solver;
 }
 
-GTEST_TEST(CholmodSparseMatrixTest, Solve) {
+GTEST_TEST(BlockSparseCholeskySolverTest, Solve) {
   auto solver = MakeSolver();
   const MatrixXd dense_A = solver->GetMutableMatrix().MakeDenseMatrix();
 
@@ -98,7 +104,7 @@ GTEST_TEST(CholmodSparseMatrixTest, Solve) {
   EXPECT_TRUE(CompareMatrices(x, expected_x, 1e-13));
 }
 
-GTEST_TEST(CholmodSparseMatrixTest, SchurComplement) {
+GTEST_TEST(BlockSparseCholeskySolverTest, SchurComplement) {
   auto solver = MakeSolver();
   const MatrixXd dense_M = solver->GetMutableMatrix().MakeDenseMatrix();
   const int m_size = dense_M.cols();
@@ -113,6 +119,56 @@ GTEST_TEST(CholmodSparseMatrixTest, SchurComplement) {
   const MatrixXd expected_S =
       D - B.transpose() * Eigen::LLT<MatrixXd>(A).solve(B);
   EXPECT_TRUE(CompareMatrices(S, expected_S, 1e-9));
+}
+
+GTEST_TEST(BlockSparseCholeskySolverTest, CalcPermutationFromCholmod) {
+  const int num_verts = 4;
+  std::vector<Vector4i> elements;
+  elements.emplace_back(0, 1, 2, 3);
+  const std::vector<int> p =
+      CalcPermutationFromCholmod(BuildAdjacencyGraph(num_verts, elements));
+  /* We expect natural ordering when there's no sparsity to be exploit */
+  for (int i = 0; i < num_verts; ++i) {
+    EXPECT_EQ(p[i], i);
+  }
+}
+
+GTEST_TEST(BlockSparseCholeskySolverTest, CalcPermutationForSchurComplement) {
+  const std::vector<int> p = {1, 5, 3, 2, 4, 0};
+  const std::vector<int> nonparticipating_indices = {0, 1, 3, 4};
+  const std::vector<int> expected_permutation = {0, 3, 5, 1, 2, 4};
+  const std::vector<int> result =
+      CalcPermutationForSchurComplement(p, nonparticipating_indices);
+  ASSERT_EQ(result.size(), expected_permutation.size());
+  for (int i = 0; i < static_cast<int>(result.size()); ++i) {
+    EXPECT_EQ(result[i], expected_permutation[i]);
+  }
+}
+
+GTEST_TEST(BlockSparseCholeskySolverTest, CalcSparsityPattern) {
+  SceneGraph<double> scene_graph;
+  SourceId s_id = scene_graph.RegisterSource();
+  constexpr double kRezHint = 0.5;
+  unique_ptr<GeometryInstance> geometry_instance = make_sphere_instance();
+  GeometryId g_id = scene_graph.RegisterDeformableGeometry(
+      s_id, scene_graph.world_frame_id(), std::move(geometry_instance),
+      kRezHint);
+  const SceneGraphInspector<double>& inspector = scene_graph.model_inspector();
+  const VolumeMesh<double>* reference_mesh = inspector.GetReferenceMesh(g_id);
+  DRAKE_DEMAND(reference_mesh != nullptr);
+
+  vector<Vector4i> elements;
+  for (const auto element : reference_mesh->tetrahedra()) {
+    elements.emplace_back(element.vertex(0), element.vertex(1),
+                          element.vertex(2), element.vertex(3));
+  }
+  const int num_verts = reference_mesh->num_vertices();
+
+  std::vector<std::set<int>> adj = BuildAdjacencyGraph(num_verts, elements);
+  const std::vector<int> p = CalcPermutationFromCholmod(adj);
+  std::vector<int> D_indices = {1, 0, 3, 2, 5, 4, 100};
+  std::vector<int> ordering = CalcPermutationForSchurComplement(p, D_indices);
+  std::vector<std::vector<int>> pattern = CalcSparsityPattern(adj, ordering);
 }
 
 }  // namespace

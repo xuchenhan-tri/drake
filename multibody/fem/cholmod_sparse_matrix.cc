@@ -83,8 +83,10 @@ class CholmodSparseMatrix::Impl {
     /* Forbid repeated factorization. */
     DRAKE_THROW_UNLESS(L_ == nullptr);
     L_ = std::unique_ptr<cholmod_factor>(cholmod_analyze(A_.get(), &cm_));
+    std::cout << "NNZ = " << L_->xsize << std::endl;
     permutation_.resize(L_->n);
-    memcpy(permutation_.data(), L_->Perm, permutation_.size() * sizeof(permutation_[0]));
+    memcpy(permutation_.data(), L_->Perm,
+           permutation_.size() * sizeof(permutation_[0]));
     cholmod_factorize(A_.get(), L_.get(), &cm_);
     /* Throw if factorization fails. */
     DRAKE_THROW_UNLESS(cm_.status != CHOLMOD_NOT_POSDEF);

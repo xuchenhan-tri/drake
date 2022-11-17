@@ -398,6 +398,7 @@ drake_cc_library(
     deps = [
         ":symmetric_block_sparse_matrix",
         "//common:essential",
+        "@cholmod",
     ],
 )
 
@@ -748,7 +749,6 @@ drake_cc_googletest(
         "//geometry",
     ],
 )
-
 
 drake_cc_googletest(
     name = "symmetric_block_sparse_matrix_test",

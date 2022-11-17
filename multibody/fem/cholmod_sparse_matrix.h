@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <vector>
 
 #include "drake/common/eigen_types.h"
 #include "drake/multibody/fem/schur_complement.h"
@@ -33,7 +34,7 @@ class CholmodSparseMatrix {
    where A is this matrix. Computes the Schur complement C - BᵀA⁻¹B.
    @pre Factor() has been called. */
   SchurComplement<double> CalcSchurComplement(const MatrixX<double>& B,
-                                     const MatrixX<double>& C) const;
+                                              const MatrixX<double>& C) const;
   void Print() const;
 
  private:

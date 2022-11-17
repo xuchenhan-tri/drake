@@ -1,5 +1,3 @@
-#include "drake/multibody/fem/symmetric_block_sparse_matrix.h"
-
 #pragma once
 
 #include <iostream>
@@ -16,8 +14,31 @@ namespace multibody {
 namespace fem {
 namespace internal {
 
-std::vector<std::unordered_set<int>> BuildAdjacencyGraph(
+/* result[j] is the set of i>=j such that the i,j block of the matrix is
+ nonzero.*/
+std::vector<std::set<int>> BuildAdjacencyGraph(
     int num_verts, const std::vector<Vector4<int>>& elements);
+
+/* Gives the permutation ordering for elimination of the matrix with the given
+ `adjacency_graph`. */
+std::vector<int> CalcPermutationFromCholmod(
+    const std::vector<std::set<int>>& adjacency_graph);
+
+/* Returns an ordering such that everything in `D_indices` come before
+ everything else. Within elements in `D_indices` and elements not in `D_indices,
+ the ordering in `perfect_ordering` is preserved.
+ @param[in] perfect_ordering  The result of CalcPermutationFromCholmod.
+ @param[in] D_indices         Nonparticipating vertices that need to be
+                              eliminated first. */
+std::vector<int> CalcPermutationForSchurComplement(
+    const std::vector<int>& perfect_ordering,
+    const std::vector<int>& D_indices);
+
+/* Returns the column-wise sparsity pattern of L given the adjacency graph of A
+ and the elimination ordering. */
+std::vector<std::vector<int>> CalcSparsityPattern(
+    const std::vector<std::set<int>>& adjacency_graph,
+    std::vector<int> elimination_ordering);
 
 std::vector<std::vector<int>> GetFillInGraph(
     int num_verts, const std::vector<Vector4<int>>& cliques);
@@ -25,9 +46,9 @@ std::vector<std::vector<int>> GetFillInGraph(
 /* Sparse cholesky solver where the blocks are of size 3x3. */
 class BlockSparseCholeskySolver {
  public:
-  /* @param row_blocks Specifies the sparsity pattern of the matrix. */
-  explicit BlockSparseCholeskySolver(const std::vector<Vector4<int>>& cliques,
-                                     int block_cols);
+  /* @param sparsity_pattern Specifies the sparsity pattern of the matrix. */
+  explicit BlockSparseCholeskySolver(
+      std::vector<std::vector<int>> sparsity_pattern);
 
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(BlockSparseCholeskySolver);
 

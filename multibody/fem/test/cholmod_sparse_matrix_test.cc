@@ -133,10 +133,6 @@ GTEST_TEST(CholmodSparseMatrixTest, CalcSchurComplement) {
   const VectorXd expected_AinvB = llt.solve(B);
   const MatrixXd expected_S = C - B.transpose() * expected_AinvB;
   EXPECT_TRUE(CompareMatrices(S, expected_S, 1e-5));
-  const auto& p = cholmod_matrix.permutation();
-  for (int i : p) std::cout << i << " ";
-  std::cout << std::endl;
-  DRAKE_DEMAND(false);
 }
 
 }  // namespace
