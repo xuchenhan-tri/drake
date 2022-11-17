@@ -136,7 +136,7 @@ GTEST_TEST(BlockSparseCholeskySolverTest, CalcPermutationFromCholmod) {
 GTEST_TEST(BlockSparseCholeskySolverTest, CalcPermutationForSchurComplement) {
   const std::vector<int> p = {1, 5, 3, 2, 4, 0};
   const std::vector<int> nonparticipating_indices = {0, 1, 3, 4};
-  const std::vector<int> expected_permutation = {0, 3, 5, 1, 2, 4};
+  const std::vector<int> expected_permutation = {1, 3, 4, 0, 5, 2};
   const std::vector<int> result =
       CalcPermutationForSchurComplement(p, nonparticipating_indices);
   ASSERT_EQ(result.size(), expected_permutation.size());

@@ -226,11 +226,17 @@ std::unique_ptr<BlockSparseCholeskySolver> BuildSolver(
     ordering = initial_ordering;
   }
 
+  const int size = ordering.size();
+  vector<int> old_to_new(size);
+  for (int i = 0; i < size; ++i) {
+    old_to_new[ordering[i]] = i;
+  }
+
   vector<Vector4i> new_elements;
   for (const Vector4i& element : elements) {
     Vector4i permuted_element;
     for (int i = 0; i < 4; ++i) {
-      permuted_element(i) = ordering[element(i)];
+      permuted_element(i) = old_to_new[element(i)];
     }
     new_elements.emplace_back(permuted_element);
   }
@@ -256,13 +262,47 @@ std::unique_ptr<BlockSparseCholeskySolver> BuildSolver(
   return solver;
 }
 
-void CalcBlockCholeskySchurComplement(
-    const std::vector<Vector4i>& elements, const std::vector<int>& D_indices,
-    const std::vector<int>& initial_ordering,
-    const std::vector<std::set<int>>& adjacency_graph,
-    bool respect_participation) {
-  auto solver = BuildSolver(elements, D_indices, initial_ordering,
-                            adjacency_graph, respect_participation);
+void CalcBlockCholeskySchurComplement(BlockSparseCholeskySolver* solver,
+                                      const std::vector<Vector4i>& elements,
+                                      const std::vector<int>& D_indices,
+                                      const std::vector<int>& initial_ordering,
+                                      const std::vector<std::set<int>>&,
+                                      bool respect_participation) {
+  std::vector<int> ordering;
+  if (respect_participation) {
+    ordering = CalcPermutationForSchurComplement(initial_ordering, D_indices);
+  } else {
+    ordering = initial_ordering;
+  }
+
+  const int size = ordering.size();
+  vector<int> old_to_new(size);
+  for (int i = 0; i < size; ++i) {
+    old_to_new[ordering[i]] = i;
+  }
+
+  vector<Vector4i> new_elements;
+  for (const Vector4i& element : elements) {
+    Vector4i permuted_element;
+    for (int i = 0; i < 4; ++i) {
+      permuted_element(i) = old_to_new[element(i)];
+    }
+    new_elements.emplace_back(permuted_element);
+  }
+  SymmetricBlockSparseMatrix<double>& M = solver->GetMutableMatrix();
+  M.SetZero();
+  const Eigen::Matrix<double, 12, 12> element_matrix = dummy_matrix12x12();
+  /* Add in element matrices */
+  for (const Vector4i& permuted_element : new_elements) {
+    for (int a = 0; a < 4; ++a) {
+      for (int b = 0; b < 4; ++b) {
+        if (permuted_element(a) >= permuted_element(b)) {
+          M.AddToBlock(permuted_element(a), permuted_element(b),
+                       element_matrix.block<3, 3>(3 * a, 3 * b));
+        }
+      }
+    }
+  }
   solver->CalcSchurComplement(D_indices.size());
 }
 
@@ -386,31 +426,34 @@ void BenchmarkPerformance() {
     natural_ordering[i] = i;
   }
 
-  auto solver = BuildSolver(elements, D_indices, natural_ordering, adj, true);
-  starting_time = Clock::now();
-  for (int i = 0; i < FLAGS_block_cholesky_solve_iterations; ++i) {
-    /* Baseline, permutes the natural ordering to get schur complement. */
-    solver->CalcSchurComplement(D_indices.size());
-  }
-  ending_time = Clock::now();
-  if (FLAGS_block_cholesky_solve_iterations > 0) {
-    int block_cholesky_run_time =
-        std::chrono::duration_cast<std::chrono::microseconds>(ending_time -
-                                                              starting_time)
-            .count() /
-        FLAGS_block_cholesky_solve_iterations;
-    std::cout << "Block Cholesky Schur complement with natural ordering takes "
-                 "on average "
-              << block_cholesky_run_time << " microseconds on average."
-              << std::endl;
-  }
+  // auto solver = BuildSolver(elements, D_indices, natural_ordering, adj,
+  // true); starting_time = Clock::now(); for (int i = 0; i <
+  // FLAGS_block_cholesky_solve_iterations; ++i) {
+  //   /* Baseline, permutes the natural ordering to get schur complement. */
+  //   CalcBlockCholeskySchurComplement(solver.get(), elements, D_indices,
+  //                                    natural_ordering, adj, true);
+  // }
+  // ending_time = Clock::now();
+  // if (FLAGS_block_cholesky_solve_iterations > 0) {
+  //   int block_cholesky_run_time =
+  //       std::chrono::duration_cast<std::chrono::microseconds>(ending_time -
+  //                                                             starting_time)
+  //           .count() /
+  //       FLAGS_block_cholesky_solve_iterations;
+  //   std::cout << "Block Cholesky Schur complement with natural ordering takes
+  //   "
+  //                "on average "
+  //             << block_cholesky_run_time << " microseconds on average."
+  //             << std::endl;
+  // }
 
-  solver = BuildSolver(elements, D_indices, ordering, adj, true);
+  auto solver = BuildSolver(elements, D_indices, ordering, adj, true);
   starting_time = Clock::now();
   for (int i = 0; i < FLAGS_block_cholesky_solve_iterations; ++i) {
     /* Test case, permutes the ordering that Cholmod thinks is best to get schur
      complement. */
-    solver->CalcSchurComplement(D_indices.size());
+    CalcBlockCholeskySchurComplement(solver.get(), elements, D_indices,
+                                     ordering, adj, true);
   }
   ending_time = Clock::now();
   if (FLAGS_block_cholesky_solve_iterations > 0) {
@@ -425,25 +468,28 @@ void BenchmarkPerformance() {
               << std::endl;
   }
 
-  solver = BuildSolver(elements, D_indices, ordering, adj, false);
-  starting_time = Clock::now();
-  for (int i = 0; i < FLAGS_block_cholesky_solve_iterations; ++i) {
-    /* Unlikely best case scenario, the cholmod ordering so happens to eliminate
-     participating vertices first. */
-    solver->CalcSchurComplement(D_indices.size());
-  }
-  ending_time = Clock::now();
-  if (FLAGS_block_cholesky_solve_iterations > 0) {
-    int block_cholesky_run_time =
-        std::chrono::duration_cast<std::chrono::microseconds>(ending_time -
-                                                              starting_time)
-            .count() /
-        FLAGS_block_cholesky_solve_iterations;
-    std::cout << "Block Cholesky Schur complement with cholmod ordering that "
-                 "DOES NOT respect partition takes on average "
-              << block_cholesky_run_time << " microseconds on average."
-              << std::endl;
-  }
+  // solver = BuildSolver(elements, D_indices, ordering, adj, false);
+  // starting_time = Clock::now();
+  // for (int i = 0; i < FLAGS_block_cholesky_solve_iterations; ++i) {
+  //   /* Unlikely best case scenario, the cholmod ordering so happens to
+  //   eliminate
+  //    participating vertices first. */
+  //   CalcBlockCholeskySchurComplement(solver.get(), elements, D_indices,
+  //                                    ordering, adj, false);
+  // }
+  // ending_time = Clock::now();
+  // if (FLAGS_block_cholesky_solve_iterations > 0) {
+  //   int block_cholesky_run_time =
+  //       std::chrono::duration_cast<std::chrono::microseconds>(ending_time -
+  //                                                             starting_time)
+  //           .count() /
+  //       FLAGS_block_cholesky_solve_iterations;
+  //   std::cout << "Block Cholesky Schur complement with cholmod ordering that
+  //   "
+  //                "DOES NOT respect partition takes on average "
+  //             << block_cholesky_run_time << " microseconds on average."
+  //             << std::endl;
+  // }
 
 #if 0
   const MatrixXd cholmod_S =

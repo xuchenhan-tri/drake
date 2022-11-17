@@ -5,6 +5,10 @@
 #include <utility>
 #include <vector>
 
+#if defined(_OPENMP)
+#include <omp.h>
+#endif
+
 #include <cholmod.h>
 
 namespace drake {
@@ -70,18 +74,18 @@ std::vector<int> CalcPermutationFromCholmod(
     }
   }
   auto L = std::unique_ptr<cholmod_factor>(cholmod_analyze(A.get(), &cm));
+  std::cout << "-------------------------- " << std::endl;
+  std::cout << "n = " << L->n << std::endl;
   std::cout << "nnz= " << L->nzmax << std::endl;
-  std::cout << "nnz= " << L->xsize << std::endl;
+  std::cout << "supernodal nnz= " << L->xsize << std::endl;
   std::cout << "ordering= " << L->ordering << std::endl;
   std::cout << "is_ll= " << L->is_ll << std::endl;
   std::cout << "is_super= " << L->is_super << std::endl;
   std::cout << "is_monotonic= " << L->is_monotonic << std::endl;
+  std::cout << "-------------------------- " << std::endl;
   std::vector<int> permutation(N);
   memcpy(permutation.data(), L->Perm,
          permutation.size() * sizeof(permutation[0]));
-  // std::cout << "permutation " << std::endl;
-  // for (int i : permutation) std::cout << i << " " << std::endl;
-  // std::cout << std::endl;
   /* Clean up memory */
   auto* A_ptr = A.release();
   cholmod_free_sparse(&A_ptr, &cm);
@@ -89,35 +93,37 @@ std::vector<int> CalcPermutationFromCholmod(
   cholmod_free_factor(&L_ptr, &cm);
   cholmod_finish(&cm);
 
-  vector<int> r(permutation.size());
-  for (int i = 0; i < static_cast<int>(permutation.size()); ++i) {
-    r[permutation[i]] = i;
-  }
-  return r;
+  return permutation;
 }
 
-vector<int> CalcPermutationForSchurComplement(
-    const vector<int>& perfect_ordering, const vector<int>& D_indices) {
-  vector<int> perfect_ordering_inverse(perfect_ordering.size());
-  for (int i = 0; i < static_cast<int>(perfect_ordering.size()); ++i) {
-    perfect_ordering_inverse[perfect_ordering[i]] = i;
-  }
+vector<int> CalcPermutationForSchurComplement(const vector<int>& perm,
+                                              const vector<int>& D_indices) {
+  const int N = perm.size();
+  /* perm maps new index into old index. */
   unordered_set<int> D_set;
   for (int d : D_indices) {
     D_set.insert(d);
   }
 
-  /* The start of permutation of D indices. */
+  /* The new index for non-participating vertices. */
   int pd = 0;
-  /* The start of permutation of A indices. */
+  /* The new index participating. */
   int pa = D_indices.size();
-  vector<int> result(perfect_ordering.size());
-  for (int n : perfect_ordering_inverse) {
-    if (D_set.count(n) > 0) {
-      result[n] = pd++;
+  /* The resulting permutation that respects participation mapping from old to
+   new. */
+  vector<int> old_to_new(N);
+  for (int i = 0; i < N; ++i) {
+    int old_index = perm[i];
+    if (D_set.count(old_index) > 0) {
+      old_to_new[old_index] = pd++;
     } else {
-      result[n] = pa++;
+      old_to_new[old_index] = pa++;
     }
+  }
+  /* We want to return the permutation mapping from new to old*/
+  vector<int> result(N);
+  for (int i = 0; i < N; ++i) {
+    result[old_to_new[i]] = i;
   }
   return result;
 }
@@ -159,51 +165,55 @@ std::vector<std::vector<int>> CalcSparsityPattern(
     }
   }
 
-  std::vector<int> workspace1(N);
-  std::vector<int> workspace2(N);
-  std::vector<int> parent(N);
-  std::vector<int> postordering(N);
-  std::vector<int> col_nnz(N);
-  cholmod_analyze_ordering(A.get(), /*only analyze the provided ordering*/ 0,
-                           elimination_ordering.data(),
-                           /* Perform analysis on full A */ nullptr, 0,
-                           parent.data(), postordering.data(), col_nnz.data(),
-                           workspace1.data(), workspace2.data(), &cm);
+  cholmod_factor* L = cholmod_analyze_p(A.get(), elimination_ordering.data(),
+                                        /* unused variables */ nullptr, 0, &cm);
+  std::cout << "-------------------------- " << std::endl;
+  std::cout << "n = " << L->n << std::endl;
+  std::cout << "nnz= " << L->nzmax << std::endl;
+  std::cout << "supernodal nnz= " << L->xsize << std::endl;
+  std::cout << "ordering= " << L->ordering << std::endl;
+  std::cout << "is_ll= " << L->is_ll << std::endl;
+  std::cout << "is_super= " << L->is_super << std::endl;
+  std::cout << "is_monotonic= " << L->is_monotonic << std::endl;
+  std::cout << "-------------------------- " << std::endl;
 
-  /* Build tril(A). */
-  std::vector<std::unordered_set<int>> sparsity(N);
-  for (int i = 0; i < N; ++i) {
-    for (const int n : adjacency_graph[i]) {
-      sparsity[i].emplace(n);
+  /* Verify that the prescribed elimination ordering is indeed used. */
+  std::vector<int> ordering(N);
+  memcpy(ordering.data(), L->Perm, ordering.size() * sizeof(ordering[0]));
+  // for (int i = 0; i < N; ++i) {
+  //   std::cout << ordering[i] << " ";
+  // }
+  // std::cout << std::endl;
+  // for (int i = 0; i < N; ++i) {
+  //   std::cout << elimination_ordering[i] << " ";
+  // }
+  // std::cout << std::endl;
+
+  // for (int i = 0; i < N; ++i) {
+  //   DRAKE_DEMAND(ordering[i] == elimination_ordering[i]);
+  // }
+
+  int* Lp = static_cast<int*>(L->p);
+  int* Li = static_cast<int*>(L->i);
+  /* Dig out the sparsity pattern of L. */
+  std::vector<std::vector<int>> sparsity_pattern(N);
+  for (int c = 0; c < N; ++c) {
+    std::cout << c << std::endl;
+    const int start = Lp[c];
+    const int end = Lp[c + 1];
+    std::cout << start << " " << end << std::endl;
+    for (int i = start; i < end; ++i) {
+      sparsity_pattern[c].emplace_back(Li[i]);
     }
   }
-  /* Traverse elimination tree and parent nodes union child nonzeros. */
-  for (int c : postordering) {
-    const int p = parent[c];
-    /* p < 0 means p is the root. */
-    if (p >= 0) {
-      for (int n : sparsity[c]) {
-        if (n > p) {
-          sparsity[p].insert(n);
-        }
-      }
-    }
-  }
+  std::cout << "done" << std::endl;
+  /* Clean up memory */
+  auto* A_ptr = A.release();
+  cholmod_free_sparse(&A_ptr, &cm);
+  cholmod_free_factor(&L, &cm);
+  cholmod_finish(&cm);
 
-  /* Verify that the sparsity pattern created match the number of nonzero
-   entries per column computed by CHOLMOD. */
-  for (int i = 0; i < N; ++i) {
-    DRAKE_DEMAND(static_cast<int>(sparsity[i].size()) == col_nnz[i]);
-  }
-
-  /* Turn set into vector. */
-  vector<vector<int>> result(N);
-  for (int v = 0; v < N; ++v) {
-    for (int n : sparsity[v]) {
-      result[v].push_back(n);
-    }
-  }
-  return result;
+  return sparsity_pattern;
 }
 
 std::vector<std::vector<int>> GetFillInGraph(
@@ -253,7 +263,7 @@ MatrixX<double> BlockSparseCholeskySolver::CalcSchurComplement(
   /* If the matrix has been factored the original matrix is already gone. */
   DRAKE_DEMAND(0 <= num_eliminated_blocks &&
                num_eliminated_blocks <= block_cols_);
-  DRAKE_DEMAND(!is_factored_);
+  // DRAKE_DEMAND(!is_factored_);
   FactorImpl(num_eliminated_blocks);
   return L_.MakeDenseBottomRightCorner(block_cols_ - num_eliminated_blocks);
 }
@@ -302,7 +312,7 @@ VectorX<double> BlockSparseCholeskySolver::Solve(
 }
 
 void BlockSparseCholeskySolver::FactorImpl(int block_cols_to_factorize) {
-  DRAKE_DEMAND(!is_factored_);
+  // DRAKE_DEMAND(!is_factored_);
   for (int j = 0; j < block_cols_to_factorize; ++j) {
     /* Update diagonal. */
     const Matrix3<double>& Ajj = L_.get_diagonal_block(j);
@@ -320,6 +330,9 @@ void BlockSparseCholeskySolver::FactorImpl(int block_cols_to_factorize) {
       L₂₁λ₁₁ᵀ = a₂₁, and thus
       λ₁₁L₂₁ᵀ = a₂₁ᵀ */
     const std::vector<int>& blocks_in_col_j = L_.get_col_blocks(j);
+#if defined(_OPENMP)
+#pragma omp parallel for
+#endif
     for (int flat = 1; flat < static_cast<int>(blocks_in_col_j.size());
          ++flat) {
       const auto& L_diag_j = L_diag_[j].triangularView<Eigen::Lower>();
@@ -336,13 +349,25 @@ void BlockSparseCholeskySolver::FactorImpl(int block_cols_to_factorize) {
 void BlockSparseCholeskySolver::RightLookingSymmetricRank1Update(int j) {
   const std::vector<int>& blocks_in_col_j = L_.get_col_blocks(j);
   /* We start from f1 = 1 here to skip the j,j entry. */
-  for (int f1 = 1; f1 < static_cast<int>(blocks_in_col_j.size()); ++f1) {
-    for (int f2 = f1; f2 < static_cast<int>(blocks_in_col_j.size()); ++f2) {
-      const int col = blocks_in_col_j[f1];
-      const int row = blocks_in_col_j[f2];
-      const Matrix3<double> diff =
-          -L_.get_block(row, j) * L_.get_block(col, j).transpose();
-      L_.AddToBlock(row, col, diff);
+#if defined(_OPENMP)
+#pragma omp parallel for collapse(2)
+#endif
+  for (int f1 = 0; f1 < static_cast<int>(blocks_in_col_j.size() - 1); ++f1) {
+    for (int f2 = 0; f2 < static_cast<int>(blocks_in_col_j.size()); ++f2) {
+      /* The loop is equivalent to
+       for (int f1 = 1; f1 < blocks_in_col_j.size(); ++f1) {
+         for (int f2 = f1; f2 < blocks_in_col_j.size(); ++f2) {
+           ...
+         }
+       }
+      The weird formatting is to satisfy OpenMP. */
+      int flat1 = f1 + 1;
+      if (f2 >= flat1) {
+        const int col = blocks_in_col_j[flat1];
+        const int row = blocks_in_col_j[f2];
+        L_.AddToBlock(row, col,
+                      -L_.get_block(row, j) * L_.get_block(col, j).transpose());
+      }
     }
   }
 }

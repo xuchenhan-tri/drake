@@ -20,7 +20,10 @@ std::vector<std::set<int>> BuildAdjacencyGraph(
     int num_verts, const std::vector<Vector4<int>>& elements);
 
 /* Gives the permutation ordering for elimination of the matrix with the given
- `adjacency_graph`. */
+ `adjacency_graph`.
+ For example if the result is [1, 3, 0, 2], it means that we should first
+ eliminate vertex 1, then 3, 0, and 2. In other words, this is a permutation
+ mapping from new vertex indices to old indices. */
 std::vector<int> CalcPermutationFromCholmod(
     const std::vector<std::set<int>>& adjacency_graph);
 
@@ -35,7 +38,8 @@ std::vector<int> CalcPermutationForSchurComplement(
     const std::vector<int>& D_indices);
 
 /* Returns the column-wise sparsity pattern of L given the adjacency graph of A
- and the elimination ordering. */
+ and the elimination ordering.
+ Note that the elimination ordering is a mapping from new index to old index. */
 std::vector<std::vector<int>> CalcSparsityPattern(
     const std::vector<std::set<int>>& adjacency_graph,
     std::vector<int> elimination_ordering);
