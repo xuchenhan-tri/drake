@@ -74,15 +74,15 @@ std::vector<int> CalcEliminationOrdering(
     }
   }
   auto L = std::unique_ptr<cholmod_factor>(cholmod_analyze(A.get(), &cm));
-  // std::cout << "-------------------------- " << std::endl;
+  std::cout << "-------------------------- " << std::endl;
   // std::cout << "n = " << L->n << std::endl;
   // std::cout << "nnz= " << L->nzmax << std::endl;
   // std::cout << "supernodal nnz= " << L->xsize << std::endl;
-  // std::cout << "ordering= " << L->ordering << std::endl;
-  // std::cout << "is_ll= " << L->is_ll << std::endl;
-  // std::cout << "is_super= " << L->is_super << std::endl;
+  std::cout << "ordering= " << L->ordering << std::endl;
+  std::cout << "is_ll= " << L->is_ll << std::endl;
+  std::cout << "is_super= " << L->is_super << std::endl;
   // std::cout << "is_monotonic= " << L->is_monotonic << std::endl;
-  // std::cout << "-------------------------- " << std::endl;
+  std::cout << "-------------------------- " << std::endl;
   std::vector<int> permutation(N);
   memcpy(permutation.data(), L->Perm,
          permutation.size() * sizeof(permutation[0]));
@@ -156,17 +156,23 @@ std::vector<std::vector<int>> CalcSparsityPattern(
   std::vector<std::vector<int>> children(N);
   std::vector<std::vector<int>> result(N);
   for (int i = 0; i < N; ++i) {
+    /* Turn set into vector. */
+    const std::set<int>& neighbor_i = new_graph[i];
+    result[i].reserve(N);
+    for (int n : neighbor_i) result[i].emplace_back(n);
+
     /* Merge the neighbors of i and all neighbors of children of i. */
-    std::set<int> neighbor_i = new_graph[i];
     const auto& children_i = children[i];
+    std::vector<int> result_i;  // Temp variable to hold result[i] as we
+                                // accumulate all values.
+    result_i.reserve(N);
     for (int c : children_i) {
       const auto& neighbor_c = result[c];
-      for (int n : neighbor_c) {
-        if (n > i) neighbor_i.insert(n);
-      }
+      std::set_union(result[i].begin(), result[i].end(), neighbor_c.begin() + 2,
+                     neighbor_c.end(), std::back_inserter(result_i));
+      result_i.swap(result[i]);
+      result_i.clear();
     }
-    /* Turn set into vector. */
-    for (int n : neighbor_i) result[i].emplace_back(n);
     /* Record the parent of i if i isn't already the root. */
     if (result[i].size() > 1) {
       const int p = result[i][1];
@@ -280,8 +286,8 @@ void BlockSparseCholeskySolver::FactorImpl(int block_cols_to_factorize) {
     DRAKE_DEMAND(llt.info() == Eigen::Success);
     L_diag_[j] = llt.matrixL();
     /* Technically, there's no need to spell out the diagonal block of the L
-     matrix, but we do it for completeness here. */
-    L_.SetBlock(j, j, L_diag_[j]);
+     matrix, but we do it here for easy debugging. */
+    L_.SetBlockFlat(0, j, L_diag_[j]);
 
     /* Update column.
      | a₁₁  *  | = | λ₁₁  0 | * | λ₁₁ᵀ L₂₁ᵀ |
@@ -290,16 +296,12 @@ void BlockSparseCholeskySolver::FactorImpl(int block_cols_to_factorize) {
       L₂₁λ₁₁ᵀ = a₂₁, and thus
       λ₁₁L₂₁ᵀ = a₂₁ᵀ */
     const std::vector<int>& blocks_in_col_j = L_.get_col_blocks(j);
-#if defined(_OPENMP)
-#pragma omp parallel for
-#endif
-    for (int flat = 1; flat < static_cast<int>(blocks_in_col_j.size());
-         ++flat) {
+    for (int a = 0; a < static_cast<int>(blocks_in_col_j.size()) - 1; ++a) {
+      const int flat = a + 1;
       const auto& L_diag_j = L_diag_[j].triangularView<Eigen::Lower>();
-      const int i = blocks_in_col_j[flat];
-      const Matrix3<double>& Aij = L_.get_block(i, j);
-      const Matrix3<double> Lij = L_diag_j.solve(Aij.transpose()).transpose();
-      L_.SetBlock(i, j, Lij);
+      const Matrix3<double>& Aij = L_.get_block_flat(flat, j);
+      Matrix3<double> Lij = L_diag_j.solve(Aij.transpose()).transpose();
+      L_.SetBlockFlat(flat, j, std::move(Lij));
     }
     RightLookingSymmetricRank1Update(j);
   }
@@ -308,29 +310,50 @@ void BlockSparseCholeskySolver::FactorImpl(int block_cols_to_factorize) {
 
 void BlockSparseCholeskySolver::RightLookingSymmetricRank1Update(int j) {
   const std::vector<int>& blocks_in_col_j = L_.get_col_blocks(j);
+  const int N = blocks_in_col_j.size();
   /* We start from f1 = 1 here to skip the j,j entry. */
 #if defined(_OPENMP)
-omp_set_num_threads(16);
-#pragma omp parallel for collapse(2)
-#endif
-  for (int f1 = 0; f1 < static_cast<int>(blocks_in_col_j.size() - 1); ++f1) {
-    for (int f2 = 0; f2 < static_cast<int>(blocks_in_col_j.size()); ++f2) {
-      /* The loop is equivalent to
-       for (int f1 = 1; f1 < blocks_in_col_j.size(); ++f1) {
-         for (int f2 = f1; f2 < blocks_in_col_j.size(); ++f2) {
-           ...
-         }
-       }
-      The weird formatting is to satisfy OpenMP. */
-      int flat1 = f1 + 1;
-      if (f2 >= flat1) {
-        const int col = blocks_in_col_j[flat1];
-        const int row = blocks_in_col_j[f2];
-        L_.AddToBlock(row, col,
-                      -L_.get_block(row, j) * L_.get_block(col, j).transpose());
-      }
+#pragma omp parallel for num_threads(12)
+  for (int a = 0; a < N - 1; ++a) {
+    const int f1 = a + 1;
+    const int col = blocks_in_col_j[f1];
+    const Matrix3<double>& B = L_.get_block_flat(f1, j);
+    for (int f2 = f1; f2 < N; ++f2) {
+      const int row = blocks_in_col_j[f2];
+      const Matrix3<double>& A = L_.get_block_flat(f2, j);
+      L_.SubtractProductFromBlock(row, col, A, B);
     }
   }
+
+  //   std::vector<std::array<int, 2>> index_map;
+  //   index_map.reserve(N * N / 2);
+  //   for (int f1 = 1; f1 < N; ++f1) {
+  //     for (int f2 = f1; f2 < N; ++f2) {
+  //       index_map.push_back({f1, f2});
+  //     }
+  //   }
+  // #pragma omp parallel for num_threads(12)
+  //   for (int i = 0; i < static_cast<int>(index_map.size()); ++i) {
+  //     const int f1 = index_map[i][0];
+  //     const int f2 = index_map[i][1];
+  //     const int col = blocks_in_col_j[f1];
+  //     const int row = blocks_in_col_j[f2];
+  //     const Matrix3<double>& B = L_.get_block_flat(f1, j);
+  //     const Matrix3<double>& A = L_.get_block_flat(f2, j);
+  //     L_.SubtractProductFromBlock(row, col, A, B);
+  //   }
+
+#else
+  for (int f1 = 1; f1 < N; ++f1) {
+    const int col = blocks_in_col_j[f1];
+    const Matrix3<double>& B = L_.get_block_flat(f1, j);
+    for (int f2 = f1; f2 < N; ++f2) {
+      const int row = blocks_in_col_j[f2];
+      const Matrix3<double>& A = L_.get_block_flat(f2, j);
+      L_.SubtractProductFromBlock(row, col, A, B);
+    }
+  }
+#endif
 }
 
 }  // namespace internal

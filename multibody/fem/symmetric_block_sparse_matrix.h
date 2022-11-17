@@ -54,8 +54,24 @@ class SymmetricBlockSparseMatrix {
    @pre sparsity_pattern[j] contains i at constrution. */
   void AddToBlock(int i, int j, const Eigen::Ref<const Matrix3<T>>& Aij);
 
+  /* For the ij-th block M, do M -= A * B.transpose().
+   @warning no bound checking. */
+  void SubtractProductFromBlock(int i, int j, const Matrix3<T>& A,
+                                const Matrix3<T>& B) {
+    const int index = block_row_to_flat_[j][i];
+    blocks_[j][index] -= A * B.transpose();
+  }
+
+  /* Returns the flat-th block in j-th block_column. */
+  const Matrix3<T>& get_block_flat(int flat, int j) const {
+    return blocks_[j][flat];
+  }
+
   /* Similar to AddToBlock, but overwrites instead of accumulates. */
-  void SetBlock(int i, int j, const Eigen::Ref<const Matrix3<T>>& Aij);
+  void SetBlock(int i, int j, Matrix3<T> Aij);
+  void SetBlockFlat(int flat, int j, Matrix3<T> Aij) {
+    blocks_[j][flat] = std::move(Aij);
+  }
 
   void SetZero();
 

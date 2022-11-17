@@ -53,11 +53,11 @@ void SymmetricBlockSparseMatrix<T>::AddToBlock(
 
 template <typename T>
 void SymmetricBlockSparseMatrix<T>::SetBlock(
-    int i, int j, const Eigen::Ref<const Matrix3<T>>& Aij) {
+    int i, int j, Matrix3<T> Aij) {
   DRAKE_DEMAND(0 <= j && j <= i && i < num_column_blocks_);
   const int index = block_row_to_flat_[j][i];
   DRAKE_DEMAND(index >= 0);
-  blocks_[j][index] = Aij;
+  blocks_[j][index] = std::move(Aij);
 }
 
 template <typename T>
