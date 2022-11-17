@@ -19,30 +19,29 @@ namespace internal {
 std::vector<std::set<int>> BuildAdjacencyGraph(
     int num_verts, const std::vector<Vector4<int>>& elements);
 
-/* Gives the permutation ordering for elimination of the matrix with the given
- `adjacency_graph`.
- For example if the result is [1, 3, 0, 2], it means that we should first
- eliminate vertex 1, then 3, 0, and 2. In other words, this is a permutation
- mapping from new vertex indices to old indices. */
-std::vector<int> CalcPermutationFromCholmod(
+/* Computes the elimination of the matrix with the given `adjacency_graph` that
+ CHOLMOD thinks is the best. For example if the result is [1, 3, 0, 2], it means
+ that we should first eliminate vertex 1, then 3, 0, and 2. In other words, this
+ is a permutation mapping from new vertex indices to old indices. */
+std::vector<int> CalcEliminationOrdering(
     const std::vector<std::set<int>>& adjacency_graph);
 
-/* Returns an ordering such that everything in `D_indices` come before
- everything else. Within elements in `D_indices` and elements not in `D_indices,
- the ordering in `perfect_ordering` is preserved.
- @param[in] perfect_ordering  The result of CalcPermutationFromCholmod.
- @param[in] D_indices         Nonparticipating vertices that need to be
-                              eliminated first. */
-std::vector<int> CalcPermutationForSchurComplement(
-    const std::vector<int>& perfect_ordering,
-    const std::vector<int>& D_indices);
+/* Computes an elimination ordering consistent with the given `ordering` that
+ puts vertices in the set `D` first. More specifically, let P: V->V be the given
+ `ordering` and D ⊂ V. This function computes a new elimination ordering Q:V->V
+ such that
+ 1. Q(d) < Q(a) if d ∈ D and a ∉ D,
+ 2. if d₁, d₂ ∈ D, Q(d₁) < Q(d₂) iff P(d₁) < P(d₂), and
+ 3. if a₁, a₂ ∉ D, Q(a₁) < Q(a₂) iff P(a₁) < P(a₂). */
+std::vector<int> RestrictOrdering(const std::vector<int>& ordering,
+                                  const std::vector<int>& D);
 
 /* Returns the column-wise sparsity pattern of L given the adjacency graph of A
  and the elimination ordering.
  Note that the elimination ordering is a mapping from new index to old index. */
 std::vector<std::vector<int>> CalcSparsityPattern(
     const std::vector<std::set<int>>& adjacency_graph,
-    std::vector<int> elimination_ordering);
+    const std::vector<int>& elimination_ordering);
 
 std::vector<std::vector<int>> GetFillInGraph(
     int num_verts, const std::vector<Vector4<int>>& cliques);

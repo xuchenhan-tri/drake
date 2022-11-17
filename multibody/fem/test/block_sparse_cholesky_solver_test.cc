@@ -70,9 +70,16 @@ std::unique_ptr<BlockSparseCholeskySolver> MakeSolver() {
 
   std::vector<std::set<int>> adj =
       BuildAdjacencyGraph(reference_mesh->num_vertices(), elements);
-  std::vector<int> ordering = CalcPermutationFromCholmod(adj);
+  std::vector<int> ordering = CalcEliminationOrdering(adj);
   std::vector<std::vector<int>> sparsity_pattern =
-      CalcSparsityPattern(adj, std::move(ordering));
+      CalcSparsityPattern(adj, ordering);
+
+  const int N = reference_mesh->num_vertices();
+  std::vector<int> old_to_new(N);
+  for (int i = 0; i < N; ++i) {
+    old_to_new[ordering[i]] = i;
+  }
+
   auto solver =
       std::make_unique<BlockSparseCholeskySolver>(std::move(sparsity_pattern));
 
@@ -82,8 +89,8 @@ std::unique_ptr<BlockSparseCholeskySolver> MakeSolver() {
   for (const Vector4i& element : elements) {
     for (int a = 0; a < 4; ++a) {
       for (int b = 0; b < 4; ++b) {
-        if (element(a) >= element(b)) {
-          A.AddToBlock(element(a), element(b),
+        if (old_to_new[element(a)] >= old_to_new[element(b)]) {
+          A.AddToBlock(old_to_new[element(a)], old_to_new[element(b)],
                        element_matrix.block<3, 3>(3 * a, 3 * b));
         }
       }
@@ -121,24 +128,23 @@ GTEST_TEST(BlockSparseCholeskySolverTest, SchurComplement) {
   EXPECT_TRUE(CompareMatrices(S, expected_S, 1e-9));
 }
 
-GTEST_TEST(BlockSparseCholeskySolverTest, CalcPermutationFromCholmod) {
+GTEST_TEST(BlockSparseCholeskySolverTest, CalcEliminationOrdering) {
   const int num_verts = 4;
   std::vector<Vector4i> elements;
   elements.emplace_back(0, 1, 2, 3);
   const std::vector<int> p =
-      CalcPermutationFromCholmod(BuildAdjacencyGraph(num_verts, elements));
+      CalcEliminationOrdering(BuildAdjacencyGraph(num_verts, elements));
   /* We expect natural ordering when there's no sparsity to be exploit */
   for (int i = 0; i < num_verts; ++i) {
     EXPECT_EQ(p[i], i);
   }
 }
 
-GTEST_TEST(BlockSparseCholeskySolverTest, CalcPermutationForSchurComplement) {
+GTEST_TEST(BlockSparseCholeskySolverTest, RestrictOrdering) {
   const std::vector<int> p = {1, 5, 3, 2, 4, 0};
   const std::vector<int> nonparticipating_indices = {0, 1, 3, 4};
   const std::vector<int> expected_permutation = {1, 3, 4, 0, 5, 2};
-  const std::vector<int> result =
-      CalcPermutationForSchurComplement(p, nonparticipating_indices);
+  const std::vector<int> result = RestrictOrdering(p, nonparticipating_indices);
   ASSERT_EQ(result.size(), expected_permutation.size());
   for (int i = 0; i < static_cast<int>(result.size()); ++i) {
     EXPECT_EQ(result[i], expected_permutation[i]);
@@ -165,9 +171,9 @@ GTEST_TEST(BlockSparseCholeskySolverTest, CalcSparsityPattern) {
   const int num_verts = reference_mesh->num_vertices();
 
   std::vector<std::set<int>> adj = BuildAdjacencyGraph(num_verts, elements);
-  const std::vector<int> p = CalcPermutationFromCholmod(adj);
+  const std::vector<int> p = CalcEliminationOrdering(adj);
   std::vector<int> D_indices = {1, 0, 3, 2, 5, 4, 100};
-  std::vector<int> ordering = CalcPermutationForSchurComplement(p, D_indices);
+  std::vector<int> ordering = RestrictOrdering(p, D_indices);
   std::vector<std::vector<int>> pattern = CalcSparsityPattern(adj, ordering);
 }
 

@@ -36,7 +36,7 @@ vector<set<int>> BuildAdjacencyGraph(int num_verts,
   return adj;
 }
 
-std::vector<int> CalcPermutationFromCholmod(
+std::vector<int> CalcEliminationOrdering(
     const std::vector<std::set<int>>& adjacency_graph) {
   /* Size of the matrix. */
   const int N = adjacency_graph.size();
@@ -74,15 +74,15 @@ std::vector<int> CalcPermutationFromCholmod(
     }
   }
   auto L = std::unique_ptr<cholmod_factor>(cholmod_analyze(A.get(), &cm));
-  std::cout << "-------------------------- " << std::endl;
-  std::cout << "n = " << L->n << std::endl;
-  std::cout << "nnz= " << L->nzmax << std::endl;
-  std::cout << "supernodal nnz= " << L->xsize << std::endl;
-  std::cout << "ordering= " << L->ordering << std::endl;
-  std::cout << "is_ll= " << L->is_ll << std::endl;
-  std::cout << "is_super= " << L->is_super << std::endl;
-  std::cout << "is_monotonic= " << L->is_monotonic << std::endl;
-  std::cout << "-------------------------- " << std::endl;
+  // std::cout << "-------------------------- " << std::endl;
+  // std::cout << "n = " << L->n << std::endl;
+  // std::cout << "nnz= " << L->nzmax << std::endl;
+  // std::cout << "supernodal nnz= " << L->xsize << std::endl;
+  // std::cout << "ordering= " << L->ordering << std::endl;
+  // std::cout << "is_ll= " << L->is_ll << std::endl;
+  // std::cout << "is_super= " << L->is_super << std::endl;
+  // std::cout << "is_monotonic= " << L->is_monotonic << std::endl;
+  // std::cout << "-------------------------- " << std::endl;
   std::vector<int> permutation(N);
   memcpy(permutation.data(), L->Perm,
          permutation.size() * sizeof(permutation[0]));
@@ -96,8 +96,8 @@ std::vector<int> CalcPermutationFromCholmod(
   return permutation;
 }
 
-vector<int> CalcPermutationForSchurComplement(const vector<int>& perm,
-                                              const vector<int>& D_indices) {
+vector<int> RestrictOrdering(const vector<int>& perm,
+                             const vector<int>& D_indices) {
   const int N = perm.size();
   /* perm maps new index into old index. */
   unordered_set<int> D_set;
@@ -130,90 +130,50 @@ vector<int> CalcPermutationForSchurComplement(const vector<int>& perm,
 
 std::vector<std::vector<int>> CalcSparsityPattern(
     const std::vector<std::set<int>>& adjacency_graph,
-    std::vector<int> elimination_ordering) {
-  /* Size of the matrix. */
-  const int N = adjacency_graph.size();
-  int nnz = 0;
-  for (const auto& col : adjacency_graph) {
-    nnz += col.size();
+    const std::vector<int>& elimination_ordering) {
+  int N = elimination_ordering.size();
+  DRAKE_DEMAND(static_cast<int>(adjacency_graph.size()) == N);
+  std::vector<int> old_to_new(N);
+  for (int i = 0; i < N; ++i) {
+    old_to_new[elimination_ordering[i]] = i;
   }
-  /* Build a matrix A for symbolic analysis. */
-  cholmod_common cm;
-  cholmod_start(&cm);
-  auto A = std::unique_ptr<cholmod_sparse>(cholmod_allocate_sparse(
-      N, N,
-      /* max number of nonzeros */
-      nnz,
-      /* sorted */ true,
-      /* packed */ true,
-      /* ignore top right corner */ -1, CHOLMOD_REAL, &cm));
-  /* Fill out A->i (inner index), A->p (outer index), and A->x (values). See
-   CHOLMOD guide for definitions. */
-  int value_index = 0; /* index for nonzero values */
-  int* Ap = static_cast<int*>(A->p);
-  int* Ai = static_cast<int*>(A->i);
-  int* Ax = static_cast<int*>(A->x);
-  Ap[0] = 0;
-  for (int col = 0; col < static_cast<int>(adjacency_graph.size()); ++col) {
-    Ap[col + 1] = Ap[col] + adjacency_graph[col].size();
-    for (const int r : adjacency_graph[col]) {
-      Ai[value_index] = r;
-      /* We set the value to an arbitrary dummy value because we only need to
-       perform symbolic analysis. */
-      Ax[value_index] = 1.0;
-      ++value_index;
+
+  /* Computes the adjacency graph for the new ordering. */
+  std::vector<std::set<int>> new_graph(N);
+  for (int i = 0; i < N; ++i) {
+    for (int v : adjacency_graph[i]) {
+      int a = old_to_new[i];
+      int b = old_to_new[v];
+      if (a >= b) {
+        new_graph[b].insert(a);
+      } else {
+        new_graph[a].insert(b);
+      }
     }
   }
 
-  cholmod_factor* L = cholmod_analyze_p(A.get(), elimination_ordering.data(),
-                                        /* unused variables */ nullptr, 0, &cm);
-  std::cout << "-------------------------- " << std::endl;
-  std::cout << "n = " << L->n << std::endl;
-  std::cout << "nnz= " << L->nzmax << std::endl;
-  std::cout << "supernodal nnz= " << L->xsize << std::endl;
-  std::cout << "ordering= " << L->ordering << std::endl;
-  std::cout << "is_ll= " << L->is_ll << std::endl;
-  std::cout << "is_super= " << L->is_super << std::endl;
-  std::cout << "is_monotonic= " << L->is_monotonic << std::endl;
-  std::cout << "-------------------------- " << std::endl;
-
-  /* Verify that the prescribed elimination ordering is indeed used. */
-  std::vector<int> ordering(N);
-  memcpy(ordering.data(), L->Perm, ordering.size() * sizeof(ordering[0]));
-  // for (int i = 0; i < N; ++i) {
-  //   std::cout << ordering[i] << " ";
-  // }
-  // std::cout << std::endl;
-  // for (int i = 0; i < N; ++i) {
-  //   std::cout << elimination_ordering[i] << " ";
-  // }
-  // std::cout << std::endl;
-
-  // for (int i = 0; i < N; ++i) {
-  //   DRAKE_DEMAND(ordering[i] == elimination_ordering[i]);
-  // }
-
-  int* Lp = static_cast<int*>(L->p);
-  int* Li = static_cast<int*>(L->i);
-  /* Dig out the sparsity pattern of L. */
-  std::vector<std::vector<int>> sparsity_pattern(N);
-  for (int c = 0; c < N; ++c) {
-    std::cout << c << std::endl;
-    const int start = Lp[c];
-    const int end = Lp[c + 1];
-    std::cout << start << " " << end << std::endl;
-    for (int i = start; i < end; ++i) {
-      sparsity_pattern[c].emplace_back(Li[i]);
+  /* children[p] is a vector of sort children of p. */
+  std::vector<std::vector<int>> children(N);
+  std::vector<std::vector<int>> result(N);
+  for (int i = 0; i < N; ++i) {
+    /* Merge the neighbors of i and all neighbors of children of i. */
+    std::set<int> neighbor_i = new_graph[i];
+    const auto& children_i = children[i];
+    for (int c : children_i) {
+      const auto& neighbor_c = result[c];
+      for (int n : neighbor_c) {
+        if (n > i) neighbor_i.insert(n);
+      }
+    }
+    /* Turn set into vector. */
+    for (int n : neighbor_i) result[i].emplace_back(n);
+    /* Record the parent of i if i isn't already the root. */
+    if (result[i].size() > 1) {
+      const int p = result[i][1];
+      children[p].emplace_back(i);
     }
   }
-  std::cout << "done" << std::endl;
-  /* Clean up memory */
-  auto* A_ptr = A.release();
-  cholmod_free_sparse(&A_ptr, &cm);
-  cholmod_free_factor(&L, &cm);
-  cholmod_finish(&cm);
-
-  return sparsity_pattern;
+  return result;
 }
 
 std::vector<std::vector<int>> GetFillInGraph(
@@ -350,6 +310,7 @@ void BlockSparseCholeskySolver::RightLookingSymmetricRank1Update(int j) {
   const std::vector<int>& blocks_in_col_j = L_.get_col_blocks(j);
   /* We start from f1 = 1 here to skip the j,j entry. */
 #if defined(_OPENMP)
+omp_set_num_threads(16);
 #pragma omp parallel for collapse(2)
 #endif
   for (int f1 = 0; f1 < static_cast<int>(blocks_in_col_j.size() - 1); ++f1) {

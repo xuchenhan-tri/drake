@@ -31,12 +31,12 @@ using geometry::Sphere;
 using geometry::VolumeMesh;
 using internal::BlockSparseCholeskySolver;
 using internal::BuildAdjacencyGraph;
-using internal::CalcPermutationForSchurComplement;
-using internal::CalcPermutationFromCholmod;
+using internal::CalcEliminationOrdering;
 using internal::CalcSparsityPattern;
 using internal::CholmodSparseMatrix;
 using internal::GetFillInGraph;
 using internal::PetscSymmetricBlockSparseMatrix;
+using internal::RestrictOrdering;
 using internal::SchurComplement;
 using internal::SymmetricBlockSparseMatrix;
 using math::RigidTransformd;
@@ -214,21 +214,22 @@ void MakeIndices(int num_nodes, double percentage_in_contact,
   }
 }
 
-std::unique_ptr<BlockSparseCholeskySolver> BuildSolver(
+void CalcBlockCholeskySchurComplement(
     const std::vector<Vector4i>& elements, const std::vector<int>& D_indices,
     const std::vector<int>& initial_ordering,
     const std::vector<std::set<int>>& adjacency_graph,
     bool respect_participation) {
   std::vector<int> ordering;
+
   if (respect_participation) {
-    ordering = CalcPermutationForSchurComplement(initial_ordering, D_indices);
+    ordering = RestrictOrdering(initial_ordering, D_indices);
   } else {
     ordering = initial_ordering;
   }
 
-  const int size = ordering.size();
-  vector<int> old_to_new(size);
-  for (int i = 0; i < size; ++i) {
+  const int N = ordering.size();
+  vector<int> old_to_new(N);
+  for (int i = 0; i < N; ++i) {
     old_to_new[ordering[i]] = i;
   }
 
@@ -241,56 +242,9 @@ std::unique_ptr<BlockSparseCholeskySolver> BuildSolver(
     new_elements.emplace_back(permuted_element);
   }
 
-  // auto solver = std::make_unique<BlockSparseCholeskySolver>(
-  //     CalcSparsityPattern(adjacency_graph, ordering));
   auto solver = std::make_unique<BlockSparseCholeskySolver>(
-      GetFillInGraph(adjacency_graph.size(), new_elements));
-
+      CalcSparsityPattern(adjacency_graph, ordering));
   SymmetricBlockSparseMatrix<double>& M = solver->GetMutableMatrix();
-  const Eigen::Matrix<double, 12, 12> element_matrix = dummy_matrix12x12();
-  /* Add in element matrices */
-  for (const Vector4i& permuted_element : new_elements) {
-    for (int a = 0; a < 4; ++a) {
-      for (int b = 0; b < 4; ++b) {
-        if (permuted_element(a) >= permuted_element(b)) {
-          M.AddToBlock(permuted_element(a), permuted_element(b),
-                       element_matrix.block<3, 3>(3 * a, 3 * b));
-        }
-      }
-    }
-  }
-  return solver;
-}
-
-void CalcBlockCholeskySchurComplement(BlockSparseCholeskySolver* solver,
-                                      const std::vector<Vector4i>& elements,
-                                      const std::vector<int>& D_indices,
-                                      const std::vector<int>& initial_ordering,
-                                      const std::vector<std::set<int>>&,
-                                      bool respect_participation) {
-  std::vector<int> ordering;
-  if (respect_participation) {
-    ordering = CalcPermutationForSchurComplement(initial_ordering, D_indices);
-  } else {
-    ordering = initial_ordering;
-  }
-
-  const int size = ordering.size();
-  vector<int> old_to_new(size);
-  for (int i = 0; i < size; ++i) {
-    old_to_new[ordering[i]] = i;
-  }
-
-  vector<Vector4i> new_elements;
-  for (const Vector4i& element : elements) {
-    Vector4i permuted_element;
-    for (int i = 0; i < 4; ++i) {
-      permuted_element(i) = old_to_new[element(i)];
-    }
-    new_elements.emplace_back(permuted_element);
-  }
-  SymmetricBlockSparseMatrix<double>& M = solver->GetMutableMatrix();
-  M.SetZero();
   const Eigen::Matrix<double, 12, 12> element_matrix = dummy_matrix12x12();
   /* Add in element matrices */
   for (const Vector4i& permuted_element : new_elements) {
@@ -420,7 +374,7 @@ void BenchmarkPerformance() {
 
   const std::vector<std::set<int>> adj =
       BuildAdjacencyGraph(num_nodes, elements);
-  const std::vector<int> ordering = CalcPermutationFromCholmod(adj);
+  const std::vector<int> ordering = CalcEliminationOrdering(adj);
   std::vector<int> natural_ordering(ordering.size());
   for (int i = 0; i < static_cast<int>(ordering.size()); ++i) {
     natural_ordering[i] = i;
@@ -447,12 +401,11 @@ void BenchmarkPerformance() {
   //             << std::endl;
   // }
 
-  auto solver = BuildSolver(elements, D_indices, ordering, adj, true);
   starting_time = Clock::now();
   for (int i = 0; i < FLAGS_block_cholesky_solve_iterations; ++i) {
     /* Test case, permutes the ordering that Cholmod thinks is best to get schur
      complement. */
-    CalcBlockCholeskySchurComplement(solver.get(), elements, D_indices,
+    CalcBlockCholeskySchurComplement(elements, D_indices,
                                      ordering, adj, true);
   }
   ending_time = Clock::now();
