@@ -375,31 +375,6 @@ void BenchmarkPerformance() {
   const std::vector<std::set<int>> adj =
       BuildAdjacencyGraph(num_nodes, elements);
   const std::vector<int> ordering = CalcEliminationOrdering(adj);
-  std::vector<int> natural_ordering(ordering.size());
-  for (int i = 0; i < static_cast<int>(ordering.size()); ++i) {
-    natural_ordering[i] = i;
-  }
-
-  // auto solver = BuildSolver(elements, D_indices, natural_ordering, adj,
-  // true); starting_time = Clock::now(); for (int i = 0; i <
-  // FLAGS_block_cholesky_solve_iterations; ++i) {
-  //   /* Baseline, permutes the natural ordering to get schur complement. */
-  //   CalcBlockCholeskySchurComplement(solver.get(), elements, D_indices,
-  //                                    natural_ordering, adj, true);
-  // }
-  // ending_time = Clock::now();
-  // if (FLAGS_block_cholesky_solve_iterations > 0) {
-  //   int block_cholesky_run_time =
-  //       std::chrono::duration_cast<std::chrono::microseconds>(ending_time -
-  //                                                             starting_time)
-  //           .count() /
-  //       FLAGS_block_cholesky_solve_iterations;
-  //   std::cout << "Block Cholesky Schur complement with natural ordering takes
-  //   "
-  //                "on average "
-  //             << block_cholesky_run_time << " microseconds on average."
-  //             << std::endl;
-  // }
 
   starting_time = Clock::now();
   for (int i = 0; i < FLAGS_block_cholesky_solve_iterations; ++i) {
@@ -421,28 +396,45 @@ void BenchmarkPerformance() {
               << std::endl;
   }
 
-  // solver = BuildSolver(elements, D_indices, ordering, adj, false);
-  // starting_time = Clock::now();
-  // for (int i = 0; i < FLAGS_block_cholesky_solve_iterations; ++i) {
-  //   /* Unlikely best case scenario, the cholmod ordering so happens to
-  //   eliminate
-  //    participating vertices first. */
-  //   CalcBlockCholeskySchurComplement(solver.get(), elements, D_indices,
-  //                                    ordering, adj, false);
-  // }
-  // ending_time = Clock::now();
-  // if (FLAGS_block_cholesky_solve_iterations > 0) {
-  //   int block_cholesky_run_time =
-  //       std::chrono::duration_cast<std::chrono::microseconds>(ending_time -
-  //                                                             starting_time)
-  //           .count() /
-  //       FLAGS_block_cholesky_solve_iterations;
-  //   std::cout << "Block Cholesky Schur complement with cholmod ordering that
-  //   "
-  //                "DOES NOT respect partition takes on average "
-  //             << block_cholesky_run_time << " microseconds on average."
-  //             << std::endl;
-  // }
+  starting_time = Clock::now();
+  for (int i = 0; i < FLAGS_block_cholesky_solve_iterations; ++i) {
+    /* Unlikely best case scenario, the cholmod ordering so happens to
+     eliminate participating vertices first. */
+    CalcBlockCholeskySchurComplement(elements, D_indices, ordering, adj, false);
+  }
+  ending_time = Clock::now();
+  if (FLAGS_block_cholesky_solve_iterations > 0) {
+    int block_cholesky_run_time =
+        std::chrono::duration_cast<std::chrono::microseconds>(ending_time -
+                                                              starting_time)
+            .count() /
+        FLAGS_block_cholesky_solve_iterations;
+    std::cout << "Block Cholesky Schur complement with cholmod ordering that "
+                 "DOES NOT respect partition takes on average "
+              << block_cholesky_run_time << " microseconds on average."
+              << std::endl;
+  }
+
+  starting_time = Clock::now();
+  for (int i = 0; i < FLAGS_block_cholesky_solve_iterations; ++i) {
+    /* Unlikely best case scenario, the cholmod ordering so happens to
+     eliminate participating vertices first. */
+    const std::vector<int> alternative_ordering =
+        CalcEliminationOrdering(adj, D_indices);
+    CalcBlockCholeskySchurComplement(elements, D_indices, alternative_ordering,
+                                     adj, false);
+  }
+  ending_time = Clock::now();
+  if (FLAGS_block_cholesky_solve_iterations > 0) {
+    int block_cholesky_run_time =
+        std::chrono::duration_cast<std::chrono::microseconds>(ending_time -
+                                                              starting_time)
+            .count() /
+        FLAGS_block_cholesky_solve_iterations;
+    std::cout << "Block Cholesky Schur complement using alternative ordering "
+              << block_cholesky_run_time << " microseconds on average."
+              << std::endl;
+  }
 
 #if 0
   const MatrixXd cholmod_S =

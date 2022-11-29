@@ -74,15 +74,15 @@ std::vector<int> CalcEliminationOrdering(
     }
   }
   auto L = std::unique_ptr<cholmod_factor>(cholmod_analyze(A.get(), &cm));
-  std::cout << "-------------------------- " << std::endl;
+  // std::cout << "-------------------------- " << std::endl;
   // std::cout << "n = " << L->n << std::endl;
   // std::cout << "nnz= " << L->nzmax << std::endl;
   // std::cout << "supernodal nnz= " << L->xsize << std::endl;
-  std::cout << "ordering= " << L->ordering << std::endl;
-  std::cout << "is_ll= " << L->is_ll << std::endl;
-  std::cout << "is_super= " << L->is_super << std::endl;
+  // std::cout << "ordering= " << L->ordering << std::endl;
+  // std::cout << "is_ll= " << L->is_ll << std::endl;
+  // std::cout << "is_super= " << L->is_super << std::endl;
   // std::cout << "is_monotonic= " << L->is_monotonic << std::endl;
-  std::cout << "-------------------------- " << std::endl;
+  // std::cout << "-------------------------- " << std::endl;
   std::vector<int> permutation(N);
   memcpy(permutation.data(), L->Perm,
          permutation.size() * sizeof(permutation[0]));
@@ -124,6 +124,71 @@ vector<int> RestrictOrdering(const vector<int>& perm,
   vector<int> result(N);
   for (int i = 0; i < N; ++i) {
     result[old_to_new[i]] = i;
+  }
+  return result;
+}
+
+std::vector<int> CalcEliminationOrdering(
+    const std::vector<std::set<int>>& adjacency_graph,
+    const vector<int>& D_indices) {
+  unordered_set<int> D_set;
+  for (int d : D_indices) {
+    D_set.insert(d);
+  }
+  /* Size of A, D matrices and upper bound on the number of nonzeros. */
+  const int N = adjacency_graph.size();
+  const int ND = D_indices.size();
+  const int NA = N - ND;
+  /* Build the index mapping from the global adjacency graph to local A and D
+   graphs as well as the inverse mapping. */
+  int A_index = 0;
+  int D_index = 0;
+  std::vector<int> global_to_local(N);
+  std::vector<int> local_to_global_A(NA);
+  std::vector<int> local_to_global_D(ND);
+  for (int i = 0; i < N; ++i) {
+    if (D_set.count(i) > 0) {
+      global_to_local[i] = D_index;
+      local_to_global_D[D_index] = i;
+      ++D_index;
+    } else {
+      global_to_local[i] = A_index;
+      local_to_global_A[A_index] = i;
+      ++A_index;
+    }
+  }
+
+  /* Build the adjacency graph of A and D. */
+  std::vector<std::set<int>> adjacency_graph_A(NA);
+  std::vector<std::set<int>> adjacency_graph_D(ND);
+  for (int i = 0; i < N; ++i) {
+    if (D_set.count(i) > 0) {
+      for (int j : adjacency_graph[i]) {
+        if (D_set.count(j) > 0) {
+          adjacency_graph_D[global_to_local[i]].insert(global_to_local[j]);
+        }
+      }
+    } else {
+      for (int j : adjacency_graph[i]) {
+        if (D_set.count(j) == 0) {
+          adjacency_graph_A[global_to_local[i]].insert(global_to_local[j]);
+        }
+      }
+    }
+  }
+
+  const std::vector<int> D_ordering =
+      CalcEliminationOrdering(adjacency_graph_D);
+  const std::vector<int> A_ordering =
+      CalcEliminationOrdering(adjacency_graph_A);
+  std::vector<int> result;
+  result.reserve(N);
+  /* D comes before A. */
+  for (int d : D_ordering) {
+    result.emplace_back(local_to_global_D[d]);
+  }
+  for (int a : A_ordering) {
+    result.emplace_back(local_to_global_A[a]);
   }
   return result;
 }

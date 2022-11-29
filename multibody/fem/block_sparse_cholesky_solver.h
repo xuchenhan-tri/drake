@@ -26,6 +26,14 @@ std::vector<std::set<int>> BuildAdjacencyGraph(
 std::vector<int> CalcEliminationOrdering(
     const std::vector<std::set<int>>& adjacency_graph);
 
+/* Computes the elimination ordering for the subgraph of `adjacency_graph`
+ involving vertices in `D_indices` only as well as the subgraph that includes
+ the complement of `D_indices` only and then returns a concatenation of those
+ two orderings. */
+std::vector<int> CalcEliminationOrdering(
+    const std::vector<std::set<int>>& adjacency_graph,
+    const std::vector<int>& D_indices);
+
 /* Computes an elimination ordering consistent with the given `ordering` that
  puts vertices in the set `D` first. More specifically, let P: V->V be the given
  `ordering` and D ⊂ V. This function computes a new elimination ordering Q:V->V
