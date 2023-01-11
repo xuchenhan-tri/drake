@@ -59,7 +59,7 @@ struct DeformableRigidWeldConstraintSpecs {
   double stiffness{
       std::numeric_limits<double>::infinity()};  // Constraint stiffness
                                                  // k in N/m.
-  double damping{0.0};  // Constraint damping c in N⋅s/m.
+  double damping{1.0};  // Constraint damping c in N⋅s/m.
 };
 
 }  // namespace internal

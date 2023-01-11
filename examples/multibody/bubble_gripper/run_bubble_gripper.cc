@@ -25,12 +25,11 @@ DEFINE_double(simulation_time, 8.0, "Desired duration of the simulation [s].");
 DEFINE_double(realtime_rate, 0.0, "Desired real time rate.");
 DEFINE_double(time_step, 5.0e-3,
               "Discrete time step for the system [s]. Must be positive.");
-DEFINE_double(E, 2e3, "Young's modulus of the deformable body [Pa].");
+DEFINE_double(E, 1e4, "Young's modulus of the deformable body [Pa].");
 DEFINE_double(nu, 0.4, "Poisson's ratio of the deformable body, unitless.");
-DEFINE_double(density, 100, "Mass density of the deformable body [kg/m³].");
+DEFINE_double(density, 2000, "Mass density of the deformable body [kg/m³].");
 DEFINE_double(beta, 0.005,
               "Stiffness damping coefficient for the deformable body [1/s].");
-DEFINE_double(resolution_hint, 0.05, "rezhint");
 
 using drake::geometry::AddContactMaterial;
 using drake::geometry::Box;
@@ -46,9 +45,13 @@ using drake::multibody::Body;
 using drake::multibody::CoulombFriction;
 using drake::multibody::DeformableBodyId;
 using drake::multibody::DeformableModel;
+using drake::multibody::ModelInstanceIndex;
 using drake::multibody::MultibodyPlantConfig;
 using drake::multibody::Parser;
 using drake::multibody::PrismaticJoint;
+using drake::multibody::RigidBody;
+using drake::multibody::SpatialInertia;
+using drake::multibody::UnitInertia;
 using drake::multibody::fem::DeformableBodyConfig;
 using drake::systems::BasicVector;
 using drake::systems::Context;
@@ -149,7 +152,6 @@ class GripperPositionControl : public systems::LeafSystem<double> {
   const double kd_{60.0};
 };
 
-
 int do_main() {
   systems::DiagramBuilder<double> builder;
 
@@ -164,29 +166,60 @@ int do_main() {
    deformable bodies.
    1. A valid Coulomb friction coefficient, and
    2. A resolution hint. (Rigid bodies need to be tesselated so that collision
-   queries can be performed against deformable geometries.) */
+   queries can be performed against deformable geometries.) This is important
+   even if the rigid body doesn't use hydroelastic. If no resolution hint is
+   provided, the rigid body WILL NOT interact with deformable bodies. */
   ProximityProperties rigid_proximity_props;
-  /* Set the friction coefficient close to that of rubber against rubber. */
-  const CoulombFriction<double> surface_friction(1.0, 1.0);
-  AddContactMaterial({}, {}, surface_friction, &rigid_proximity_props);
-  rigid_proximity_props.AddProperty(geometry::internal::kHydroGroup,
-                                    geometry::internal::kRezHint, 1.0);
+  const CoulombFriction<double> ground_friction(0.5, 0.5);
+  AddContactMaterial({}, {}, ground_friction, &rigid_proximity_props);
+  drake::geometry::AddCompliantHydroelasticProperties(1.0, 1e6,
+                                                      &rigid_proximity_props);
   /* Set up a ground. */
   Box ground{4, 4, 4};
   const RigidTransformd X_WG(Eigen::Vector3d{0, 0, -2.0});
   plant.RegisterCollisionGeometry(plant.world_body(), X_WG, ground,
-                                  "ground_collision", rigid_proximity_props);
+                                  "ground_collision",
+                                  std::move(rigid_proximity_props));
   IllustrationProperties illustration_props;
   illustration_props.AddProperty("phong", "diffuse",
                                  Vector4d(0.7, 0.5, 0.4, 0.8));
   plant.RegisterVisualGeometry(plant.world_body(), X_WG, ground,
                                "ground_visual", std::move(illustration_props));
 
+  /* Add a rigid cube. */
+  const double cube_side_length = 0.06;
+  const double cube_mass = 0.1;
+  const Vector3<double> cube_com(0, 0, 0);
+  const UnitInertia<double> cube_unit_inertia =
+      UnitInertia<double>::SolidCube(cube_side_length);
+  const RigidBody<double>& cube_body = plant.AddRigidBody(
+      "rigid cube",
+      SpatialInertia<double>(cube_mass, cube_com, cube_unit_inertia));
+  Box cube{cube_side_length, cube_side_length, cube_side_length};
+  ProximityProperties cube_proximity_props;
+  drake::geometry::AddCompliantHydroelasticProperties(1.0, 1e6,
+                                                      &cube_proximity_props);
+  /* Set the friction coefficient close to that of rubber against rubber. */
+  const CoulombFriction<double> surface_friction(1.0, 1.0);
+  drake::geometry::AddContactMaterial({}, {}, surface_friction,
+                                      &cube_proximity_props);
+  plant.RegisterCollisionGeometry(cube_body, RigidTransformd::Identity(), cube,
+                                  "cube_collision",
+                                  std::move(cube_proximity_props));
+  IllustrationProperties cube_illustration_props;
+  cube_illustration_props.AddProperty("phong", "diffuse",
+                                      Vector4d(0.6, 0.8, 0.4, 0.8));
+  plant.RegisterVisualGeometry(cube_body, RigidTransformd::Identity(), cube,
+                               "cube_visual",
+                               std::move(cube_illustration_props));
+
   // Parse the gripper model.
   Parser parser(&plant, &scene_graph);
   const std::string gripper_file = FindResourceOrThrow(
-      "drake/examples/multibody/teddy/models/schunk_wsg_50.sdf");
-  parser.AddModels(gripper_file);
+      "drake/examples/multibody/bubble_gripper/models/schunk_wsg_50.sdf");
+  const std::vector<ModelInstanceIndex> model_instance_indices =
+      parser.AddModels(gripper_file);
+  ModelInstanceIndex gripper_instance = model_instance_indices[0];
   // Pose the gripper and weld it to the world.
   const math::RigidTransform<double> X_WF0 = math::RigidTransform<double>(
       math::RollPitchYaw(0.0, -1.57, 0.0), Eigen::Vector3d(0.06, 0.0, 0.0));
@@ -206,38 +239,30 @@ int do_main() {
   deformable_config.set_mass_density(FLAGS_density);
   deformable_config.set_stiffness_damping_coefficient(FLAGS_beta);
 
-  const std::string teddy_vtk =
-      FindResourceOrThrow("drake/examples/multibody/teddy/teddy.vtk");
-  auto teddy_mesh = std::make_unique<Mesh>(teddy_vtk, 0.1);
-  const RigidTransformd X_WB(RollPitchYawd(1.57, 0, -1.57), Vector3d(-0.21, 0.0, 0));
-  auto teddy_instance =
-      std::make_unique<GeometryInstance>(X_WB, std::move(teddy_mesh), "teddy");
-  /* Minimumly required proximity properties for deformable bodies: A valid
-   Coulomb friction coefficient. */
-  ProximityProperties deformable_proximity_props;
-  AddContactMaterial({}, {}, surface_friction, &deformable_proximity_props);
-  teddy_instance->set_proximity_properties(deformable_proximity_props);
-
-    deformable_model->RegisterDeformableBody(std::move(teddy_instance),
-                                             deformable_config, 1.0);
-
   const std::string bubble_vtk =
-      FindResourceOrThrow("drake/examples/multibody/teddy/bubble.vtk");
+      FindResourceOrThrow("drake/examples/multibody/bubble_gripper/bubble.vtk");
   auto left_bubble_mesh = std::make_unique<Mesh>(bubble_vtk);
+  /* Pose of the left bubble measured in the gripper's frame. */
   const RigidTransformd X_FB1(RollPitchYawd(0, 1.57, -1.57),
                               Vector3d(0.06, -0.095, 0.245));
   const RigidTransformd X_WB1 = X_WF0 * X_FB1;
   auto left_bubble_instance = std::make_unique<GeometryInstance>(
       X_WB1, std::move(left_bubble_mesh), "left bubble");
+  /* Minimumly required proximity properties for deformable bodies: A valid
+   Coulomb friction coefficient. */
+  ProximityProperties deformable_proximity_props;
+  AddContactMaterial({}, {}, surface_friction, &deformable_proximity_props);
   left_bubble_instance->set_proximity_properties(deformable_proximity_props);
   DeformableBodyId left_bubble_id = deformable_model->RegisterDeformableBody(
       std::move(left_bubble_instance), deformable_config, 1.0);
   const Body<double>& left_finger = plant.GetBodyByName("left_finger_bubble");
-  deformable_model->Weld(left_bubble_id, left_finger, X_WB1,
-                         RigidTransformd(RollPitchYawd(0, 1.57, 0),
-                                         Vector3d(-0.0725796, -0.065, 0.0599422)));
+  /* The pose of the left finger. */
+  RigidTransformd X_WF1(RollPitchYawd(0, 1.57, 0),
+                        Vector3d(-0.0725796, -0.065, 0.0599422));
+  deformable_model->Weld(left_bubble_id, left_finger, X_WB1, X_WF1);
 
   auto right_bubble_mesh = std::make_unique<Mesh>(bubble_vtk);
+  /* Pose of the right bubble measured in the gripper's frame. */
   const RigidTransformd X_FB2(RollPitchYawd(0.0, 1.57, 1.57),
                               Vector3d(0.06, 0.095, 0.245));
   const RigidTransformd X_WB2 = X_WF0 * X_FB2;
@@ -247,9 +272,10 @@ int do_main() {
   DeformableBodyId right_bubble_id = deformable_model->RegisterDeformableBody(
       std::move(right_bubble_instance), deformable_config, 1.0);
   const Body<double>& right_finger = plant.GetBodyByName("right_finger_bubble");
-  deformable_model->Weld(right_bubble_id, right_finger, X_WB2,
-                         RigidTransformd(RollPitchYawd(0, 1.57, 0),
-                                         Vector3d(-0.0725796, 0.065, 0.0599422)));
+  /* The pose of the right finger. */
+  const RigidTransformd X_WF2(RollPitchYawd(0, 1.57, 0),
+                        Vector3d(-0.0725796, 0.065, 0.0599422));
+  deformable_model->Weld(right_bubble_id, right_finger, X_WB2, X_WF2);
 
   plant.AddPhysicalModel(std::move(owned_deformable_model));
 
@@ -280,7 +306,8 @@ int do_main() {
 
   const auto& control = *builder.AddSystem<GripperPositionControl>(
       open_width, closed_width, lifted_height);
-  builder.Connect(plant.get_state_output_port(), control.get_input_port());
+  builder.Connect(plant.get_state_output_port(gripper_instance),
+                  control.get_input_port());
   builder.Connect(control.get_output_port(), plant.get_actuation_input_port());
 
   /* Add a visualizer that emits LCM messages for visualization. */
@@ -302,6 +329,8 @@ int do_main() {
   Context<double>& plant_context =
       diagram->GetMutableSubsystemContext(plant, &mutable_root_context);
 
+  plant.SetFreeBodyPose(&plant_context, cube_body,
+                        RigidTransformd(Vector3d(-0.2, 0, 0.15)));
   // Set finger joint positions.
   left_joint.set_translation(&plant_context, -0.065);
   right_joint.set_translation(&plant_context, 0.065);

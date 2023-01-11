@@ -25,15 +25,14 @@ install_data(
 )
 
 drake_cc_binary(
-    name = "teddy",
+    name = "run_bubble_gripper",
     data = [
         ":models",
-        "teddy.vtk",
         "bubble.vtk",
         "//manipulation/models/wsg_50_description:models",
     ],
     srcs = [
-        "teddy.cc",
+        "run_bubble_gripper.cc",
     ],
     test_rule_args = [
         "-simulation_time=0.1",

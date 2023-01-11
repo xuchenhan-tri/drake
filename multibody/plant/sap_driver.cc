@@ -378,7 +378,7 @@ void SapDriver<T>::AddWeldConstraints(const systems::Context<T>& context,
   const Vector3<T> gamma_upper = Vector3<T>::Constant(kInfinity);
 
   // TODO(amcastro-tri): consider exposing this parameter.
-  const double beta = 0.1;
+  const double beta = 0.05;
   const double stiffness = 1e16;
   const double dissipation_time_scale = 0.1;
   const typename SapHolonomicConstraint<T>::Parameters parameters{

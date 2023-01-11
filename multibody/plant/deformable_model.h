@@ -206,13 +206,15 @@ class DeformableModel final : public multibody::internal::PhysicalModel<T> {
       double damping = 0.0);
 
   /* Welds vertices of deformable body A to rigid body B. The vertices that are
-   welded are those that are close to z=0 in its body frame. */
+   welded are those whose z-coordinate is less than 1mm in its body frame.
+   @param X_WA the world bose of the A.
+   @param X_WB the world bose of the B. */
   void Weld(DeformableBodyId body_A_id, const Body<T>& body_B,
             const math::RigidTransform<T>& X_WA,
             const math::RigidTransform<T>& X_WB) {
     const VectorX<T>& reference_positions = GetReferencePositions(body_A_id);
     const int num_verts = reference_positions.size() / 3;
-    const double tol = 5e-4;
+    const double tol = 1e-3;
     for (int i = 0; i < num_verts; ++i) {
       const Vector3<T>& p_WV = reference_positions.template segment<3>(3 * i);
       const Vector3<T> p_AV = X_WA.inverse() * p_WV;

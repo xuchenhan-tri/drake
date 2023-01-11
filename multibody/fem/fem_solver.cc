@@ -110,7 +110,7 @@ int FemSolver<T>::SolveWithInitialGuess(
         linear_solve_tolerance(residual_norm, initial_residual_norm));
     const auto linear_solve_status =
         tangent_matrix.Solve(internal::PetscSymmetricBlockSparseMatrix::
-                                 SolverType::kDirect,
+                                 SolverType::kConjugateGradient,
                              internal::PetscSymmetricBlockSparseMatrix::
                                  PreconditionerType::kCholesky,
                              -b, &dz);
