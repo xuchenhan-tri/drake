@@ -54,6 +54,16 @@ drake_cc_binary(
 )
 
 drake_cc_binary(
+    name = "make_mesh",
+    srcs = ["make_mesh.cc"],
+    deps = [
+        "//geometry/proximity:mesh_to_vtk",
+        "//geometry/proximity:make_cylinder_mesh",
+        "@gflags",
+    ],
+)
+
+drake_cc_binary(
     name = "simple_contact_surface_vis",
     srcs = ["simple_contact_surface_vis.cc"],
     add_test_rule = 1,
