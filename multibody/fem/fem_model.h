@@ -276,7 +276,7 @@ class FemModel {
   /* The system that manages the states and cache entries of this FEM model.
    */
   std::unique_ptr<internal::FemStateSystem<T>> fem_state_system_;
-  Vector3<T> gravity_{0, 0, -9.81};
+  Vector3<T> gravity_{0, 0, 0};
   /* The Dirichlet boundary condition that the model is subject to. */
   internal::DirichletBoundaryCondition<T> dirichlet_bc_;
 };

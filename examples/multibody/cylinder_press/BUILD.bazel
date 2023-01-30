@@ -13,6 +13,8 @@ drake_cc_binary(
     ],
     data = [
         "cylinder.vtk",
+        "cylinder_fine.vtk",
+        "cylinder_short.vtk",
     ],
     deps = [
         "//geometry:drake_visualizer",

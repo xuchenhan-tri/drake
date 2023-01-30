@@ -1,4 +1,5 @@
 #include <iostream>
+#include <fstream>
 #include <memory>
 
 #include <gflags/gflags.h>
@@ -19,17 +20,17 @@
 #include "drake/systems/framework/diagram_builder.h"
 #include "drake/systems/primitives/vector_log_sink.h"
 
-DEFINE_double(simulation_time, 8.0, "Desired duration of the simulation [s].");
+DEFINE_double(simulation_time, 10, "Desired duration of the simulation [s].");
 DEFINE_double(realtime_rate, 1.0, "Desired real time rate.");
-DEFINE_double(time_step, 1e-2,
+DEFINE_double(time_step, 1.0e-2,
               "Discrete time step for the system [s]. Must be positive.");
-DEFINE_double(E, 1e4, "Young's modulus of the deformable body [Pa].");
-DEFINE_double(nu, 0.4, "Poisson's ratio of the deformable body, unitless.");
-DEFINE_double(density, 1e3, "Mass density of the deformable body [kg/m³].");
-DEFINE_double(beta, 0.0,
+DEFINE_double(E, 3e3, "Young's modulus of the deformable body [kPa].");
+DEFINE_double(nu, 0.45, "Poisson's ratio of the deformable body, unitless.");
+DEFINE_double(density, 1, "Mass density of the deformable body [ton/m³].");
+DEFINE_double(beta, 0.002,
               "Stiffness damping coefficient for the deformable body [1/s].");
 DEFINE_double(t0, 0.0, "Time to start pressing [s].");
-DEFINE_double(k, 10.0, "Slope of force [N/s].");
+DEFINE_double(k, 6.0, "Slope of force [kN/s].");
 
 using drake::geometry::AddContactMaterial;
 using drake::geometry::Box;
@@ -94,7 +95,7 @@ class ForceControl : public systems::LeafSystem<double> {
   }
 
   double t0_{0.0};
-  double k_{0.1};
+  double k_{300000};
 };
 
 int do_main() {
@@ -122,7 +123,7 @@ int do_main() {
   plant.AddJointActuator("bottom_joint_actuator", bottom_joint);
 
   /* Set up collision and visualization geometries. */
-  Box box{7, 7, 0.1};
+  Box box{1.4, 1.4, 0.06};
   /* Minimum required proximity properties for rigid bodies to interact with
    deformable bodies.
    1. A valid Coulomb friction coefficient, and
@@ -159,8 +160,8 @@ int do_main() {
   const math::RigidTransform<double> X_WG = math::RigidTransform<double>(
       math::RollPitchYaw(0.0, -1.57, 0.0), Eigen::Vector3d(0.0, 0.0, 0.0));
   const std::string cylinder_vtk = FindResourceOrThrow(
-      "drake/examples/multibody/cylinder_press/cylinder.vtk");
-  auto cylinder_mesh = std::make_unique<Mesh>(cylinder_vtk, 1.0);
+      "drake/examples/multibody/cylinder_press/cylinder_short.vtk");
+  auto cylinder_mesh = std::make_unique<Mesh>(cylinder_vtk, 0.2);
   auto cylinder_instance = std::make_unique<GeometryInstance>(
       X_WG, std::move(cylinder_mesh), "deformable_cylinder");
 
@@ -176,9 +177,6 @@ int do_main() {
       owned_deformable_model.get();
   plant.AddPhysicalModel(std::move(owned_deformable_model));
   plant.mutable_gravity_field().set_gravity_vector(Vector3d{0, 0, 0});
-  // /* Viscous damping for the finger joints, in N⋅s/m. */
-  // top_joint.set_default_damping(50.0);
-  // bottom_joint.set_default_damping(50.0);
 
   /* All rigid and deformable models have been added. Finalize the plant. */
   plant.Finalize();
@@ -208,8 +206,8 @@ int do_main() {
   /* Set initial conditions for the gripper. */
   auto& plant_context =
       diagram->GetMutableSubsystemContext(plant, diagram_context.get());
-  top_joint.set_translation(&plant_context, -1.05);
-  bottom_joint.set_translation(&plant_context, -1.05);
+  top_joint.set_translation(&plant_context, -0.23);
+  bottom_joint.set_translation(&plant_context, -0.23);
 
   /* Build the simulator and run! */
   systems::Simulator<double> simulator(*diagram, std::move(diagram_context));
@@ -219,10 +217,28 @@ int do_main() {
 
   const auto& force_log = force_logger->FindLog(simulator.get_context());
   const auto& state_log = state_logger->FindLog(simulator.get_context());
+
   std::cout << "Forces" << std::endl;
-  std::cout << force_log.data() << std::endl;
+  const VectorXd force = force_log.data().row(0) / 0.4;
+  std::cout << force << std::endl;
   std::cout << "States" << std::endl;
-  std::cout << state_log.data() << std::endl;
+  const int num_states = state_log.data().cols();
+  // Distance between center of two plates.
+  const VectorXd distance =
+      -(state_log.data().row(0) + state_log.data().row(1));
+  const VectorXd displacement =
+      VectorXd::Constant(num_states, 0.4) -
+      (distance - VectorXd::Constant(num_states, 0.06));
+  std::cout << displacement << std::endl;
+
+  std::ofstream file("data.txt");
+  if (file.is_open())
+  {
+    Eigen::MatrixXd data(num_states, 2);
+    data.col(0) = displacement;
+    data.col(1) = force;
+    file << data << '\n';
+  }
 
   return 0;
 }
