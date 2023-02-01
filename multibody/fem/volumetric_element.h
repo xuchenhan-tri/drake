@@ -377,6 +377,15 @@ class VolumetricElement
     // The ab-th 3-by-3 block of K.
     Matrix3<T> K_ab;
     for (int q = 0; q < num_quadrature_points; ++q) {
+      Eigen::SelfAdjointEigenSolver<Eigen::Matrix<T, 9, 9>> solver(dPdF[q]);
+      VectorX<T> lambda = solver.eigenvalues();
+      const auto& V = solver.eigenvectors();
+      for (int i = 0; i < 9; ++i) {
+        if (lambda(i) <= 0.0) {
+          lambda(i) = 1e-6;
+        }
+      }
+      const Eigen::Matrix<T, 9, 9> H = V * lambda.asDiagonal() * V.transpose();
       /* Notice that Fₖₗ = xᵃₖdSᵃ/dXₗ, so dFₖₗ/dxᵇⱼ = δᵃᵇδₖⱼdSᵃ/dXₗ, and thus
        Kᵃᵇᵢⱼ = dFₘₙ/dxᵃᵢ dPₘₙ/dFₖₗ dFₖₗ/dxᵇⱼ =  dSᵃ/dXₙ dPᵢₙ/dFⱼₗ dSᵇ/dXₗ. */
       for (int a = 0; a < num_nodes; ++a) {
@@ -385,7 +394,7 @@ class VolumetricElement
            gives the second derivative of energy, which is the opposite of the
            force derivative. */
           PerformDoubleTensorContraction<T>(
-              dPdF[q], dSdX_transpose_[q].col(a),
+              H, dSdX_transpose_[q].col(a),
               dSdX_transpose_[q].col(b) * reference_volume_[q] * -scale, &K_ab);
           AccumulateMatrixBlock(K_ab, a, b, K);
         }

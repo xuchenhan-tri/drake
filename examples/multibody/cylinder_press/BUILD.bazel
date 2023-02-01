@@ -15,6 +15,7 @@ drake_cc_binary(
         "cylinder.vtk",
         "cylinder_fine.vtk",
         "cylinder_short.vtk",
+        "cylinder_shorter.vtk",
     ],
     deps = [
         "//geometry:drake_visualizer",
