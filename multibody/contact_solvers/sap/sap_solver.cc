@@ -1,7 +1,6 @@
 #include "drake/multibody/contact_solvers/sap/sap_solver.h"
 
 #include <algorithm>
-#include <iostream>
 #include <limits>
 #include <type_traits>
 #include <utility>

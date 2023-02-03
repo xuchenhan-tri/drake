@@ -192,7 +192,7 @@ GTEST_TEST(MultibodyPlantForwardDynamics, AtlasRobot) {
     //  2 temps in MbTS::CalcArticulatedBodyForceCache (F_B_W_, tau_).
     //  1 temp  in MbP::AssembleActuationInput (actuation_input).
     //  2 temps in MbTS::DoCalcTimeDerivatives (xdot, qdot).
-    LimitMalloc guard({ .max_num_allocations = 5 });
+    LimitMalloc guard({ .max_num_allocations = 6 });
     EXPECT_NO_THROW(plant.CalcTimeDerivatives(*context, derivatives.get()));
   }
 

@@ -1,7 +1,6 @@
 #include "drake/multibody/plant/sap_driver.h"
 
 #include <algorithm>
-#include <iostream>
 #include <limits>
 #include <memory>
 #include <string>
@@ -392,6 +391,7 @@ void SapDriver<T>::AddWeldConstraints(const systems::Context<T>& context,
   }
 }
 
+template <typename T>
 void SapDriver<T>::AddDistanceConstraints(const systems::Context<T>& context,
                                           SapContactProblem<T>* problem) const {
   DRAKE_DEMAND(problem != nullptr);

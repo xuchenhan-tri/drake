@@ -22,6 +22,12 @@ FastSchurComplement<T>::FastSchurComplement(
 template <class T>
 VectorX<T> FastSchurComplement<T>::SolveForX(
     const Eigen::Ref<const VectorX<T>>& a) const {
+  /* Don't try solving the equation if the schur complement is empty. */
+  DRAKE_DEMAND(S_.rows() > 0);
+  /* Return the trivial solution if D matrix is empty. */
+  if (D_indices_.empty()) {
+    return VectorX<T>::Zero(0);
+  }
   DRAKE_DEMAND(static_cast<int>(a.size()) ==
                3 * static_cast<int>(A_indices_.size()));
   const int block_cols = A_indices_.size() + D_indices_.size();

@@ -1,7 +1,6 @@
 #include "drake/multibody/plant/compliant_contact_manager.h"
 
 #include <algorithm>
-#include <iostream>
 #include <limits>
 #include <memory>
 #include <string>
@@ -1001,7 +1000,8 @@ void CompliantContactManager<T>::ExtractModelInfo() {
   for (JointActuatorIndex a(0); a < plant().num_actuators(); ++a) {
     const JointActuator<T>& actuator = plant().get_joint_actuator(a);
     if (actuator.has_controller()) {
-      if (plant().get_discrete_contact_solver() == DiscreteContactSolver::kTamsi) {
+      if (plant().get_discrete_contact_solver() ==
+          DiscreteContactSolver::kTamsi) {
         const std::string msg =
             "PD controlled actuators are not supported by the TAMSI solver. "
             "Either use the SAP solver or use MultibodyPlant's actuation ports "

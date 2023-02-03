@@ -5208,7 +5208,7 @@ class MultibodyPlant : public internal::MultibodyTreeSystem<T> {
   std::vector<internal::CouplerConstraintSpecs> coupler_constraints_specs_;
 
   // Vector of distance constraints specifications.
-  std::vector<internal::DistanceConstraintSpecs> distance_constraints_specs_;  
+  std::vector<internal::DistanceConstraintSpecs> distance_constraints_specs_;
 
   // Vector of ball constraint specifications.
   std::vector<internal::BallConstraintSpecs> ball_constraints_specs_;

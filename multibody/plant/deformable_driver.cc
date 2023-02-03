@@ -1,7 +1,6 @@
 #include "drake/multibody/plant/deformable_driver.h"
 
 #include <array>
-#include <iostream>
 #include <memory>
 #include <set>
 #include <string>

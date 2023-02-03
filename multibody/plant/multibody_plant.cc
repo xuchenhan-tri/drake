@@ -2027,6 +2027,7 @@ VectorX<T> MultibodyPlant<T>::AssembleActuationInput(
       // torque.
       const auto& input_port =
           this->get_input_port(instance_actuation_ports_[model_instance_index]);
+      // TODO(sherm1) Heap allocation here. Get rid of it.
       VectorX<T> u_values = VectorX<T>::Zero(instance_num_dofs);
       if (!input_port.HasValue(context)) {
         const auto& qd_input_port = this->get_input_port(

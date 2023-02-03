@@ -1,7 +1,6 @@
 #include "drake/multibody/fem/fem_solver.h"
 
 #include <algorithm>
-#include <iostream>
 
 #include "drake/common/text_logging.h"
 
@@ -100,8 +99,8 @@ int FemSolver<T>::SolveWithInitialGuess(
       scratch->mutable_petsc_tangent_matrix();
   internal::SymmetricBlockSparseMatrix<T>& tangent_matrix =
       scratch->mutable_tangent_matrix();
-  internal::BlockSparseCholeskySolver& solver = scratch->mutable_linear_solver();
-
+  internal::BlockSparseCholeskySolver& solver =
+      scratch->mutable_linear_solver();
   model_->ApplyBoundaryCondition(state);
   model_->CalcResidual(*state, &b);
   T residual_norm = b.norm();
@@ -124,7 +123,8 @@ int FemSolver<T>::SolveWithInitialGuess(
       petsc_tangent_matrix.set_relative_tolerance(
           linear_solve_tolerance(residual_norm, initial_residual_norm));
       const auto linear_solve_status = petsc_tangent_matrix.Solve(
-          internal::PetscSymmetricBlockSparseMatrix::SolverType::kConjugateGradient,
+          internal::PetscSymmetricBlockSparseMatrix::SolverType::
+              kConjugateGradient,
           internal::PetscSymmetricBlockSparseMatrix::PreconditionerType::
               kIncompleteCholesky,
           -b, &dz);

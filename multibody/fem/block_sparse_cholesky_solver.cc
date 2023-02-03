@@ -1,7 +1,6 @@
 #include "drake/multibody/fem/block_sparse_cholesky_solver.h"
 
 #include <algorithm>
-#include <iostream>
 #include <memory>
 #include <utility>
 #include <vector>
