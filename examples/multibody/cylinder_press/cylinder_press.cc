@@ -1,5 +1,5 @@
-#include <iostream>
 #include <fstream>
+#include <iostream>
 #include <memory>
 
 #include <gflags/gflags.h>
@@ -32,11 +32,13 @@ DEFINE_double(beta, 0.7,
 DEFINE_double(alpha, 0.0,
               "Mass damping coefficient for the deformable body [s].");
 DEFINE_double(t0, 0.0, "Time to start pressing [s].");
-DEFINE_double(k, 0.00056, "Slope of force [mN/s].");
+DEFINE_double(k, 0.000112, "Slope of force [mN/s].");
 
 using drake::geometry::AddContactMaterial;
 using drake::geometry::Box;
+using drake::geometry::CollisionFilterDeclaration;
 using drake::geometry::GeometryInstance;
+using drake::geometry::GeometrySet;
 using drake::geometry::IllustrationProperties;
 using drake::geometry::Mesh;
 using drake::geometry::ProximityProperties;
@@ -49,6 +51,7 @@ using drake::multibody::DeformableModel;
 using drake::multibody::MultibodyPlantConfig;
 using drake::multibody::PrismaticJoint;
 using drake::multibody::SpatialInertia;
+using drake::multibody::UnitInertia;
 using drake::multibody::fem::DeformableBodyConfig;
 using drake::systems::BasicVector;
 using drake::systems::Context;
@@ -77,30 +80,28 @@ class ForceControl : public systems::LeafSystem<double> {
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(ForceControl);
 
   /* Constructs a ForceControl system with the given parameters. The output
-   force is the positive part of k*(t-t0). */
-  ForceControl(double t0, double k) : t0_(t0), k_(k) {
-    this->DeclareVectorOutputPort("gripper force", BasicVector<double>(2),
+   force is the positive part of k*t. */
+  ForceControl(double k) : k_(k) {
+    this->DeclareVectorOutputPort("gripper force", BasicVector<double>(1),
                                   &ForceControl::SetAppliedForce);
   }
 
  private:
   void SetAppliedForce(const Context<double>& context,
                        BasicVector<double>* output) const {
-    Vector2d force = Vector2d::Zero();
+    Vector1d force = Vector1d::Zero();
     const double t = context.get_time();
-    if (t > t0_) {
-      force(0) = k_ * (t - t0_);
-      force(1) = k_ * (t - t0_);
-    }
+    force(0) = -k_ * t;
     output->get_mutable_value() << force;
-    std::cout << force.transpose() << std::endl;
+    std::cout << context.get_time() << std::endl;
   }
 
-  double t0_{0.0};
   double k_{300000};
 };
 
 int do_main() {
+  const double kCylinderLength = 0.04;
+  const double kRadius = 0.2;
   systems::DiagramBuilder<double> builder;
 
   MultibodyPlantConfig plant_config;
@@ -110,22 +111,20 @@ int do_main() {
 
   auto [plant, scene_graph] = AddMultibodyPlant(plant_config, &builder);
 
-  SpatialInertia<double> unit_spatial_inertia =
-      SpatialInertia<double>::MakeUnitary();
-  const auto& top_body = plant.AddRigidBody("top", unit_spatial_inertia);
-  const auto& bottom_body = plant.AddRigidBody("bottom", unit_spatial_inertia);
+  SpatialInertia<double> spatial_inertia(1e-4, Vector3d::Zero(),
+                                         UnitInertia<double>(1.0, 1.0, 1.0));
+  const auto& top_body = plant.AddRigidBody("top", spatial_inertia);
 
   const auto& top_joint = plant.AddJoint<PrismaticJoint>(
       "top_joint", plant.world_body(), {}, top_body,
-      RigidTransformd::Identity(), -Vector3d::UnitZ());
-  const auto& bottom_joint = plant.AddJoint<PrismaticJoint>(
-      "bottom_joint", plant.world_body(), {}, bottom_body,
       RigidTransformd::Identity(), Vector3d::UnitZ());
   plant.AddJointActuator("top_joint_actuator", top_joint);
-  plant.AddJointActuator("bottom_joint_actuator", bottom_joint);
 
+  const double kLength = 1.0;
+  const double kWidth = 1.0;
+  const double kHeight = 0.06;
   /* Set up collision and visualization geometries. */
-  Box box{1.4, 1.4, 0.06};
+  Box box{kLength, kWidth, kHeight};
   /* Minimum required proximity properties for rigid bodies to interact with
    deformable bodies.
    1. A valid Coulomb friction coefficient, and
@@ -136,18 +135,53 @@ int do_main() {
   AddContactMaterial({}, {}, surface_friction, &rigid_proximity_props);
   rigid_proximity_props.AddProperty(geometry::internal::kHydroGroup,
                                     geometry::internal::kRezHint, 1.0);
-  plant.RegisterCollisionGeometry(top_body, RigidTransformd::Identity(), box,
-                                  "top_collision", rigid_proximity_props);
-  plant.RegisterCollisionGeometry(bottom_body, RigidTransformd::Identity(), box,
-                                  "bottom_collision", rigid_proximity_props);
+
+  auto g_top = plant.RegisterCollisionGeometry(
+      top_body, RigidTransformd::Identity(), box, "top_collision",
+      rigid_proximity_props);
+  RigidTransformd X_WBottom =
+      RigidTransformd(Vector3d(0, 0, -kRadius - kHeight / 2.0));
+  auto g_bottom = plant.RegisterCollisionGeometry(plant.world_body(), X_WBottom,
+                                                  box, "bottom_collision",
+                                                  rigid_proximity_props);
 
   IllustrationProperties illustration_props;
   illustration_props.AddProperty("phong", "diffuse",
                                  Vector4d(0.7, 0.5, 0.4, 0.8));
   plant.RegisterVisualGeometry(top_body, RigidTransformd::Identity(), box,
                                "top_visual", illustration_props);
-  plant.RegisterVisualGeometry(bottom_body, RigidTransformd::Identity(), box,
+  plant.RegisterVisualGeometry(plant.world_body(), X_WBottom, box,
                                "bottom_visual", illustration_props);
+
+  //   RigidTransformd X_WFront = RigidTransformd(
+  //       math::RollPitchYawd(0, -1.57, 0),
+  //       Eigen::Vector3d(-kCylinderLength / 2.0 - kHeight / 2.0, 0, 0));
+  //   RigidTransformd X_WBack = RigidTransformd(
+  //       math::RollPitchYawd(0, -1.57, 0),
+  //       Eigen::Vector3d(kCylinderLength / 2.0 + kHeight / 2.0, 0, 0));
+  //   auto g_front = plant.RegisterCollisionGeometry(
+  //       plant.world_body(), X_WFront, box, "front_wall",
+  //       rigid_proximity_props);
+  //   auto g_back = plant.RegisterCollisionGeometry(
+  //       plant.world_body(), X_WBack, box, "back_wall",
+  //       rigid_proximity_props);
+
+  //   IllustrationProperties illustration_props_2;
+  //   illustration_props_2.AddProperty("phong", "diffuse",
+  //                                    Vector4d(0.7, 0.5, 0.4, 0.2));
+  //   plant.RegisterVisualGeometry(plant.world_body(), X_WFront, box,
+  //                                "front_visual", illustration_props_2);
+  //   plant.RegisterVisualGeometry(plant.world_body(), X_WBack, box,
+  //   "back_visual",
+  //                                illustration_props_2);
+
+  //   scene_graph.collision_filter_manager().Apply(
+  //       CollisionFilterDeclaration().ExcludeWithin(
+  //           GeometrySet({g_front, g_back, g_top, g_bottom})));
+
+  scene_graph.collision_filter_manager().Apply(
+      CollisionFilterDeclaration().ExcludeWithin(
+          GeometrySet({g_top, g_bottom})));
 
   /* Set up a deformable cylinder. */
   auto owned_deformable_model =
@@ -163,7 +197,7 @@ int do_main() {
   const math::RigidTransform<double> X_WG = math::RigidTransform<double>(
       math::RollPitchYaw(0.0, -1.57, 0.0), Eigen::Vector3d(0.0, 0.0, 0.0));
   const std::string cylinder_vtk = FindResourceOrThrow(
-      "drake/examples/multibody/cylinder_press/cylinder.vtk");
+      "drake/examples/multibody/cylinder_press/cylinder_fine.vtk");
   auto cylinder_mesh = std::make_unique<Mesh>(cylinder_vtk, 0.2);
   auto cylinder_instance = std::make_unique<GeometryInstance>(
       X_WG, std::move(cylinder_mesh), "deformable_cylinder");
@@ -194,7 +228,7 @@ int do_main() {
   /* Add a visualizer that emits LCM messages for visualization. */
   geometry::DrakeVisualizerd::AddToBuilder(&builder, scene_graph);
 
-  const auto& control = *builder.AddSystem<ForceControl>(FLAGS_t0, FLAGS_k);
+  const auto& control = *builder.AddSystem<ForceControl>(FLAGS_k);
   builder.Connect(control.get_output_port(), plant.get_actuation_input_port());
 
   auto state_logger =
@@ -209,8 +243,7 @@ int do_main() {
   /* Set initial conditions for the gripper. */
   auto& plant_context =
       diagram->GetMutableSubsystemContext(plant, diagram_context.get());
-  top_joint.set_translation(&plant_context, -0.23);
-  bottom_joint.set_translation(&plant_context, -0.23);
+  top_joint.set_translation(&plant_context, kRadius + kHeight / 2.0);
 
   /* Build the simulator and run! */
   systems::Simulator<double> simulator(*diagram, std::move(diagram_context));
@@ -222,21 +255,18 @@ int do_main() {
   const auto& state_log = state_logger->FindLog(simulator.get_context());
 
   std::cout << "Forces" << std::endl;
-  const VectorXd force = force_log.data().row(0) / 0.2;
+  const VectorXd force = -force_log.data().row(0) / kCylinderLength;
   std::cout << force << std::endl;
   std::cout << "States" << std::endl;
   const int num_states = state_log.data().cols();
   // Distance between center of two plates.
-  const VectorXd distance =
-      -(state_log.data().row(0) + state_log.data().row(1));
+  VectorXd position = state_log.data().row(0);
   const VectorXd displacement =
-      VectorXd::Constant(num_states, 0.4) -
-      (distance - VectorXd::Constant(num_states, 0.06));
+      VectorXd::Constant(num_states, kRadius + kHeight / 2.0) - position;
   std::cout << displacement << std::endl;
 
   std::ofstream file("data.txt");
-  if (file.is_open())
-  {
+  if (file.is_open()) {
     Eigen::MatrixXd data(num_states, 2);
     data.col(0) = displacement;
     data.col(1) = force;

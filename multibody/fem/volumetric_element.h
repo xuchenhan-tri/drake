@@ -478,6 +478,9 @@ class VolumetricElement
         dxdxi = isoparametric_element_.CalcJacobian(element_q_reshaped);
     for (int quad = 0; quad < num_quadrature_points; ++quad) {
       F[quad] = dxdxi[quad] * dxidX_[quad];
+    F[quad].row(0).setZero();
+    F[quad].col(0).setZero();
+    F[quad](0,0) = 1.0;
     }
     return F;
   }
