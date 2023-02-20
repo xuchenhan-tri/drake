@@ -189,7 +189,7 @@ class _ViewerApplet:
         f_start_index = v_start_index + 3 * num_verts
         vertices = np.array(geom.float_data[v_start_index:f_start_index])
         faces = np.array(geom.float_data[f_start_index:]).astype(int)
-        vertices = np.reshape(vertices, (3, num_verts), order='F')
+        vertices = np.reshape(vertices, (3, num_verts), order='F')/10.0
         faces = np.reshape(faces, (3, num_faces), order='F')
         rgba = Rgba(*geom.color)
         pose = self._to_pose(geom.position, geom.quaternion)

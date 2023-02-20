@@ -119,17 +119,32 @@ int do_main() {
                                   rigid_proximity_props);
   IllustrationProperties illustration_props;
   illustration_props.AddProperty("phong", "diffuse",
-                                 Vector4d(0.7, 0.5, 0.4, 0.8));
+                                 Vector4d(0.7, 0.5, 0.4, 1.0));
   plant.RegisterVisualGeometry(plant.world_body(), X_WB1, base, "base1_visual",
                                illustration_props);
   plant.RegisterVisualGeometry(plant.world_body(), X_WB2, base, "base2_visual",
                                illustration_props);
-  Box ground{100, 100, 40};
+  Box ground{400, 400, 40};
   const RigidTransformd X_WG(Eigen::Vector3d{0.0, 0, -31.4});
   plant.RegisterCollisionGeometry(plant.world_body(), X_WG, ground, "ground",
                                   rigid_proximity_props);
-  plant.RegisterVisualGeometry(plant.world_body(), X_WG, ground, "ground",
+  // plant.RegisterVisualGeometry(plant.world_body(), X_WG, ground, "ground",
+  //                              illustration_props);
+
+  const RigidTransformd X_WB3(Eigen::Vector3d{-3.6, 0, -0.64});
+  const RigidTransformd X_WB4(Eigen::Vector3d{3.6, 0, -0.64});
+  const RigidTransformd X_WG2(Eigen::Vector3d{0.0, 0, -3.14});
+  Box ground2{100, 100, 4};
+  Box base2{1, 1, 1};
+  IllustrationProperties illustration_props2;
+  illustration_props2.AddProperty("phong", "diffuse",
+                                 Vector4d(0.8, 0.8, 0.8, 1.0));
+  plant.RegisterVisualGeometry(plant.world_body(), X_WG2, ground2, "ground2",
                                illustration_props);
+  plant.RegisterVisualGeometry(plant.world_body(), X_WB3, base2, "base3_visual",
+                               illustration_props2);
+  plant.RegisterVisualGeometry(plant.world_body(), X_WB4, base2, "base4_visual",
+                               illustration_props2);
 
   /* Set up deformable blocks. */
   auto owned_deformable_model =
@@ -153,7 +168,7 @@ int do_main() {
       filename = "arch_without_gap_" + ss.str() + ".vtk";
     }
     Vector4d rgba =
-        (i % 2) ? Vector4d(0.333, 0.333, 0.333, 0.9) : Vector4d(1, 0, 0, 0.9);
+        (i % 2) ? Vector4d(0.333, 0.333, 0.333, 1.0) : Vector4d(1, 0, 0, 1.0);
     AddArch(owned_deformable_model.get(), deformable_config, dir + filename,
             &body_ids, rgba);
   }
