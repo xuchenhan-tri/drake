@@ -21,7 +21,7 @@
 #include "drake/systems/primitives/vector_log_sink.h"
 
 DEFINE_double(simulation_time, 500, "Desired duration of the simulation [s].");
-DEFINE_double(realtime_rate, 1.0, "Desired real time rate.");
+DEFINE_double(realtime_rate, 0.0, "Desired real time rate.");
 DEFINE_double(time_step, 1.0e-2,
               "Discrete time step for the system [s]. Must be positive.");
 DEFINE_double(E, 3e3, "Young's modulus of the deformable body [kPa].");
@@ -197,7 +197,7 @@ int do_main() {
   const math::RigidTransform<double> X_WG = math::RigidTransform<double>(
       math::RollPitchYaw(0.0, -1.57, 0.0), Eigen::Vector3d(0.0, 0.0, 0.0));
   const std::string cylinder_vtk = FindResourceOrThrow(
-      "drake/examples/multibody/cylinder_press/cylinder_finest.vtk");
+      "drake/examples/multibody/cylinder_press/cylinder_finer.vtk");
   auto cylinder_mesh = std::make_unique<Mesh>(cylinder_vtk, 0.2);
   auto cylinder_instance = std::make_unique<GeometryInstance>(
       X_WG, std::move(cylinder_mesh), "deformable_cylinder");
