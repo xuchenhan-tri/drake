@@ -14,6 +14,7 @@ drake_cc_binary(
     data = [
         "cylinder.vtk",
         "cylinder_fine.vtk",
+        "cylinder_finer.vtk",
         "cylinder_finest.vtk",
         "cylinder_coarse.vtk",
     ],

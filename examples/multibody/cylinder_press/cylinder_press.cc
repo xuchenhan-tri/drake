@@ -27,12 +27,12 @@ DEFINE_double(time_step, 1.0e-2,
 DEFINE_double(E, 3e3, "Young's modulus of the deformable body [kPa].");
 DEFINE_double(nu, 0.45, "Poisson's ratio of the deformable body, unitless.");
 DEFINE_double(density, 0.001, "Mass density of the deformable body [kton/m³].");
-DEFINE_double(beta, 0.7,
+DEFINE_double(beta, 0.5,
               "Stiffness damping coefficient for the deformable body [1/s].");
 DEFINE_double(alpha, 0.0,
               "Mass damping coefficient for the deformable body [s].");
 DEFINE_double(t0, 0.0, "Time to start pressing [s].");
-DEFINE_double(k, 0.000112, "Slope of force [mN/s].");
+DEFINE_double(k, 0.000056, "Slope of force [mN/s].");
 
 using drake::geometry::AddContactMaterial;
 using drake::geometry::Box;
@@ -100,7 +100,7 @@ class ForceControl : public systems::LeafSystem<double> {
 };
 
 int do_main() {
-  const double kCylinderLength = 0.04;
+  const double kCylinderLength = 0.02;
   const double kRadius = 0.2;
   systems::DiagramBuilder<double> builder;
 
@@ -197,7 +197,7 @@ int do_main() {
   const math::RigidTransform<double> X_WG = math::RigidTransform<double>(
       math::RollPitchYaw(0.0, -1.57, 0.0), Eigen::Vector3d(0.0, 0.0, 0.0));
   const std::string cylinder_vtk = FindResourceOrThrow(
-      "drake/examples/multibody/cylinder_press/cylinder_fine.vtk");
+      "drake/examples/multibody/cylinder_press/cylinder_finest.vtk");
   auto cylinder_mesh = std::make_unique<Mesh>(cylinder_vtk, 0.2);
   auto cylinder_instance = std::make_unique<GeometryInstance>(
       X_WG, std::move(cylinder_mesh), "deformable_cylinder");
