@@ -32,7 +32,7 @@ DEFINE_double(teddy_nu, 0.4, "Poisson's ratio of the deformable body, unitless."
 DEFINE_double(teddy_density, 1000, "Mass density of the deformable body [kg/m³].");
 DEFINE_double(teddy_beta, 0.01,
               "Stiffness damping coefficient for the deformable body [1/s].");
-DEFINE_double(bubble_E, 5e3, "Young's modulus of the deformable body [Pa].");
+DEFINE_double(bubble_E, 2e4, "Young's modulus of the deformable body [Pa].");
 DEFINE_double(bubble_nu, 0.3, "Poisson's ratio of the deformable body, unitless.");
 DEFINE_double(bubble_density, 1000, "Mass density of the deformable body [kg/m³].");
 DEFINE_double(bubble_beta, 0.01,
@@ -95,6 +95,7 @@ class GripperPositionControl : public systems::LeafSystem<double> {
       : initial_state_(0, -open_width / 2),
         closed_state_(0, -closed_width / 2),
         lifted_state_(height, -closed_width / 2),
+        shake_state_(height-0.05, -closed_width / 2),
         open_state_(height, -open_width / 2) {
     this->DeclareVectorOutputPort("gripper force", BasicVector<double>(2),
                                   &GripperPositionControl::SetAppliedForce);
@@ -132,6 +133,32 @@ class GripperPositionControl : public systems::LeafSystem<double> {
       desired_positions = theta * lifted_state_ + (1.0 - theta) * closed_state_;
     } else if (t < hold_time_) {
       desired_positions = lifted_state_;
+    } else if (t < down1_) {
+      const double end_time = down1_ - hold_time_;
+      const double theta = (t - hold_time_) / end_time;
+      desired_positions = theta * shake_state_ + (1.0 - theta) * lifted_state_;
+    } else if (t < up1_) {
+      const double end_time = up1_ - down1_;
+      const double theta = (t - down1_) / end_time;
+      desired_positions = theta * lifted_state_ + (1.0 - theta) * shake_state_;
+    } else if (t < down2_) {
+      const double end_time = down2_ - up1_;
+      const double theta = (t - up1_) / end_time;
+      desired_positions = theta * shake_state_ + (1.0 - theta) * lifted_state_;
+    } else if (t < up2_) {
+      const double end_time = up2_ - down2_;
+      const double theta = (t - down2_) / end_time;
+      desired_positions = theta * lifted_state_ + (1.0 - theta) * shake_state_;
+    } else if (t < down3_) {
+      const double end_time = down3_ - up2_;
+      const double theta = (t - up2_) / end_time;
+      desired_positions = theta * shake_state_ + (1.0 - theta) * lifted_state_;
+    } else if (t < up3_) {
+      const double end_time = up3_ - down3_;
+      const double theta = (t - down3_) / end_time;
+      desired_positions = theta * lifted_state_ + (1.0 - theta) * shake_state_;
+    } else if (t < hold_time2_) {
+      desired_positions = lifted_state_;
     } else if (t < fingers_open_time_) {
       const double end_time = fingers_open_time_ - hold_time_;
       const double theta = (t - hold_time_) / end_time;
@@ -150,11 +177,19 @@ class GripperPositionControl : public systems::LeafSystem<double> {
   /* The time at which the gripper reaches the desired "lifted" state. */
   const double gripper_lifted_time_{5.0};
   const double hold_time_{7};
+  const double down1_{7.1};
+  const double up1_{7.2};
+  const double down2_{7.3};
+  const double up2_{7.4};
+  const double down3_{7.5};
+  const double up3_{7.6};
+  const double hold_time2_{8.3};
   /* The time at which the fingers reach the desired open state. */
-  const double fingers_open_time_{8.5};
+  const double fingers_open_time_{9.5};
   Vector2d initial_state_;
   Vector2d closed_state_;
   Vector2d lifted_state_;
+  Vector2d shake_state_;
   Vector2d open_state_;
   const double kp_{1000};
   const double kd_{60.0};
