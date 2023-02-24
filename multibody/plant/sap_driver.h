@@ -231,6 +231,8 @@ class SapDriver {
   VectorX<T> joint_damping_;
   // Parameters for SAP.
   contact_solvers::internal::SapSolverParameters sap_parameters_;
+  mutable int t_{0};
+  mutable int m_{0};
 };
 
 }  // namespace internal

@@ -678,6 +678,9 @@ void SapDriver<T>::CalcContactProblemCache(
   AddDistanceConstraints(context, &problem);
   AddBallConstraints(context, &problem);
   AddPdControllerConstraints(context, &problem);
+  t_ += problem.num_constraints();
+  m_ = std::max(m_, problem.num_constraints());
+  std::cout << t_ << "  " << m_ << std::endl;
 }
 
 template <typename T>
