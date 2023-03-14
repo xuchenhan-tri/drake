@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <utility>
 
 #include "drake/common/drake_copyable.h"
 #include "drake/common/eigen_types.h"
@@ -125,11 +126,17 @@ class SapHolonomicConstraint final : public SapConstraint<T> {
 
    @pre clique is non-negative.
    @pre g.size() == J.rows() == parameters.num_constraint_equations(). */
-  SapHolonomicConstraint(int clique, VectorX<T> g, MatrixX<T> J,
+  SapHolonomicConstraint(int clique, VectorX<T> g, MatrixBlock<T> J,
                          Parameters parameters);
 
-  /* Constructs a holonomic constraint involving two cliques. The bias term b is
-   zero.
+  /* Alternative holonomic constraint constructor for a single clique that takes
+   a dense Jacobian. */
+  SapHolonomicConstraint(int clique, VectorX<T> g, MatrixX<T> J,
+                         Parameters parameters)
+      : SapHolonomicConstraint(clique, std::move(g),
+                               MatrixBlock<T>(std::move(J)), parameters) {}
+
+  /* Constructs a holonomic constraint involving two cliques.
    @param[in] first_clique First clique involved in the constraint.
    @param[in] second_clique Second clique involved in the constraint.
    @param[in] g The value of the constraint function.
@@ -143,8 +150,18 @@ class SapHolonomicConstraint final : public SapConstraint<T> {
    @pre g.size() == J_first_clique.rows() == J_second_clique.rows() ==
    parameters.num_constraint_equations(). */
   SapHolonomicConstraint(int first_clique, int second_clique, VectorX<T> g,
+                         MatrixBlock<T> J_first_clique,
+                         MatrixBlock<T> J_second_clique, Parameters parameters);
+
+  /* Alternative holonomic constraint constructor for two cliques that takes a
+   dense Jacobian. */
+  SapHolonomicConstraint(int first_clique, int second_clique, VectorX<T> g,
                          MatrixX<T> J_first_clique, MatrixX<T> J_second_clique,
-                         Parameters parameters);
+                         Parameters parameters)
+      : SapHolonomicConstraint(first_clique, second_clique, std::move(g),
+                               MatrixBlock<T>(std::move(J_first_clique)),
+                               MatrixBlock<T>(std::move(J_second_clique)),
+                               parameters) {}
 
   /* Single clique holonomic constraints with non-zero bias.
    @param[in] clique The clique involved in the constraint.
