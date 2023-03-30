@@ -4,6 +4,7 @@
 #include <iostream>
 #include <memory>
 #include <numeric>
+#include <queue>
 #include <set>
 #include <utility>
 #include <vector>
@@ -18,15 +19,136 @@ using Vector4i = Vector4<int>;
 using contact_solvers::internal::PartialPermutation;
 using std::vector;
 
+/* Computes a union b. */
+std::set<int> Union(const std::set<int>& a, const std::set<int>& b) {
+  std::set<int> result;
+  std::set_union(a.begin(), a.end(), b.begin(), b.end(),
+                 std::inserter(result, result.begin()));
+  return result;
+}
+
+/* Computes a\b. */
+std::set<int> SetDifference(const std::set<int>& a, const std::set<int>& b) {
+  std::set<int> result;
+  std::set_difference(a.begin(), a.end(), b.begin(), b.end(),
+                      std::inserter(result, result.begin()));
+  return result;
+}
+
+/* Notation taken from Algorithm 1 in An Approximate Minimum Degree Ordering
+ Algorithm. */
+struct Node {
+  void UpdateExternalDegree(const std::vector<Node>& nodes) {
+    degree = 0;
+    for (int a : A) {
+      degree += nodes[a].size;
+    }
+    std::set<int> L_union;
+    for (int e : E) {
+      L_union = Union(L_union, nodes[e].L);
+    }
+    L_union.erase(index);
+    for (int l : L_union) {
+      degree += nodes[l].size;
+    }
+  }
+
+  std::set<int> A;
+  std::set<int> E;
+  int degree;
+  std::set<int> L;
+  int size;
+  int index;
+};
+
+/* A simplified version of Node. Only contains index of the node and the degree.
+ */
+struct IndexDegreeNode {
+  int degree;
+  int index;
+};
+
+bool operator>(const IndexDegreeNode& a, const IndexDegreeNode& b) {
+  return a.degree > b.degree;
+}
+
 /* Computes the elimination of the matrix with the given `adjacency_graph` that
  CHOLMOD thinks is the best. For example if the result is [1, 3, 0, 2], it means
  that we should first eliminate vertex 1, then 3, 0, and 2. In other words, this
  is a permutation mapping from new vertex indices to old indices. */
 std::vector<int> CalcEliminationOrdering(
     const BlockSparsityPattern& block_sparsity_pattern) {
-  // TODO(xuchenhan-tri): Use AMD ordering.
-  std::vector<int> result(block_sparsity_pattern.diagonals.size());
-  std::iota(result.begin(), result.end(), 0);
+  /* Intialize for AMD algorithm. */
+  int num_nodes = block_sparsity_pattern.diagonals.size();
+  std::vector<Node> nodes(num_nodes);
+  for (int n = 0; n < num_nodes; ++n) {
+    nodes[n].index = n;
+    nodes[n].size = block_sparsity_pattern.diagonals[n];
+  }
+  for (int n = 0; n < num_nodes; ++n) {
+    Node& node = nodes[n];
+    std::vector<int> neighbors = block_sparsity_pattern.sparsity_pattern[n];
+    for (int neighbor : neighbors) {
+      // We modify both `node` and `neighbor` here because for each ij-pair only
+      // one of (i, j) and (j, i) is recorded in `sparsity pattern` but we want
+      // j be part of Ai and i to be part of Aj.
+      node.A.emplace(neighbor);
+      node.degree += nodes[neighbor].size;
+      nodes[neighbor].A.emplace(n);
+      nodes[neighbor].degree += node.size;
+    }
+  }
+  std::priority_queue<IndexDegreeNode, std::vector<IndexDegreeNode>,
+                      std::greater<IndexDegreeNode>>
+      pq;
+  // Put all nodes in the priority queue.
+  for (int n = 0; n < num_nodes; ++n) {
+    IndexDegreeNode node = {.degree = nodes[n].degree, .index = n};
+    pq.emplace(node);
+  }
+
+  std::vector<int> result(num_nodes);
+  /* Begin elimination. */
+  for (int k = 0; k < num_nodes; ++k) {
+    IndexDegreeNode pq_node = pq.top();
+    /* Pop stale priority queue elements because std::priority_queue can't
+     replace nodes. */
+    while (pq_node.degree != nodes[pq_node.index].degree) {
+      pq.pop();
+      pq_node = pq.top();
+    }
+    pq.pop();
+    int p = pq_node.index;
+    result[k] = p;
+    Node& node_p = nodes[p];
+    /* Form Lp */
+    node_p.L = node_p.A;
+    for (int e : node_p.E) {
+      node_p.L = Union(node_p.L, nodes[e].L);
+    }
+    node_p.L.erase(p);
+
+    for (int i : node_p.L) {
+      Node& node_i = nodes[i];
+      // Remove redundant entries.
+      node_i.A = SetDifference(node_i.A, node_p.L);
+      node_i.A.erase(p);
+      // Element absorption.
+      node_i.E = SetDifference(node_i.E, node_p.E);
+      node_i.E.insert(p);
+      // Compute external degree.
+      node_i.UpdateExternalDegree(nodes);
+
+      IndexDegreeNode new_node = {.degree = node_i.degree,
+                                  .index = node_i.index};
+      pq.emplace(new_node);
+    }
+    // Convert node_p to element p.
+    node_p.A.clear();
+    node_p.E.clear();
+    node_p.degree = -1;
+  }
+
   return result;
 }
 

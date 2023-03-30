@@ -148,7 +148,7 @@ drake_cc_library(
         "//multibody/contact_solvers:block_sparse_matrix",
         "//multibody/contact_solvers:newton_with_bisection",
         "//multibody/contact_solvers:point_contact_data",
-        "//multibody/contact_solvers:supernodal_solver",
+        "//multibody/contact_solvers:supernodal_solver2",
         "//multibody/contact_solvers:system_dynamics_data",
     ],
 )
