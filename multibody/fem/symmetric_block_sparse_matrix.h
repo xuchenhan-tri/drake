@@ -1,6 +1,7 @@
 #pragma once
 
 #include <set>
+#include <algorithm>
 #include <utility>
 #include <vector>
 
@@ -14,46 +15,64 @@ namespace multibody {
 namespace fem {
 namespace internal {
 
-/* The sparsity pattern of a symmetric block sparse matrix. Each diagonal block
- is always non-zero and square and the number of its rows (and cols) is stored
- in `diagonals`. Off diagonal blocks may or may not be nonzero and is dictated
- by `sparsity_pattern`. The number of blocks in column c is given by
- `sparsity_pattern[c].size()`. `sparsity_pattern[c][i]` gives the block row
- index of the i-th block in the c-th block column. In addition,
- sparsity_pattern[c][i] >= c. In other words, only the lower triangular part of
- the sparsity pattern is specified. We require `sparsity_pattern[c]` to be
- sorted for each c. As a result, we have sparsity_pattern[c][0] = c for each c
- since the diagonal block is always nonzero. */
-struct BlockSparsityPattern {
-  std::vector<int> diagonals;
-  std::vector<std::vector<int>> sparsity_pattern;
+/* The sparsity pattern of a block sparse matrix.
+ Each diagonal block is always non-zero and square, and the number of its rows
+ (and columns) is stored in `block_sizes`.
+ `neighbors` describes whether off diagonal blocks are nonzero or
+ not. `neighbors[c][i]` gives the block row index of the i-th nonzero block in
+ the c-th block column. We require that `neighbors[c]` is sorted for each block
+ column c and that each entry in `neighbors[c]` is greater than or equal to c.
+ In other words, only the lower triangular part of the sparsity pattern is
+ specified. As a result, we have `neighbors[c][0] = c` for each c because all
+ diagonal blocks are nonzero. */
+class BlockSparsityPattern {
+ public:
+  DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(BlockSparsityPattern);
+  BlockSparsityPattern(std::vector<int> block_sizes,
+                       std::vector<std::vector<int>> neighbors)
+      : block_sizes_(std::move(block_sizes)), neighbors_(std::move(neighbors)) {
+    DRAKE_DEMAND(block_sizes_.size() == neighbors_.size());
+    for (int i = 0; i < static_cast<int>(block_sizes_.size()); ++i) {
+      DRAKE_DEMAND(neighbors_[i].size() > 0);
+      DRAKE_DEMAND(neighbors_[i].back() <
+                   static_cast<int>(block_sizes_.size()));
+      DRAKE_ASSERT(std::is_sorted(neighbors_[i].begin(), neighbors_[i].end()));
+      DRAKE_DEMAND(neighbors_[i][0] == i);
+    }
+  }
+
+  const std::vector<int>& block_sizes() const { return block_sizes_; };
+  const std::vector<std::vector<int>>& neighbors() const { return neighbors_; };
+
+ private:
+  std::vector<int> block_sizes_;
+  std::vector<std::vector<int>> neighbors_;
 };
 
 /* This class provides a representation for sparse matrices with a structure
  consisting of dense blocks. It is similar to
- contact_solvers::internal::BlockSparseMatrix in that it enables efficient
- algorithms capable of exploiting highly optimized operations with dense blocks.
- It differs from BlockSparseMatrix in a few aspects:
-
-  2. It is tailored to symmetric matrices and only stores the lower triangular
-     part of the matrix.
-  3. It allows modification to the data (but not the sparsity pattern) after
+ drake::multibody::contact_solvers::internal::BlockSparseMatrix in that it
+ enables efficient algorithms capable of exploiting highly optimized operations
+ with dense blocks. It differs from BlockSparseMatrix in a few aspects:
+  1. We only store the lower triangular portion of the matrix with a flag to
+     make the matrix either lower triangular or symmetric.
+  2. It allows modification to the data (but not the sparsity pattern) after
      construction. Therefore, it is suitable for storing matrices with constant
      sparsity pattern and mutable data.
-
- In particular, these features make SymmetricBlockSparseMatrix suitable for
- storing the stiffness/damping/tangent matrix of an FEM model, where the matrix
- has constant sparsity pattern and is symmetric.
  @tparam_nonsymbolic_scalar */
 template <typename T>
-class SymmetricBlockSparseMatrix {
+class TriangularBlockSparseMatrix {
  public:
-  DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(SymmetricBlockSparseMatrix);
+  DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(TriangularBlockSparseMatrix);
 
-  /* Constructs a SymmetricBlockSparseMatrix with the given block sparsity
-   pattern. */
-  explicit SymmetricBlockSparseMatrix(
-      BlockSparsityPattern block_sparsity_pattern);
+  /* Constructs a TriangularBlockSparseMatrix with the given block sparsity
+   pattern.
+   @param sparsity_pattern  The block sparsity pattern of lower triangular part
+                            of the matrix.
+   @param is_symmetric      If true, the lower triangular matrix implicitly
+                            represents a symmetric matrix. */
+  TriangularBlockSparseMatrix(BlockSparsityPattern sparsity_pattern,
+                             bool is_symmetric);
 
   int rows() const { return cols_; }
   int cols() const { return cols_; }
@@ -61,34 +80,35 @@ class SymmetricBlockSparseMatrix {
   int block_cols() const { return block_cols_; }
 
   /* Adds Aij to the ij-th block of this matrix.
-   @pre Aij = Aij.transpose() if i==j.
-   @pre The size of Aij is compatible to the ij-th block specified at
-   construction. */
+   @pre Aij = Aij.transpose() if i==j and is_symmetric() is true.
+   @pre The size of Aij is compatible to the size of ij-th block implied by the
+   sparsity pattern at construction. */
   void AddToBlock(int i, int j, const Eigen::Ref<const MatrixX<T>>& Aij);
-
-  /* For the ij-th block M, do M -= A * Bᵀ.
-   @pre The size of A * Bᵀ is compatible to the ij-th block specified at
-   construction. */
-  void SubtractProductFromBlock(int i, int j, const MatrixX<T>& A,
-                                const MatrixX<T>& B) {
-    DRAKE_ASSERT(A.cols() == B.cols());
-    DRAKE_ASSERT(A.rows() == block_sparsity_pattern_.diagonals[i]);
-    DRAKE_ASSERT(B.rows() == block_sparsity_pattern_.diagonals[j]);
-    const int index = block_row_to_flat_[j][i];
-    blocks_[j][index] -= A * B.transpose();
-  }
-
-  /* Returns the flat-th block in j-th block_column. */
-  const MatrixX<T>& get_block_flat(int flat, int j) const {
-    return blocks_[j][flat];
-  }
 
   /* Similar to AddToBlock, but overwrites instead of accumulates. */
   void SetBlock(int i, int j, MatrixX<T> Aij);
+
+  /* (Advanced) Similar to SetBlock, but uses flat indices instead of block row
+   indices. This is slightly faster than SetBlock. */
   void SetBlockFlat(int flat, int j, MatrixX<T> Aij) {
     blocks_[j][flat] = std::move(Aij);
   }
 
+  /* For the ij-th block M, does M -= A * Bᵀ.
+   @pre The size of A * Bᵀ is compatible to the size of ij-th block implied by
+   the sparsity pattern at construction.
+   @pre has_block(i, j) == true */
+  void SubtractProductFromBlock(int i, int j, const MatrixX<T>& A,
+                                const MatrixX<T>& B) {
+    DRAKE_ASSERT(A.cols() == B.cols());
+    DRAKE_ASSERT(A.rows() == sparsity_pattern_.block_sizes()[i]);
+    DRAKE_ASSERT(B.rows() == sparsity_pattern_.block_sizes()[j]);
+    const int index = block_row_to_flat_[j][i];
+    blocks_[j][index] -= A * B.transpose();
+  }
+
+  /* Sets the numerical values of all nonzero blocks to zero without changing
+   the sparsity pattern. */
   void SetZero();
 
   MatrixX<T> MakeDenseMatrix() const;
@@ -103,51 +123,61 @@ class SymmetricBlockSparseMatrix {
 
   /* Returns the ij-th block.
    @pre has_block(i,j) == true. */
-  const MatrixX<T>& get_block(int i, int j) const {
+  const MatrixX<T>& block(int i, int j) const {
+    DRAKE_ASSERT(has_block(i, j));
+    return blocks_[j][block_row_to_flat_[j][i]];
+  }
+
+  /* Returns the mutable ij-th block.
+   @pre has_block(i,j) == true. */
+  MatrixX<T>& mutable_block(int i, int j) {
     DRAKE_ASSERT(has_block(i, j));
     return blocks_[j][block_row_to_flat_[j][i]];
   }
 
   /* Returns the i-th diagonal block. */
-  const MatrixX<T>& get_diagonal_block(int i) const {
+  const MatrixX<T>& diagonal_block(int i) const {
+    DRAKE_ASSERT(0 <= i && i < block_cols_);
     /* Since block_rows are sorted with in each block column, the first entry is
      necessarily the diagonal. */
     return blocks_[i][0];
   }
 
-  /* Returns the mutable ij-th block.
-   @pre has_block(i,j) == true. */
-  MatrixX<T>& get_mutable_block(int i, int j) {
-    DRAKE_ASSERT(has_block(i, j));
-    return blocks_[j][block_row_to_flat_[j][i]];
+  /* (Advanced) Similar to `block`, but returns matrix blocks based on flat indices instead of block row indices. */
+  const MatrixX<T>& block_flat(int flat, int j) {
+    DRAKE_ASSERT(0 <= j && j < block_cols_);
+    return blocks_[j][flat];
   }
-
-  MatrixX<T>& get_mutable_block_flat(int flat, int j) {
+  MatrixX<T>& mutable_block_flat(int flat, int j) {
+    DRAKE_ASSERT(0 <= j && j < block_cols_);
     return blocks_[j][flat];
   }
 
-  const std::vector<int>& get_row_indices_in_col(int j) const {
+  /* Returns the sorted block row indices in the j-th block column. */
+  const std::vector<int>& block_row_indices(int j) const {
     DRAKE_DEMAND(0 <= j && j < block_cols_);
-    return block_sparsity_pattern_.sparsity_pattern[j];
+    return sparsity_pattern_.neighbors()[j];
   }
 
-  const BlockSparsityPattern& block_sparsity_pattern() const {
-    return block_sparsity_pattern_;
+  /* Returns the sparsity pattern of the matrix. */
+  const BlockSparsityPattern& sparsity_pattern() const {
+    return sparsity_pattern_;
   }
 
+  /* Returns the starting (scalar) column of each block column. */
   const std::vector<int>& starting_cols() const { return starting_cols_; }
 
  private:
-  friend class BlockSparseCholeskySolver;
-
-  int num_blocks_in_col(int j) const {
-    return get_row_indices_in_col(j).size();
+  /* The number of nonzero blocks in j-th column. */
+  int num_blocks(int j) const {
+    return block_row_indices(j).size();
   }
 
-  BlockSparsityPattern block_sparsity_pattern_;
+  BlockSparsityPattern sparsity_pattern_;
+  bool is_symmetric_{false};
   int block_cols_{};
   int cols_{};
-  /* The starting column of each column block. */
+  /* The starting (scalar) column of each block column. */
   std::vector<int> starting_cols_;
   /* Dense blocks stored in a 2d vector. The first index is the block column
    index and the second index is a flat index that can be retrieved from

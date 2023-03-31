@@ -68,13 +68,14 @@ MatrixXd MakeDenseMatrix() {
         -----------------
           0  | A21 | A22
 where A21 = A12.transpose(). */
-SymmetricBlockSparseMatrix<double> MakeBlockSparseMatrix() {
+TriangularBlockSparseMatrix<double> MakeBlockSparseMatrix() {
   vector<int> diag{2, 3, 4};
   vector<vector<int>> sparsity;
   sparsity.push_back({{0}});
   sparsity.push_back({{1, 2}});
   sparsity.push_back({{2}});
-  SymmetricBlockSparseMatrix<double> A_blocks({diag, sparsity});
+  BlockSparsityPattern pattern(diag, sparsity);
+  TriangularBlockSparseMatrix<double> A_blocks(pattern, true);
   A_blocks.SetBlock(0, 0, A00);
   A_blocks.SetBlock(1, 1, A11);
   A_blocks.SetBlock(2, 1, A21);
@@ -82,22 +83,22 @@ SymmetricBlockSparseMatrix<double> MakeBlockSparseMatrix() {
   return A_blocks;
 }
 
-GTEST_TEST(SymmetricBlockSparseMatrixTest, Construction) {
+GTEST_TEST(TriangularBlockSparseMatrixTest, Construction) {
   const MatrixXd A = MakeDenseMatrix();
-  const SymmetricBlockSparseMatrix<double> A_blocks = MakeBlockSparseMatrix();
+  const TriangularBlockSparseMatrix<double> A_blocks = MakeBlockSparseMatrix();
   EXPECT_TRUE(CompareMatrices(A_blocks.MakeDenseMatrix(), A));
 }
 
-GTEST_TEST(SymmetricBlockSparseMatrixTest, SetZero) {
-  SymmetricBlockSparseMatrix<double> A_blocks = MakeBlockSparseMatrix();
+GTEST_TEST(TriangularBlockSparseMatrixTest, SetZero) {
+  TriangularBlockSparseMatrix<double> A_blocks = MakeBlockSparseMatrix();
   A_blocks.SetZero();
   EXPECT_TRUE(
       CompareMatrices(A_blocks.MakeDenseMatrix(), MatrixXd::Zero(9, 9)));
 }
 
-GTEST_TEST(SymmetricBlockSparseMatrixTest, SubtractProductFromBlock) {
+GTEST_TEST(TriangularBlockSparseMatrixTest, SubtractProductFromBlock) {
   MatrixXd A = MakeDenseMatrix();
-  SymmetricBlockSparseMatrix<double> A_blocks = MakeBlockSparseMatrix();
+  TriangularBlockSparseMatrix<double> A_blocks = MakeBlockSparseMatrix();
   const MatrixXd M1 = MakeArbitraryMatrix(4, 5);
   const MatrixXd M2 = MakeArbitraryMatrix(3, 5);
   A_blocks.SubtractProductFromBlock(2, 1, M1, M2);
@@ -105,22 +106,6 @@ GTEST_TEST(SymmetricBlockSparseMatrixTest, SubtractProductFromBlock) {
   A.block<3, 4>(2, 5) -= M2 * M1.transpose();
   EXPECT_TRUE(CompareMatrices(A_blocks.MakeDenseMatrix(), A));
 }
-
-// GTEST_TEST(SymmetricBlockSparseMatrixTest, CalcAdjacencyGrpah) {
-//   const SymmetricBlockSparseMatrix<double> A_blocks =
-//   MakeBlockSparseMatrix(); const std::vector<std::set<int>> adj =
-//   A_blocks.CalcAdjacencyGraph(); ASSERT_EQ(adj.size(), 3);
-
-//   EXPECT_EQ(adj[0].size(), 1);
-//   EXPECT_EQ(adj[0].count(0), 1);
-
-//   EXPECT_EQ(adj[1].size(), 2);
-//   EXPECT_EQ(adj[1].count(1), 1);
-//   EXPECT_EQ(adj[1].count(2), 1);
-
-//   EXPECT_EQ(adj[2].size(), 1);
-//   EXPECT_EQ(adj[2].count(2), 1);
-// }
 
 }  // namespace
 }  // namespace internal
