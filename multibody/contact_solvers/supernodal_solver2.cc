@@ -1,16 +1,16 @@
-#include <algorithm>
-#include <iostream>
-#include <utility>
-
 #include "drake/multibody/contact_solvers/supernodal_solver2.h"
+
+#include <algorithm>
+#include <set>
+#include <utility>
 
 using Eigen::MatrixXd;
 using std::vector;
 using MatrixBlock = std::pair<Eigen::MatrixXd, std::vector<int>>;
 using MatrixBlocks = std::vector<MatrixBlock>;
-using drake::multibody::fem::internal::SymmetricBlockSparseMatrix;
 using drake::multibody::fem::internal::BlockSparseCholeskySolver;
 using drake::multibody::fem::internal::BlockSparsityPattern;
+using drake::multibody::fem::internal::TriangularBlockSparseMatrix;
 
 namespace drake {
 namespace multibody {
@@ -179,9 +179,10 @@ SuperNodalSolver2::SuperNodalSolver2(
   for (int i = 0; i < num_nodes; ++i) {
     sparsity2[i] = std::vector<int>(sparsity[i].begin(), sparsity[i].end());
   }
-  BlockSparsityPattern block_sparsity_pattern = {
-      .diagonals = block_sizes, .sparsity_pattern = sparsity2};
-  A_ = std::make_unique<SymmetricBlockSparseMatrix<double>>(std::move(block_sparsity_pattern));
+  BlockSparsityPattern block_sparsity_pattern = {.diagonals = block_sizes,
+                                                 .sparsity_pattern = sparsity2};
+  A_ = std::make_unique<TriangularBlockSparseMatrix<double>>(
+      std::move(block_sparsity_pattern), true);
   solver_->SetMatrix(*A_);
 }
 
@@ -200,7 +201,8 @@ void SuperNodalSolver2::SetWeightMatrix(
   int weight_end = 0;
   for (int k = 0; k < num_constraints; ++k) {
     const std::vector<int>& triplets = row_to_triplet_list_[k];
-    const int num_constraint_equations = std::get<2>(jacobian_blocks_[triplets[0]]).rows();
+    const int num_constraint_equations =
+        std::get<2>(jacobian_blocks_[triplets[0]]).rows();
     int G_rows = 0;
     while (G_rows < num_constraint_equations) {
       G_rows += weight_matrix[weight_end++].rows();
@@ -209,8 +211,8 @@ void SuperNodalSolver2::SetWeightMatrix(
 
     if (triplets.size() == 1) {
       const MatrixBlock<double>& J = std::get<2>(jacobian_blocks_[triplets[0]]);
-      MatrixBlock<double> GJ =
-          J.LeftMultiplyByBlockDiagonal(weight_matrix, weight_start, weight_end-1);
+      MatrixBlock<double> GJ = J.LeftMultiplyByBlockDiagonal(
+          weight_matrix, weight_start, weight_end - 1);
       MatrixXd JTGJ = MatrixXd::Zero(J.cols(), J.cols());
       J.TransposeAndMultiplyAndAddTo(GJ, &JTGJ);
       int c = std::get<1>(jacobian_blocks_[triplets[0]]);
@@ -225,10 +227,10 @@ void SuperNodalSolver2::SetWeightMatrix(
       const MatrixBlock<double>& Ji =
           std::get<2>(jacobian_blocks_[triplets[1]]);
 
-      MatrixBlock<double> GJj =
-          Jj.LeftMultiplyByBlockDiagonal(weight_matrix, weight_start, weight_end-1);
-      MatrixBlock<double> GJi =
-          Ji.LeftMultiplyByBlockDiagonal(weight_matrix, weight_start, weight_end-1);
+      MatrixBlock<double> GJj = Jj.LeftMultiplyByBlockDiagonal(
+          weight_matrix, weight_start, weight_end - 1);
+      MatrixBlock<double> GJi = Ji.LeftMultiplyByBlockDiagonal(
+          weight_matrix, weight_start, weight_end - 1);
 
       MatrixXd JiTGJi = MatrixXd::Zero(Ji.cols(), Ji.cols());
       MatrixXd JiTGJj = MatrixXd::Zero(Ji.cols(), Jj.cols());
@@ -238,9 +240,9 @@ void SuperNodalSolver2::SetWeightMatrix(
       Ji.TransposeAndMultiplyAndAddTo(GJj, &JiTGJj);
       Jj.TransposeAndMultiplyAndAddTo(GJj, &JjTGJj);
 
-      A_->AddToBlock(i, j, std::move(JiTGJj));
-      A_->AddToBlock(i, i, std::move(JiTGJi));
-      A_->AddToBlock(j, j, std::move(JjTGJj));
+      A_->AddToBlock(i, i, JiTGJi);
+      A_->AddToBlock(i, j, JiTGJj);
+      A_->AddToBlock(j, j, JjTGJj);
     }
     weight_start = weight_end;
   }

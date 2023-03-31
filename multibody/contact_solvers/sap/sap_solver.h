@@ -7,6 +7,7 @@
 
 #include "drake/multibody/contact_solvers/sap/sap_model.h"
 #include "drake/multibody/contact_solvers/sap/sap_solver_results.h"
+#include "drake/multibody/contact_solvers/supernodal_solver.h"
 #include "drake/multibody/contact_solvers/supernodal_solver2.h"
 #include "drake/systems/framework/context.h"
 

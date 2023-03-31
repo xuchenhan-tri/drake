@@ -305,9 +305,9 @@ GTEST_TEST(SupernodalSolver, SeveralPointsPerPatch) {
        0, 0, 2, 1, 0, 0,
        0, 0, 3, 3, 0, 0;
   const std::vector<BlockMatrixTriplet> Jtriplets = MakeBlockTriplets(J,
-      {{0, 0}, {0, 2}, {1, 0}, {1, 2},{2, 2}, {3, 1}},
-      {{0, 0}, {0, 4}, {3, 0}, {3, 4},{6, 4}, {9, 2}},
-      {{3, 2}, {3, 2}, {3, 2}, {3, 2},{3, 2}, {3, 2}});
+      {{0, 0}, {0, 2}, {1, 0}, {1, 2}, {2, 2}, {3, 1}},
+      {{0, 0}, {0, 4}, {3, 0}, {3, 4}, {6, 4}, {9, 2}},
+      {{3, 2}, {3, 2}, {3, 2}, {3, 2}, {3, 2}, {3, 2}});
   // clang-format on
 
   const auto [G, blocks_of_G] =

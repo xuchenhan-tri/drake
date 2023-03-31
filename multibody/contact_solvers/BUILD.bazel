@@ -26,6 +26,7 @@ drake_cc_package_library(
         ":point_contact_data",
         ":sparse_linear_operator",
         ":supernodal_solver",
+        ":supernodal_solver2",
         ":system_dynamics_data",
     ],
 )
@@ -188,7 +189,6 @@ drake_cc_library(
         "//multibody/fem:block_sparse_cholesky_solver",
     ],
 )
-
 
 drake_cc_library(
     name = "system_dynamics_data",

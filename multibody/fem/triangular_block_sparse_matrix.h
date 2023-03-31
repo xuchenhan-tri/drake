@@ -1,7 +1,7 @@
 #pragma once
 
-#include <set>
 #include <algorithm>
+#include <set>
 #include <utility>
 #include <vector>
 
@@ -41,8 +41,8 @@ class BlockSparsityPattern {
     }
   }
 
-  const std::vector<int>& block_sizes() const { return block_sizes_; };
-  const std::vector<std::vector<int>>& neighbors() const { return neighbors_; };
+  const std::vector<int>& block_sizes() const { return block_sizes_; }
+  const std::vector<std::vector<int>>& neighbors() const { return neighbors_; }
 
  private:
   std::vector<int> block_sizes_;
@@ -72,7 +72,7 @@ class TriangularBlockSparseMatrix {
    @param is_symmetric      If true, the lower triangular matrix implicitly
                             represents a symmetric matrix. */
   TriangularBlockSparseMatrix(BlockSparsityPattern sparsity_pattern,
-                             bool is_symmetric);
+                              bool is_symmetric);
 
   int rows() const { return cols_; }
   int cols() const { return cols_; }
@@ -143,7 +143,8 @@ class TriangularBlockSparseMatrix {
     return blocks_[i][0];
   }
 
-  /* (Advanced) Similar to `block`, but returns matrix blocks based on flat indices instead of block row indices. */
+  /* (Advanced) Similar to `block`, but returns matrix blocks based on flat
+   * indices instead of block row indices. */
   const MatrixX<T>& block_flat(int flat, int j) {
     DRAKE_ASSERT(0 <= j && j < block_cols_);
     return blocks_[j][flat];
@@ -169,9 +170,7 @@ class TriangularBlockSparseMatrix {
 
  private:
   /* The number of nonzero blocks in j-th column. */
-  int num_blocks(int j) const {
-    return block_row_indices(j).size();
-  }
+  int num_blocks(int j) const { return block_row_indices(j).size(); }
 
   BlockSparsityPattern sparsity_pattern_;
   bool is_symmetric_{false};

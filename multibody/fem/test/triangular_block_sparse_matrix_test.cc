@@ -1,4 +1,4 @@
-#include "drake/multibody/fem/symmetric_block_sparse_matrix.h"
+#include "drake/multibody/fem/triangular_block_sparse_matrix.h"
 
 #include <gtest/gtest.h>
 
@@ -27,10 +27,11 @@ const Matrix4d A22 = (Eigen::Matrix4d() << 11, 12, 13, 13,
                                            14, 15, 16, 16,
                                            17, 18, 19, 19,
                                            20, 21, 22, 23).finished();
-const Eigen::Matrix<double, 4, 3> A21 = (Eigen::Matrix<double, 4, 3>() << 11, 22, 33,
-                                                                          33, 44, 55,
-                                                                          66, 11, 88,
-                                                                          22, 56, 78).finished();
+const Eigen::Matrix<double, 4, 3> A21 =
+    (Eigen::Matrix<double, 4, 3>() << 11, 22, 33,
+                                      33, 44, 55,
+                                      66, 11, 88,
+                                      22, 56, 78).finished();
 // clang-format on
 
 /* Returns an arbitrary non-zero matrix of size m-by-n.*/

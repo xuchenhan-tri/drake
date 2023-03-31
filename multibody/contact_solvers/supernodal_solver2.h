@@ -107,7 +107,7 @@ class SuperNodalSolver2 {
  private:
   bool factorization_ready_ = false;
   bool matrix_ready_ = false;
-  std::unique_ptr<multibody::fem::internal::SymmetricBlockSparseMatrix<double>>
+  std::unique_ptr<multibody::fem::internal::TriangularBlockSparseMatrix<double>>
       A_;
   // The indices into `jacobian_blocks_` on row i organized by column.
   std::vector<std::vector<int>> row_to_triplet_list_;

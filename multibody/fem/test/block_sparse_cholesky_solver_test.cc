@@ -32,8 +32,8 @@ Eigen::Matrix<double, 12, 12> dummy_matrix12x12() {
   return A * A.transpose() + I;
 }
 
-/* Makes a SymmetricBlockSparseMatrix version of the matrix above. */
-SymmetricBlockSparseMatrix<double> MakeSparseMatrix() {
+/* Makes a TriangularBlockSparseMatrix version of the matrix above. */
+TriangularBlockSparseMatrix<double> MakeSparseMatrix() {
   vector<vector<int>> sparsity;
   sparsity.emplace_back(vector<int>{0, 1, 2, 3});
   sparsity.emplace_back(vector<int>{1, 2, 3});
@@ -43,7 +43,7 @@ SymmetricBlockSparseMatrix<double> MakeSparseMatrix() {
   BlockSparsityPattern block_pattern = {.diagonals = block_sizes,
                                         .sparsity_pattern = sparsity};
 
-  SymmetricBlockSparseMatrix<double> A(block_pattern);
+  TriangularBlockSparseMatrix<double> A(block_pattern, true);
   const std::vector<int>& starting_cols = A.starting_cols();
   const Eigen::Matrix<double, 12, 12> dense_A = dummy_matrix12x12();
   for (int a = 0; a < 4; ++a) {
@@ -58,7 +58,7 @@ SymmetricBlockSparseMatrix<double> MakeSparseMatrix() {
 
 GTEST_TEST(BlockSparseCholeskySolverTest, SolveWithBestOrdering) {
   BlockSparseCholeskySolver solver;
-  SymmetricBlockSparseMatrix<double> A = MakeSparseMatrix();
+  TriangularBlockSparseMatrix<double> A = MakeSparseMatrix();
   MatrixX<double> dense_A = A.MakeDenseMatrix();
   solver.SetMatrix(A);
   solver.Factor();

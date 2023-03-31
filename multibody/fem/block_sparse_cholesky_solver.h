@@ -2,29 +2,16 @@
 
 #include <vector>
 
+#include "drake/common/copyable_unique_ptr.h"
 #include "drake/common/drake_copyable.h"
 #include "drake/common/eigen_types.h"
 #include "drake/multibody/contact_solvers/sap/partial_permutation.h"
-#include "drake/multibody/fem/symmetric_block_sparse_matrix.h"
+#include "drake/multibody/fem/triangular_block_sparse_matrix.h"
 
 namespace drake {
 namespace multibody {
 namespace fem {
 namespace internal {
-
-/* Returns the column-wise sparsity pattern of L given the adjacency graph of A
- and the elimination ordering.
- Note that the elimination ordering is a mapping from new index to old index. */
-std::vector<std::vector<int>> CalcSparsityPattern(
-    const std::vector<std::vector<int>>& adjacency_graph,
-    const std::vector<int>& elimination_ordering);
-
-/* Given an input matrix M, and a permutation mapping e, sets the resulting
- matrix M̃ such that M̃(i, j) = M(e(i), e(j)). */
-void PermuteSymmetricBlockSparseMatrix(
-    const SymmetricBlockSparseMatrix<double>& input,
-    const std::vector<int>& permutation,
-    SymmetricBlockSparseMatrix<double>* result);
 
 /* Sparse cholesky solver where the blocks are of size 3x3. */
 class BlockSparseCholeskySolver {
@@ -36,7 +23,7 @@ class BlockSparseCholeskySolver {
 
   /* Sets the matrix to be factored and uses the AMD elimination ordering that
    to reduce fill-ins. */
-  void SetMatrix(const SymmetricBlockSparseMatrix<double>& A);
+  void SetMatrix(const TriangularBlockSparseMatrix<double>& A);
 
   /* Updates the matrix to be factored. This is useful for solving a series of
    matrices with the same sparsity pattern using the same elimination ordering.
@@ -49,7 +36,7 @@ class BlockSparseCholeskySolver {
      solver.SetMatrix(A);
      solver.SetMatrix(B);
      solver.SetMatrix(C); */
-  void UpdateMatrix(const SymmetricBlockSparseMatrix<double>& A);
+  void UpdateMatrix(const TriangularBlockSparseMatrix<double>& A);
 
   void Factor();
 
@@ -63,12 +50,12 @@ class BlockSparseCholeskySolver {
   void RightLookingSymmetricRank1Update(int j);
 
   int block_cols_{0};
-  SymmetricBlockSparseMatrix<double> L_{{}};
-  std::vector<MatrixX<double>> L_diag_;
-  /* The mapping from the internal block indices (i.e, the indices for L_) to
-   the block indices of the matrix supplied in SetMatrix(). */
-  contact_solvers::internal::PartialPermutation internal_to_original_;
-  contact_solvers::internal::PartialPermutation internal_to_original_scalar_;
+  copyable_unique_ptr<TriangularBlockSparseMatrix<double>> L_;
+  std::vector<Eigen::LLT<MatrixX<double>>> L_diag_;
+  /* The mapping from the internal indices (i.e, the indices for L_) to
+   the indices of the original matrix supplied in SetMatrix(). */
+  contact_solvers::internal::PartialPermutation block_index_permutation_;
+  contact_solvers::internal::PartialPermutation scalar_index_permutation_;
   bool is_factored_{false};
 };
 

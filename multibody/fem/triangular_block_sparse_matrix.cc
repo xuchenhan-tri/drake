@@ -1,4 +1,4 @@
-#include "drake/multibody/fem/symmetric_block_sparse_matrix.h"
+#include "drake/multibody/fem/triangular_block_sparse_matrix.h"
 
 #include <algorithm>
 
