@@ -176,6 +176,7 @@ drake_cc_library(
     deps = [
         ":fem_state",
         ":petsc_symmetric_block_sparse_matrix",
+        ":symmetric_block_sparse_matrix",
         "//common:essential",
     ],
 )

@@ -73,7 +73,7 @@ void FemModel<T>::CalcTangentMatrix(
     DRAKE_DEMAND(tangent_matrix->cols() == num_dofs());
     ThrowIfModelStateIncompatible(__func__, fem_state);
     DoCalcTangentMatrix(fem_state, weights, tangent_matrix);
-    // TODO(xuchenhan-tri): Apply boundary condition.
+    dirichlet_bc_.ApplyBoundaryConditionToTangentMatrix(tangent_matrix);
   } else {
     throw std::logic_error(
         "FemModel::CalcTangentMatrix() only supports double at the moment.");

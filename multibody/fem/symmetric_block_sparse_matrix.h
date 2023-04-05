@@ -130,6 +130,23 @@ class SymmetricBlockSparseMatrix {
    block instead of a single entry. */
   std::vector<std::set<int>> CalcAdjacencyGraph() const;
 
+  /* Zero the block rows and columns of the given block indices but set the
+   * diagonals to one for these rows and cols. */
+  void ZeroRowsAndColumns(const std::vector<int>& block_indices) {
+    for (int block_col : block_indices) {
+      for (int block_row : block_indices) {
+        const int flat_index = block_row_to_flat_[block_col][block_row];
+        if (flat_index >= 0) {
+          if (block_col == block_row) {
+            blocks_[block_col][flat_index] = 100000 * Matrix3<T>::Identity();
+          } else {
+            blocks_[block_col][flat_index].setZero();
+          }
+        }
+      }
+    }
+  }
+
  private:
   friend class BlockSparseCholeskySolver;
 

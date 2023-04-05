@@ -51,6 +51,28 @@ void DirichletBoundaryCondition<T>::ApplyBoundaryConditionToTangentMatrix(
 }
 
 template <typename T>
+void DirichletBoundaryCondition<T>::ApplyBoundaryConditionToTangentMatrix(
+    SymmetricBlockSparseMatrix<T>* tangent_matrix) const {
+  DRAKE_DEMAND(tangent_matrix != nullptr);
+  DRAKE_DEMAND(tangent_matrix->rows() == tangent_matrix->cols());
+  if (index_to_boundary_state_.empty()) return;
+  VerifyIndexes(tangent_matrix->cols());
+
+  /* Zero out all rows and columns of the tangent matrix corresponding to
+   dofs under the BC (except the diagonal entry which is set to 1). */
+  std::vector<int> indexes(index_to_boundary_state_.size());
+  int i = 0;
+  for (const auto& it : index_to_boundary_state_) {
+    indexes[i++] = it.first;
+  }
+  std::vector<int> block_indexes(indexes.size()/3);
+  for (int b = 0; b < static_cast<int>(block_indexes.size()); ++b) {
+    block_indexes[b] = indexes[3 * b] / 3;
+  }
+  tangent_matrix->ZeroRowsAndColumns(block_indexes);
+}
+
+template <typename T>
 void DirichletBoundaryCondition<T>::ApplyHomogeneousBoundaryCondition(
     EigenPtr<VectorX<T>> v) const {
   DRAKE_DEMAND(v != nullptr);

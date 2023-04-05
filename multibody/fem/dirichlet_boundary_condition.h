@@ -6,6 +6,7 @@
 #include "drake/common/eigen_types.h"
 #include "drake/multibody/fem/fem_state.h"
 #include "drake/multibody/fem/petsc_symmetric_block_sparse_matrix.h"
+#include "drake/multibody/fem/symmetric_block_sparse_matrix.h"
 
 namespace drake {
 namespace multibody {
@@ -67,6 +68,9 @@ class DirichletBoundaryCondition {
    condition is greater than or equal to the `tangent_matrix->cols()`. */
   void ApplyBoundaryConditionToTangentMatrix(
       PetscSymmetricBlockSparseMatrix* tangent_matrix) const;
+
+  void ApplyBoundaryConditionToTangentMatrix(
+      SymmetricBlockSparseMatrix<T>* tangent_matrix) const;
 
   /* Modifies the given vector `v` (e.g, the residual of the system or the
    velocities/positions) that arises from an FEM model without BC into the a
