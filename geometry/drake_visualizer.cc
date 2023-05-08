@@ -773,7 +773,7 @@ void DrakeVisualizer<T>::SendDeformableGeometriesMessage(
     // TODO(xuchenhan-tri): We should use the color from the property of the
     // geometry when available.
     message.geom[i] =
-        MakeDeformableSurfaceMesh(vertex_positions, data, params.default_color);
+        MakeDeformableSurfaceMesh(vertex_positions, data, i == 0 ? params.default_color : Rgba{0.9, 0, 0, 1} );
   }
   std::string channel = MakeLcmChannelNameForRole("DRAKE_VIEWER_DEFORMABLE",
                                                   params);
