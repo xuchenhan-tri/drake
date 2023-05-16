@@ -36,6 +36,15 @@ namespace internal {
  @pre deformable_contact != nullptr. */
 void AddDeformableRigidContactSurface(
     const deformable::DeformableGeometry& deformable_D,
+    GeometryId deformable_id,
+    const VolumeMeshFieldLinear<double, double>& distance_field,
+    GeometryId rigid_id, const TriangleSurfaceMesh<double>& rigid_mesh_R,
+    const Bvh<Obb, TriangleSurfaceMesh<double>>& rigid_bvh_R,
+    const math::RigidTransform<double>& X_DR,
+    DeformableContact<double>* deformable_contact);
+
+void AddDeformableRigidContactSurface(
+    const deformable::DeformableGeometry& deformable_D,
     GeometryId deformable_id, GeometryId rigid_id,
     const TriangleSurfaceMesh<double>& rigid_mesh_R,
     const Bvh<Obb, TriangleSurfaceMesh<double>>& rigid_bvh_R,

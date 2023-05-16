@@ -70,19 +70,19 @@ DeformableContact<double> Geometries::ComputeDeformableContact() const {
        it != deformable_geometries_.end(); ++it) {
     const GeometryId deformable_id = it->first;
     const DeformableGeometry& deformable_geometry = it->second;
+    const VolumeMeshFieldLinear<double, double>& field1 =
+        deformable_geometry.CalcSignedDistanceField();
     /* collect all deformable rigid contact. */
     for (const auto& [rigid_id, rigid_geometry] : rigid_geometries_) {
       const math::RigidTransform<double>& X_WR = rigid_geometry.pose_in_world();
       const auto& rigid_bvh = rigid_geometry.rigid_mesh().bvh();
       const auto& rigid_tri_mesh = rigid_geometry.rigid_mesh().mesh();
-      AddDeformableRigidContactSurface(deformable_geometry, deformable_id,
+      AddDeformableRigidContactSurface(deformable_geometry, deformable_id, field1,
                                        rigid_id, rigid_tri_mesh, rigid_bvh,
                                        X_WR, &result);
     }
     
 
-    const VolumeMeshFieldLinear<double, double>& field1 =
-        deformable_geometry.CalcSignedDistanceField();
     const auto& bvh1 = deformable_geometry.deformable_mesh().bvh();
     for (auto it2 = std::next(it, 1); it2 != deformable_geometries_.end();
          ++it2) {

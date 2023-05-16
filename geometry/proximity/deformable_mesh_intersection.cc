@@ -76,8 +76,9 @@ class DeformableSurfaceVolumeIntersector
 
 void AddDeformableRigidContactSurface(
     const deformable::DeformableGeometry& deformable_D,
-    const GeometryId deformable_id, const GeometryId rigid_id,
-    const TriangleSurfaceMesh<double>& rigid_mesh_R,
+    const GeometryId deformable_id,
+    const VolumeMeshFieldLinear<double, double>& distance_field,
+    const GeometryId rigid_id, const TriangleSurfaceMesh<double>& rigid_mesh_R,
     const Bvh<Obb, TriangleSurfaceMesh<double>>& rigid_bvh_R,
     const math::RigidTransform<double>& X_DR,
     DeformableContact<double>* deformable_contact) {
@@ -85,8 +86,8 @@ void AddDeformableRigidContactSurface(
 
   DeformableSurfaceVolumeIntersector intersect;
   intersect.SampleVolumeFieldOnSurface(
-      deformable_D.CalcSignedDistanceField(),
-      deformable_D.deformable_mesh().bvh(), rigid_mesh_R, rigid_bvh_R, X_DR,
+      distance_field, deformable_D.deformable_mesh().bvh(), rigid_mesh_R,
+      rigid_bvh_R, X_DR,
       false /* don't filter face normal along field gradient */);
 
   if (intersect.has_intersection()) {
@@ -139,6 +140,18 @@ void AddDeformableRigidContactSurface(
         std::move(contact_vertex_indexes),
         std::move(intersect.mutable_barycentric_centroids()));
   }
+}
+
+void AddDeformableRigidContactSurface(
+    const deformable::DeformableGeometry& deformable_D,
+    GeometryId deformable_id, GeometryId rigid_id,
+    const TriangleSurfaceMesh<double>& rigid_mesh_R,
+    const Bvh<Obb, TriangleSurfaceMesh<double>>& rigid_bvh_R,
+    const math::RigidTransform<double>& X_DR,
+    DeformableContact<double>* deformable_contact) {
+  AddDeformableRigidContactSurface(
+      deformable_D, deformable_id, deformable_D.CalcSignedDistanceField(),
+      rigid_id, rigid_mesh_R, rigid_bvh_R, X_DR, deformable_contact);
 }
 
 }  // namespace internal
