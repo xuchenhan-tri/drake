@@ -17,6 +17,21 @@ namespace multibody {
 namespace contact_solvers {
 namespace internal {
 
+/* Given a block sparsity pattern G on vertices V = {0, 1, ..., N-1} and a
+ partition on V = V1 ∪ V2 (such that V1 ∩ V2 = ∅), computes an elimination
+ ordering on B in the following way:
+  1. Generate the V1-induced graph G1 and the V2-induced graph G2.
+  2. Compute the Minimum Degree ordering on G1 and G2 respectively.
+  3. Concatenate the orderings so that all vertices in V1 come before vertices
+     in V2.
+ @param[in] global_pattern  The block sparsity pattern G.
+ @param[in] V1              The vertices in the set V1.
+ @returns  The elimination ordering obtained by following the algorithm
+ described above. */
+std::vector<int> ConcatenateMdOrderingWithinGroup(
+    const BlockSparsityPattern& global_pattern,
+    const std::unordered_set<int>& V1);
+
 /* A Cholesky solver for solving the symmetric positive definite
  system
    A⋅x = b

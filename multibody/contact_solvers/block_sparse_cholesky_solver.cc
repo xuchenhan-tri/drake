@@ -1,6 +1,7 @@
 #include "drake/multibody/contact_solvers/block_sparse_cholesky_solver.h"
 
 #include <algorithm>
+#include <numeric>
 #include <utility>
 #include <vector>
 
@@ -10,6 +11,82 @@ namespace drake {
 namespace multibody {
 namespace contact_solvers {
 namespace internal {
+
+std::vector<int> ConcatenateMdOrderingWithinGroup(
+    const BlockSparsityPattern& global_pattern,
+    const std::unordered_set<int>& V1) {
+  /* Sizes of V, V1, and V2. */
+  const int N = global_pattern.block_sizes().size();
+  const int N1 = V1.size();
+  const int N2 = N - N1;
+  /* Mapping from V to V1 and V2 and the inverse mappings. */
+  std::vector<int> global_to_local(N);
+  std::vector<int> v1_to_global(N1);
+  std::vector<int> v2_to_global(N2);
+  /* How many scalar variables in each vertex (as needed for the block sparsity
+   pattern for G1 and G2). */
+  std::vector<int> v1_block_sizes(N1);
+  std::vector<int> v2_block_sizes(N2);
+  /* Map from global index to whether the vertex is in V1. For better cache
+   consistency, we put this information in a vector. */
+  std::vector<bool> in_v1(N);
+  int v1_index = 0;
+  int v2_index = 0;
+  const std::vector<int>& global_block_sizes = global_pattern.block_sizes();
+  for (int i = 0; i < N; ++i) {
+    if (V1.count(i) > 0) {
+      global_to_local[i] = v1_index;
+      v1_block_sizes[v1_index] = global_block_sizes[i];
+      in_v1[i] = true;
+      v1_to_global[v1_index] = i;
+      ++v1_index;
+    } else {
+      global_to_local[i] = v2_index;
+      v2_block_sizes[v2_index] = global_block_sizes[i];
+      in_v1[i] = false;
+      v2_to_global[v2_index] = i;
+      ++v2_index;
+    }
+  }
+
+  /* Build the induced graphs G1 and G2 from the global graph G. */
+  const std::vector<std::vector<int>>& G = global_pattern.neighbors();
+  std::vector<std::vector<int>> G1(N1);
+  std::vector<std::vector<int>> G2(N2);
+  for (int a = 0; a < N; ++a) {
+    for (int b : G[a]) {
+      if (in_v1[a] != in_v1[b]) {
+        // One of a and b is in V1 and the other is in V2, so the edge ab is not
+        // in either of the induced graph.
+        continue;
+      }
+      const int j = std::min(global_to_local[a], global_to_local[b]);
+      const int i = std::max(global_to_local[a], global_to_local[b]);
+      if (in_v1[b]) {
+        G1[j].emplace_back(i);
+      } else {
+        G2[j].emplace_back(i);
+      }
+    }
+  }
+
+  const std::vector<int> v1_ordering = ComputeMinimumDegreeOrdering(
+      BlockSparsityPattern(std::move(v1_block_sizes), std::move(G1)));
+  const std::vector<int> v2_ordering = ComputeMinimumDegreeOrdering(
+      BlockSparsityPattern(std::move(v2_block_sizes), std::move(G2)));
+
+  std::vector<int> result;
+  result.reserve(N);
+  /* The V1 vertices come first. */
+  for (int v : v1_ordering) {
+    result.emplace_back(v1_to_global[v]);
+  }
+  /* The V2 vertices follow. */
+  for (int v : v2_ordering) {
+    result.emplace_back(v2_to_global[v]);
+  }
+  return result;
+}
 
 template <typename BlockType>
 BlockSparseCholeskySolver<BlockType>::~BlockSparseCholeskySolver() = default;
