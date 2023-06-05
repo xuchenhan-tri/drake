@@ -179,6 +179,10 @@ class BlockSparseLowerTriangularOrSymmetricMatrix {
    */
   MatrixX<double> MakeDenseMatrix() const;
 
+  /* Makes a dense representation of the bottom right `num_blocks` blocks of the
+   matrix. */
+  MatrixX<double> MakeDenseBottomRightCorner(int num_blocks) const;
+
   /* Returns true if the ij-th block in this block sparse matrix is non-zero. In
    particular, this returns false if the indices provided are out of range. */
   bool HasBlock(int i, int j) const {

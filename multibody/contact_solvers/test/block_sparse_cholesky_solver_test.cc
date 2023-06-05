@@ -1,6 +1,7 @@
 #include "drake/multibody/contact_solvers/block_sparse_cholesky_solver.h"
 
 #include <memory>
+#include <numeric>
 #include <utility>
 
 #include <gtest/gtest.h>
@@ -44,7 +45,7 @@ Eigen::Matrix<double, 12, 12> MakeSpdMatrix(double scale) {
   }
   Eigen::Matrix<double, 12, 12> I = Eigen::Matrix<double, 12, 12>::Identity();
   /* Now result is guaranteed to be SPD. */
-  Eigen::Matrix<double, 12, 12> result = scale * (A * A.transpose() + 1e4 * I);
+  Eigen::Matrix<double, 12, 12> result = scale * (A * A.transpose() + 12 * I);
   /* Zeroing off-diagonal entries of a diagnally dominant matrix doesn't affect
    the SPDness of the matrix. */
   result.block<10, 2>(2, 0).setZero();
@@ -126,6 +127,112 @@ GTEST_TEST(BlockSparseCholeskySolverTest, SolveBeforeFactorThrows) {
   VectorXd b = VectorXd::LinSpaced(A.cols(), 0.0, 10.0);
   EXPECT_THROW(solver.Solve(b), std::exception);
   EXPECT_THROW(solver.SolveInPlace(&b), std::exception);
+}
+
+GTEST_TEST(BlockSparseCholeskySolverTest, CalcSchurComplementAndFactor) {
+  BlockSparseCholeskySolver<MatrixXd> solver;
+  BlockSparseSymmetricMatrix M = MakeSparseSpdMatrix();
+  const int kNumBlocks = 4;
+  MatrixXd schur_complement;
+  /* All blocks are eliminated. */
+  {
+    std::vector<int> eliminated_blocks(kNumBlocks);
+    std::iota(eliminated_blocks.begin(), eliminated_blocks.end(), 0);
+    const bool success = solver.CalcSchurComplementAndFactor(
+        M,
+        std::unordered_set<int>(eliminated_blocks.begin(),
+                                eliminated_blocks.end()),
+        &schur_complement);
+    EXPECT_TRUE(success);
+    EXPECT_EQ(schur_complement, MatrixXd::Zero(0, 0));
+    EXPECT_TRUE(solver.is_factored());
+    EXPECT_FALSE(solver.matrix_set());
+  }
+  /* None of the blocks is eliminated. */
+  {
+    const bool success = solver.CalcSchurComplementAndFactor(
+        M, std::unordered_set<int>(), &schur_complement);
+    EXPECT_TRUE(success);
+    EXPECT_TRUE(CompareMatrices(schur_complement, M.MakeDenseMatrix()));
+    EXPECT_TRUE(solver.is_factored());
+    EXPECT_FALSE(solver.matrix_set());
+  }
+  /* Some of the blocks are eliminated. */
+  {
+    std::unordered_set<int> eliminated_blocks = {1, 3};
+    const bool success = solver.CalcSchurComplementAndFactor(
+        M, eliminated_blocks, &schur_complement);
+    EXPECT_TRUE(success);
+    const MatrixXd dense = M.MakeDenseMatrix();
+    MatrixXd A = MatrixXd::Zero(6, 6);
+    A.topLeftCorner(2, 2) = dense.topLeftCorner(2, 2);
+    A.bottomRightCorner(4, 4) = dense.block<4, 4>(5, 5);
+    MatrixXd D = MatrixXd::Zero(6, 6);
+    D.topLeftCorner(3, 3) = dense.block<3, 3>(2, 2);
+    D.topRightCorner(3, 3) = dense.block<3, 3>(2, 9);
+    D.bottomLeftCorner(3, 3) = dense.block<3, 3>(9, 2);
+    D.bottomRightCorner(3, 3) = dense.block<3, 3>(9, 9);
+    MatrixXd B = MatrixXd::Zero(6, 6);
+    B.topRightCorner(3, 4) = dense.block<3, 4>(2, 5);
+    MatrixXd Mhat = MatrixXd::Zero(12, 12);
+    Mhat.topLeftCorner(6, 6) = D;
+    Mhat.bottomRightCorner(6, 6) = A;
+    Mhat.topRightCorner(6, 6) = B;
+    Mhat.bottomLeftCorner(6, 6) = B.transpose();
+    fmt::print("Mhat = {}\n", fmt_eigen(Mhat));
+    MatrixXd expected_schur_complement = A - B.transpose() * D.llt().solve(B);
+    EXPECT_TRUE(
+        CompareMatrices(schur_complement, expected_schur_complement, 1e-14));
+    EXPECT_TRUE(solver.is_factored());
+    EXPECT_FALSE(solver.matrix_set());
+  }
+}
+
+/* In this test, we make a graph with 8 vertices, {0, 1, ..., 7}, such that
+ odd indexed vertices belong to V1 and even indexed vertices belong to V2.
+ Within V1 and V2, the block sparsity pattern looks like
+    X X | O O O | O O O O | O O O
+    X X | O O O | O O O O | O O O
+    --- | ----- |---------| -----
+    O O | X X X | X X X X | O O O
+    O O | X X X | X X X X | O O O
+    O O | X X X | X X X X | O O O
+    --- | ----- |---------| -----
+    O O | X X X | X X X X | O O O
+    O O | X X X | X X X X | O O O
+    O O | X X X | X X X X | O O O
+    O O | X X X | X X X X | O O O
+    --- | ----- |---------| -----
+    O O | O O O | O O O O | X X X
+    O O | O O O | O O O O | X X X
+    O O | O O O | O O O O | X X X
+ The expected elimination ordering for this block sparsity pattern is
+ [0, 3, 2, 1] from pen and paper calculation. 2 is eliminated before 1 because
+ when 0 and 3 are eliminated, the degree of 2 is 3 and the degree of 1 is 4.
+
+ The global to local index mapping looks like
+  0->0, 2->1, 4->2, 6->3
+  1->0, 3->1, 5->2, 7->3.
+ Because vertices in V1 appear first in the resulting ordering, the final result
+ should be [1, 7, 5, 3, 0, 6, 4, 2].
+ We arbitrarily add edges across V1 and V2 (4-5, 4-7, 0-7, 0-5, 2-1) but they do
+ not affect the result. */
+GTEST_TEST(BlockSparseCholeskySolverTest, ConcatenateMdOrderingWithinGroup) {
+  std::vector<std::vector<int>> sparsity;
+  sparsity.emplace_back(std::vector<int>{0, 5, 7});
+  sparsity.emplace_back(std::vector<int>{1, 2});
+  sparsity.emplace_back(std::vector<int>{2, 4});
+  sparsity.emplace_back(std::vector<int>{3, 5});
+  sparsity.emplace_back(std::vector<int>{4, 5, 7});
+  sparsity.emplace_back(std::vector<int>{5});
+  sparsity.emplace_back(std::vector<int>{6});
+  sparsity.emplace_back(std::vector<int>{7});
+  std::vector<int> block_sizes = {2, 2, 3, 3, 4, 4, 3, 3};
+  BlockSparsityPattern block_pattern(block_sizes, sparsity);
+  const std::unordered_set<int> V1 = {1, 3, 5, 7};
+  const std::vector<int> result =
+      ConcatenateMdOrderingWithinGroup(block_pattern, V1);
+  EXPECT_EQ(result, std::vector<int>({1, 7, 5, 3, 0, 6, 4, 2}));
 }
 
 }  // namespace
