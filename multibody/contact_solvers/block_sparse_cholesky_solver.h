@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <unordered_set>
 #include <vector>
 
 #include "drake/common/copyable_unique_ptr.h"
@@ -14,6 +15,21 @@ namespace drake {
 namespace multibody {
 namespace contact_solvers {
 namespace internal {
+
+/* Given a block sparsity pattern G on vertices V = {0, 1, ..., N-1} and a
+ partition on V = V1 ∪ V2 (such that V1 ∩ V2 = ∅), computes an elimination
+ ordering on B in the following way:
+  1. Generate the V1-induced graph G1 and the V2-induced graph G2.
+  2. Compute the Minimum Degree ordering on G1 and G2 respectively.
+  3. Concatenate the orderings so that all vertices in V1 come before vertices
+     in V2.
+ @param[in] global_pattern  The block sparsity pattern G.
+ @param[in] V1              The vertices in the set V1.
+ @returns  The elimination ordering obtained by following the algorithm
+ described above. */
+std::vector<int> ConcatenateMdOrderingWithinGroup(
+    const BlockSparsityPattern& global_pattern,
+    const std::unordered_set<int>& V1);
 
 /* A Cholesky solver for solving the symmetric positive definite
  system
@@ -120,6 +136,38 @@ class BlockSparseCholeskySolver {
    and is SolverMode::kEmpty otherwise. */
   [[nodiscard]] bool Factor();
 
+  /* Computes the supernodal LLT factorization of the given matrix `M`. Returns
+   true if factorization succeeds, otherwise returns false. Failure is triggered
+   by an internal failure of Eigen::LLT.  This can fail if, for instance, the
+   input matrix set in SetMatrix() or UpdateMatrix() is not positive definite.
+   If failure is encountered, the user should verify that the specified matrix
+   is positive definite and not poorly conditioned.
+
+   In addition, this function computes the Schur complement matrix of the input
+   matrix M in the following sense:
+
+   Let E be the set of `eliminated_blocks`. We define permutation p such
+   that p(i) < p(j) iff
+    (1) i ∈ E and j ∉ E or
+    (2) i ∈ E and j ∈ E and i < j or
+    (3) i ∉ E and j ∉ E and i < j.
+
+   We then define M̂ = P*M*Pᵀ, i.e, M̂ is stably permuted from M so that blocks
+   with indices in `eliminated_blocks` appear on the top left corner of the
+   matrix M̂ and all other blocks appear on the bottom right corner of the
+   matrix. The matrix M̂ can be written in block form as M̂ = [D B; Bᵀ A] where D
+   corresponds to the blocks with indices in E and A corresponds to the blocks
+   with indices outside of E. On output, S = A - BᵀD⁻¹B is written to
+   `schur_complement`.
+   @pre schur_complement != nullptr.
+   @pre `eliminated_blocks` has all its entries in [0, M.block_cols()).
+   @post is_factored() == true.
+   @post matrix_set() == false. */
+  bool CalcSchurComplementAndFactor(
+      const SymmetricMatrix& M,
+      const std::unordered_set<int>& eliminated_blocks,
+      MatrixX<double>* schur_complement);
+
   /* Solves the system A⋅x = b and returns x.
    @throws std::exception if b.size() is incompatible with the size of the
    matrix set by SetMatrix().
@@ -185,6 +233,19 @@ class BlockSparseCholeskySolver {
                                     A.block_cols() - 1}. */
   BlockSparsityPattern SymbolicFactor(
       const SymmetricMatrix& A, const std::vector<int>& elimination_ordering);
+
+  // TODO(xuchenhan-tri) Document this better.
+  /* Helper for CalcSchurComplementAndFactor(). */
+  std::vector<int> PickEliminationOrderingAndSetMatrix(
+      const SymmetricMatrix& M,
+      const std::unordered_set<int>& eliminated_blocks);
+
+  /* Helper for Factor() and CalcSchurComplementAndFactor() to factorize part of
+   the matrix. Unless [starting_col_block, ending_col_block) is equal to
+   [0, L.block_cols()), this may leave L in an intermediate state. Call this
+   function with care.
+   @pre 0 <= starting_col_block <= ending_col_block <= L.block_cols(). */
+  bool FactorImpl(int starting_col_block, int ending_col_block);
 
   /* Performs L(j+1:, j+1:) -= L(j+1:, j) * L(j+1:, j).transpose().
    @pre 0 <= j < L.block_cols(). */
