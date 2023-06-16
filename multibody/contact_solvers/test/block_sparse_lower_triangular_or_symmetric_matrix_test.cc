@@ -169,6 +169,16 @@ GTEST_TEST(TriangularBlockSparseMatrixTest, SetBlock) {
   EXPECT_EQ(A.block(2, 1), m);
 }
 
+GTEST_TEST(TriangularBlockSparseMatrixTest, MakeDenseBottomRightCorner) {
+  BlockSparseLowerTriangularMatrix A_triangular = MakeLowerTriangularMatrix();
+  MatrixXd expected = MakeDenseMatrix(false).bottomRightCorner(7, 7);
+  EXPECT_EQ(expected, A_triangular.MakeDenseBottomRightCorner(2));
+
+  BlockSparseSymmetricMatrix A_symmetric = MakeSymmetricMatrix();
+  expected = MakeDenseMatrix(true).bottomRightCorner(7, 7);
+  EXPECT_EQ(expected, A_symmetric.MakeDenseBottomRightCorner(2));
+}
+
 GTEST_TEST(TriangularBlockSparseMatrixTest, InvalidOperations) {
   if (kDrakeAssertIsArmed) {
     BlockSparseLowerTriangularMatrix A_triangular = MakeLowerTriangularMatrix();
