@@ -20,7 +20,7 @@ FemSolver<T>::FemSolver(const FemModel<T>* model,
 template <typename T>
 int FemSolver<T>::AdvanceOneTimeStep(const FemState<T>& prev_state,
                                      FemState<T>* next_state,
-                                     FemSolverData<T>* data) const {
+                                     FemData<T>* data) const {
   DRAKE_DEMAND(next_state != nullptr);
   model_->ThrowIfModelStateIncompatible(__func__, prev_state);
   model_->ThrowIfModelStateIncompatible(__func__, *next_state);
@@ -59,14 +59,14 @@ double FemSolver<T>::linear_solve_tolerance(
 
 template <typename T>
 int FemSolver<T>::SolveWithInitialGuess(FemState<T>* state,
-                                        FemSolverData<T>* data) const {
+                                        FemData<T>* data) const {
   /* We scale the entire system by dt so that we are solving
     A * dt * dt = -b * dt.
   The reason is that we want the Schur complement of the tangent matrix
   of the momentum balance equation (A * dt) instead of the force balance
   equation (A). */
-  VectorX<T>& b = data->b;
-  VectorX<T>& dz = data->dz;
+  VectorX<T>& b = data->scratch.b;
+  VectorX<T>& dz = data->scratch.dz;
   contact_solvers::internal::Block3x3SparseSymmetricMatrix& tangent_matrix =
       *data->tangent_matrix;
   contact_solvers::internal::SchurComplement& schur_complement =
@@ -102,8 +102,8 @@ int FemSolver<T>::SolveWithInitialGuess(FemState<T>* state,
          !solver_converged(residual_norm, initial_residual_norm)) {
     model_->CalcTangentMatrix(*state, integrator_->GetWeights() * dt,
                               &tangent_matrix);
-    data->linear_solver.UpdateMatrix(tangent_matrix);
-    const bool factored = data->linear_solver.Factor();
+    data->scratch.linear_solver.UpdateMatrix(tangent_matrix);
+    const bool factored = data->scratch.linear_solver.Factor();
     if (!factored) {
       throw std::runtime_error(
           "Tangent matrix factorization failed in FemSolver because the FEM "
@@ -111,7 +111,7 @@ int FemSolver<T>::SolveWithInitialGuess(FemState<T>* state,
           "be triggered by a combination of a stiff nonlinear constitutive "
           "model and a large time step.");
     }
-    dz = data->linear_solver.Solve(-b * dt);
+    dz = data->scratch.linear_solver.Solve(-b * dt);
     integrator_->UpdateStateFromChangeInUnknowns(dz, state);
     model_->CalcResidual(*state, &b);
     residual_norm = b.norm() * dt;
@@ -131,5 +131,5 @@ int FemSolver<T>::SolveWithInitialGuess(FemState<T>* state,
 }  // namespace multibody
 }  // namespace drake
 
-template class drake::multibody::fem::internal::FemSolverData<double>;
+template class drake::multibody::fem::internal::FemData<double>;
 template class drake::multibody::fem::internal::FemSolver<double>;
