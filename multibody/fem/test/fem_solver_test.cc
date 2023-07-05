@@ -55,7 +55,7 @@ TEST_P(FemSolverTest, AdvanceOneTimeStep) {
   builder.Build();
   std::unique_ptr<FemState<double>> state0 = model_.MakeFemState();
   std::unique_ptr<FemState<double>> state = model_.MakeFemState();
-  FemSolverData<double> data(model_);
+  FemData<double> data(model_);
   data.nonparticipating_vertices = {0, 1};
   const int num_iterations =
       solver_.AdvanceOneTimeStep(*state0, state.get(), &data);

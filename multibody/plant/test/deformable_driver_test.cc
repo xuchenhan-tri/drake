@@ -69,7 +69,7 @@ class DeformableDriverTest : public ::testing::Test {
   const FemState<double>& EvalFreeMotionFemState(
       const systems::Context<double>& context,
       DeformableBodyIndex index) const {
-    return driver_->EvalFreeMotionFemState(context, index);
+    return *driver_->EvalFreeMotionFemStateAndData(context, index).state;
   }
 
   const FemState<double>& EvalNextFemState(
