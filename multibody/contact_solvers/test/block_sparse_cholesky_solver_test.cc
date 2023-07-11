@@ -236,26 +236,20 @@ GTEST_TEST(BlockSparseCholeskySolverTest, CalcSchurComplementAndFactor) {
   }
   /* Some of the blocks are eliminated. */
   {
-    std::unordered_set<int> eliminated_blocks = {1, 3};
+    std::unordered_set<int> eliminated_blocks = {0, 1, 3};
     const bool success = solver.CalcSchurComplementAndFactor(
         M, eliminated_blocks, &schur_complement);
     EXPECT_TRUE(success);
     const MatrixXd dense = M.MakeDenseMatrix();
-    MatrixXd A = MatrixXd::Zero(6, 6);
-    A.topLeftCorner(2, 2) = dense.topLeftCorner(2, 2);
-    A.bottomRightCorner(4, 4) = dense.block<4, 4>(5, 5);
-    MatrixXd D = MatrixXd::Zero(6, 6);
-    D.topLeftCorner(3, 3) = dense.block<3, 3>(2, 2);
-    D.topRightCorner(3, 3) = dense.block<3, 3>(2, 9);
-    D.bottomLeftCorner(3, 3) = dense.block<3, 3>(9, 2);
-    D.bottomRightCorner(3, 3) = dense.block<3, 3>(9, 9);
-    MatrixXd B = MatrixXd::Zero(6, 6);
-    B.topRightCorner(3, 4) = dense.block<3, 4>(2, 5);
-    MatrixXd Mhat = MatrixXd::Zero(12, 12);
-    Mhat.topLeftCorner(6, 6) = D;
-    Mhat.bottomRightCorner(6, 6) = A;
-    Mhat.topRightCorner(6, 6) = B;
-    Mhat.bottomLeftCorner(6, 6) = B.transpose();
+    MatrixXd A = dense.block<4, 4>(5, 5);
+    MatrixXd D = MatrixXd::Zero(8, 8);
+    D.topLeftCorner(2, 2) = dense.topLeftCorner(2, 2);
+    D.block<3, 3>(2, 2) = dense.block<3, 3>(2, 2);
+    D.block<3, 3>(2, 5) = dense.block<3, 3>(2, 9);
+    D.block<3, 3>(5, 2) = dense.block<3, 3>(9, 2);
+    D.bottomRightCorner(3, 3) = dense.bottomRightCorner(3, 3);
+    MatrixXd B = MatrixXd::Zero(8, 4);
+    B.block<3, 4>(2, 0) = dense.block<3, 4>(2, 5);
     MatrixXd expected_schur_complement = A - B.transpose() * D.llt().solve(B);
     EXPECT_TRUE(
         CompareMatrices(schur_complement, expected_schur_complement, 1e-14));

@@ -225,25 +225,15 @@ bool BlockSparseCholeskySolver<BlockType>::CalcSchurComplementAndFactor(
    participating indices in `global_to_participating`. */
   /* A value of -1 indicates that the element is non-participating. */
   std::vector<int> global_to_participating(num_total_blocks, -1);
+  const std::vector<int>& block_sizes = M.sparsity_pattern().block_sizes();
+  std::vector<int> participating_block_sizes;
+  participating_block_sizes.reserve(num_participating_blocks);
   int participating_index = 0;
   for (int i = 0; i < num_total_blocks; ++i) {
     if (nonparticipating_blocks.count(i) == 0) {
       global_to_participating[i] = participating_index++;
+      participating_block_sizes.emplace_back(block_sizes[i]);
     }
-  }
-  const std::vector<int>& block_sizes = M.sparsity_pattern().block_sizes();
-  std::vector<int> participating_ordering;
-  std::vector<int> participating_block_sizes;
-  participating_ordering.reserve(num_participating_blocks);
-  participating_block_sizes.reserve(num_participating_blocks);
-  /* We start with i = ssize(nonparticipating_blocks) to skip all
-   nonparticipating blocks. */
-  for (int i = ssize(nonparticipating_blocks); i < ssize(elimination_ordering);
-       ++i) {
-    const int element = elimination_ordering[i];
-    DRAKE_DEMAND(global_to_participating[element] >= 0);
-    participating_ordering.emplace_back(global_to_participating[element]);
-    participating_block_sizes.emplace_back(block_sizes[element]);
   }
   /* The scalar index of the first scalar in each participating block. */
   std::vector<int> participating_starting_indices(num_participating_blocks);
@@ -252,23 +242,34 @@ bool BlockSparseCholeskySolver<BlockType>::CalcSchurComplementAndFactor(
     participating_starting_indices[i] = participating_starting_indices[i - 1] +
                                         participating_block_sizes[i - 1];
   }
+  /* The elimination ordering within participating blocks. */
+  std::vector<int> participating_ordering;
+  participating_ordering.reserve(num_participating_blocks);
+  /* We start with permuted_i = ssize(nonparticipating_blocks) to skip all
+   nonparticipating blocks. */
+  for (int permuted_i = ssize(nonparticipating_blocks);
+       permuted_i < ssize(elimination_ordering); ++permuted_i) {
+    const int i = elimination_ordering[permuted_i];
+    DRAKE_DEMAND(global_to_participating[i] >= 0);
+    participating_ordering.emplace_back(global_to_participating[i]);
+  }
   const int num_participating_scalars =
       participating_starting_indices.back() + participating_block_sizes.back();
   /* Build the scalar permutation. */
-  VectorX<int> scalar_permutation(num_participating_scalars);
+  VectorX<int> inverse_scalar_permutation(num_participating_scalars);
   int new_scalar_index = 0;
   for (int i = 0; i < ssize(participating_ordering); ++i) {
     const int block = participating_ordering[i];
     const int start = participating_starting_indices[block];
     const int size = participating_block_sizes[block];
     for (int s = start; s < start + size; ++s) {
-      scalar_permutation(new_scalar_index++) = s;
+      inverse_scalar_permutation(new_scalar_index++) = s;
     }
   }
   auto& S = *schur_complement;
   S.resizeLike(permuted_S);
-  Eigen::PermutationMatrix<Eigen::Dynamic> P(scalar_permutation);
-  S = P.transpose() * permuted_S * P;
+  Eigen::PermutationMatrix<Eigen::Dynamic> P(inverse_scalar_permutation);
+  S = P * permuted_S * P.transpose();
 
   /* Finish the factorization. */
   bool success = FactorImpl(num_nonparticipating_blocks, L_->block_cols());
