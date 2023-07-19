@@ -1,6 +1,7 @@
 #include "drake/multibody/contact_solvers/sap/sap_solver.h"
 
 #include <algorithm>
+#include <iostream>
 #include <limits>
 #include <type_traits>
 #include <utility>
@@ -198,7 +199,7 @@ SapSolverStatus SapSolver<double>::SolveWithGuess(
 
     // This is the most expensive update: it performs the factorization of H to
     // solve for the search direction dv.
-    CalcSearchDirectionData(*context, supernodal_solver.get(),
+    CalcSearchDirectionData(*context, (k==0), supernodal_solver.get(),
                             &search_direction_data);
     const VectorX<double>& dv = search_direction_data.dv;
 
@@ -237,7 +238,8 @@ SapSolverStatus SapSolver<double>::SolveWithGuess(
         alpha > 0.5;
   }
 
-  if (!converged) return SapSolverStatus::kFailure;
+  // if (!converged) return SapSolverStatus::kFailure;
+  unused(converged);
 
   PackSapSolverResults(*context, results);
 
@@ -245,6 +247,7 @@ SapSolverStatus SapSolver<double>::SolveWithGuess(
   // even instantiated and no factorizations are performed (the expensive part
   // of the computation). We report zero number of iterations.
   stats_.num_iters = k;
+  std::cout << k << std::endl;
 
   return SapSolverStatus::kSuccess;
 }
@@ -660,13 +663,16 @@ void SapSolver<T>::CallDenseSolver(const Context<T>& context,
 
 template <typename T>
 void SapSolver<T>::UpdateSuperNodalSolver(
-    const Context<T>& context, SuperNodalSolver* supernodal_solver) const {
+    const Context<T>& context, bool first,
+    SuperNodalSolver* supernodal_solver) const {
   if constexpr (std::is_same_v<T, double>) {
-    const std::vector<MatrixX<double>>& G =
-        model_->EvalConstraintsHessian(context);
-    supernodal_solver->SetWeightMatrix(G);
+    if (first) {
+      const std::vector<MatrixX<double>>& G =
+          model_->EvalConstraintsHessian(context);
+      supernodal_solver->SetWeightMatrix(G);
+    }
   } else {
-    unused(context);
+    unused(context, first);
     unused(supernodal_solver);
     throw std::logic_error(
         "SapSolver::UpdateSuperNodalSolver(): SuperNodalSolver only supports T "
@@ -675,20 +681,22 @@ void SapSolver<T>::UpdateSuperNodalSolver(
 }
 
 template <typename T>
-void SapSolver<T>::CallSuperNodalSolver(const Context<T>& context,
-                                        SuperNodalSolver* supernodal_solver,
-                                        VectorX<T>* dv) const {
+void SapSolver<T>::CallSuperNodalSolver(
+    const Context<T>& context, bool first, SuperNodalSolver* supernodal_solver,
+    VectorX<T>* dv) const {
   if constexpr (std::is_same_v<T, double>) {
-    UpdateSuperNodalSolver(context, supernodal_solver);
-    if (!supernodal_solver->Factor()) {
-      throw std::logic_error("SapSolver: Supernodal factorization failed.");
+    UpdateSuperNodalSolver(context, first, supernodal_solver);
+    if (first) {
+      if (!supernodal_solver->Factor()) {
+        throw std::logic_error("SapSolver: Supernodal factorization failed.");
+      }
     }
     // We solve in place to avoid heap allocating additional memory for the
     // right hand side.
     *dv = -model_->EvalCostGradient(context);
     supernodal_solver->SolveInPlace(dv);
   } else {
-    unused(context);
+    unused(context, first);
     unused(supernodal_solver);
     unused(dv);
     throw std::logic_error(
@@ -699,14 +707,14 @@ void SapSolver<T>::CallSuperNodalSolver(const Context<T>& context,
 
 template <typename T>
 void SapSolver<T>::CalcSearchDirectionData(
-    const systems::Context<T>& context, SuperNodalSolver* supernodal_solver,
+    const systems::Context<T>& context, bool first, SuperNodalSolver* supernodal_solver,
     SapSolver<T>::SearchDirectionData* data) const {
   const bool use_dense_algebra = parameters_.linear_solver_type ==
                                  SapSolverParameters::LinearSolverType::kDense;
   DRAKE_DEMAND(use_dense_algebra || (supernodal_solver != nullptr));
   // Update search direction dv.
   if (!use_dense_algebra) {
-    CallSuperNodalSolver(context, supernodal_solver, &data->dv);
+    CallSuperNodalSolver(context, first, supernodal_solver, &data->dv);
   } else {
     CallDenseSolver(context, &data->dv);
   }

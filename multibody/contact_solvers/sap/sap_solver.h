@@ -393,14 +393,14 @@ class SapSolver {
   // Evaluates the constraint's Hessian G(v) and updates `supernodal_solver`'s
   // weight matrix so that we can later on solve the Newton system with Hessian
   // H(v) = A + Jᵀ⋅G(v)⋅J.
-  void UpdateSuperNodalSolver(const systems::Context<T>& context,
+  void UpdateSuperNodalSolver(const systems::Context<T>& context, bool first,
                               SuperNodalSolver* supernodal_solver) const;
 
   // Updates the supernodal solver with the constraint's Hessian G(v),
   // factorizes it, and solves for the search direction `dv`.
   // @pre supernodal_solver and dv are not nullptr.
   // @pre supernodal_solver was created with a call to MakeSuperNodalSolver().
-  void CallSuperNodalSolver(const systems::Context<T>& context,
+  void CallSuperNodalSolver(const systems::Context<T>& context, bool first,
                             SuperNodalSolver* supernodal_solver,
                             VectorX<T>* dv) const;
 
@@ -421,7 +421,7 @@ class SapSolver {
   // @pre supernodal_solver must be a valid supernodal solver created with
   // MakeSuperNodalSolver() when
   // parameters_.linear_solver_type != LinearSolverType::kDense.
-  void CalcSearchDirectionData(const systems::Context<T>& context,
+  void CalcSearchDirectionData(const systems::Context<T>& context, bool first,
                                SuperNodalSolver* supernodal_solver,
                                SearchDirectionData* data) const;
 
