@@ -14,6 +14,24 @@ namespace drake {
 namespace multibody {
 namespace internal {
 
+// Struct to store the block contribution from a given tree to the constraint
+// Jacobian for a constraint pair.
+template <typename T>
+struct JacobianTreeBlock {
+  DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(JacobianTreeBlock);
+
+  JacobianTreeBlock(TreeIndex tree_in,
+                    contact_solvers::internal::MatrixBlock<T> J_in)
+      : tree(tree_in), J(std::move(J_in)) {}
+
+  // Index of the tree for this block.
+  TreeIndex tree;
+
+  // J.cols() must equal the number of generalized velocities for
+  // the corresponding tree.
+  contact_solvers::internal::MatrixBlock<T> J;
+};
+
 // Struct to store kinematics information for each contact pair. For each
 // contact pair this struct stores signed distance, Jacobian w.r.t. velocities
 // for each participating tree and rotation matrix between world frame and
@@ -22,25 +40,8 @@ template <typename T>
 struct ContactPairKinematics {
   DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(ContactPairKinematics);
 
-  // Struct to store the block contribution from a given tree to the contact
-  // Jacobian for a contact pair.
-  struct JacobianTreeBlock {
-    DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(JacobianTreeBlock);
-
-    JacobianTreeBlock(TreeIndex tree_in,
-                      contact_solvers::internal::MatrixBlock<T> J_in)
-        : tree(tree_in), J(std::move(J_in)) {}
-
-    // Index of the tree for this block.
-    TreeIndex tree;
-
-    // J.cols() must equal the number of generalized velocities for
-    // the corresponding tree.
-    contact_solvers::internal::MatrixBlock<T> J;
-  };
-
   ContactPairKinematics(
-      std::vector<JacobianTreeBlock> jacobian_in,
+      std::vector<JacobianTreeBlock<T>> jacobian_in,
       contact_solvers::internal::ContactConfiguration<T> configuration_in)
       : jacobian(std::move(jacobian_in)),
         configuration(std::move(configuration_in)) {}
@@ -50,11 +51,33 @@ struct ContactPairKinematics {
   // Jacobian for a discrete contact pair stored as individual blocks for each
   // of the trees participating in the contact. Only one or two trees can
   // participate in a given contact.
-  std::vector<JacobianTreeBlock> jacobian;
+  std::vector<JacobianTreeBlock<T>> jacobian;
 
   // Contact configuration specifying objects in contact, contact point
   // position, depth and contact frame.
   contact_solvers::internal::ContactConfiguration<T> configuration;
+};
+
+// Struct to store kinematics information for each deformable rigid fixed
+// constraint pair. For each fixed constraint, this struct stores Jacobian
+// w.r.t. velocities for each participating tree and displacement (i.e. the
+// constraint function value).
+template <typename T>
+struct FixedConstraintKinematics {
+  DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(FixedConstraintKinematics);
+
+  FixedConstraintKinematics(std::vector<JacobianTreeBlock<T>> jacobian_in,
+                            VectorX<T> p_PQs_W_in)
+      : jacobian(std::move(jacobian_in)), p_PQs_W(std::move(p_PQs_W_in)) {}
+
+  // Jacobian for a discrete constraint pair stored as individual blocks for
+  // each of the trees participating in the contact. Only one or two trees can
+  // participate in a given constraint.
+  std::vector<JacobianTreeBlock<T>> jacobian;
+
+  // Flattened displacement vectors between constrained points.
+  // `p_PQs_W.segment<3>(3*i)` gives p_PiQi_W.
+  VectorX<T> p_PQs_W;
 };
 
 }  // namespace internal
@@ -63,3 +86,5 @@ struct ContactPairKinematics {
 
 DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
     struct ::drake::multibody::internal::ContactPairKinematics)
+DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
+    struct ::drake::multibody::internal::FixedConstraintKinematics)
