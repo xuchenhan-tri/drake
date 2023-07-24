@@ -232,8 +232,7 @@ CompliantContactManager<T>::CalcContactKinematics(
     DRAKE_DEMAND(treeA_index.is_valid() || treeB_index.is_valid());
 
     // We have at most two blocks per contact.
-    std::vector<typename ContactPairKinematics<T>::JacobianTreeBlock>
-        jacobian_blocks;
+    std::vector<JacobianTreeBlock<T>> jacobian_blocks;
     jacobian_blocks.reserve(2);
 
     // Tree A contribution to contact Jacobian Jv_W_AcBc_C.

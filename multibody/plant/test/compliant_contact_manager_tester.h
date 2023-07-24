@@ -91,8 +91,8 @@ class CompliantContactManagerTester {
       const int row_offset = 3 * i;
       const ContactPairKinematics<double>& pair_kinematics =
           contact_kinematics[i];
-      for (const ContactPairKinematics<double>::JacobianTreeBlock&
-               tree_jacobian : pair_kinematics.jacobian) {
+      for (const JacobianTreeBlock<double>& tree_jacobian :
+           pair_kinematics.jacobian) {
         // If added to the Jacobian, it must have a valid index.
         EXPECT_TRUE(tree_jacobian.tree.is_valid());
         const int col_offset =
