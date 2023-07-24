@@ -67,16 +67,17 @@ struct FixedConstraintKinematics {
   DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(FixedConstraintKinematics);
 
   FixedConstraintKinematics(std::vector<JacobianTreeBlock<T>> jacobian_in,
-                            Matrix3X<T> p_PQs_W_in)
+                            VectorX<T> p_PQs_W_in)
       : jacobian(std::move(jacobian_in)), p_PQs_W(std::move(p_PQs_W_in)) {}
 
   // Jacobian for a discrete constraint pair stored as individual blocks for
   // each of the trees participating in the contact. Only one or two trees can
-  // participate in a given contact.
+  // participate in a given constraint.
   std::vector<JacobianTreeBlock<T>> jacobian;
 
-  // Each column represents the displacement between two constrained points.
-  Matrix3X<T> p_PQs_W;
+  // Flattened displacement vectors between constrained points.
+  // `p_PQs_W.segment<3>(3*i)` gives p_PiQi_W.
+  VectorX<T> p_PQs_W;
 };
 
 }  // namespace internal
