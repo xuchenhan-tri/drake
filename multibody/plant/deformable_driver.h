@@ -146,6 +146,13 @@ class DeformableDriver : public ScalarConvertibleComponent<T> {
       const systems::Context<T>& context,
       std::vector<ContactPairKinematics<T>>* result) const;
 
+  /* Appends the constraint kinematics information for each deformable rigid
+   fixed constraint.
+   @pre result != nullptr. */
+  void AppendDeformableRigidFixedConstraintKinematics(
+      const systems::Context<T>& context,
+      std::vector<ContactPairKinematics<T>>* result) const;
+
   /* Evaluates FemState at the next time step for each deformable body and
    copies the them into the corresponding DiscreteValues.
    @pre next_states != nullptr. */

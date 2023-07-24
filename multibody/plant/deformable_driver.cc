@@ -340,8 +340,7 @@ void DeformableDriver<T>::AppendContactKinematics(
 
     for (int i = 0; i < surface.num_contact_points(); ++i) {
       /* We have at most two blocks per contact. */
-      std::vector<typename ContactPairKinematics<T>::JacobianTreeBlock>
-          jacobian_blocks;
+      std::vector<JacobianTreeBlock<T>> jacobian_blocks;
       jacobian_blocks.reserve(2);
       /* Contact solver assumes the normal points from A to B whereas the
        surface's normal points from B to A. */

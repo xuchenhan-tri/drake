@@ -39,8 +39,7 @@ internal::ContactJacobians<T> TamsiDriver<T>::CalcContactJacobians(
   for (int i = 0; i < nc; ++i) {
     const int row_offset = 3 * i;
     const ContactPairKinematics<T>& pair_kinematics = contact_kinematics[i];
-    for (const typename ContactPairKinematics<T>::JacobianTreeBlock&
-             tree_jacobian : pair_kinematics.jacobian) {
+    for (const JacobianTreeBlock<T>& tree_jacobian : pair_kinematics.jacobian) {
       const int col_offset = topology.tree_velocities_start(tree_jacobian.tree);
       const int tree_nv = topology.num_tree_velocities(tree_jacobian.tree);
       contact_jacobians.Jc.block(row_offset, col_offset, 3, tree_nv) =
