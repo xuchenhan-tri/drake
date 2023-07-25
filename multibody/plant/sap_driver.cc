@@ -581,6 +581,55 @@ void SapDriver<T>::AddBallConstraints(
 }
 
 template <typename T>
+void SapDriver<T>::AddFixedConstraints(
+    const systems::Context<T>& context,
+    contact_solvers::internal::SapContactProblem<T>* problem) const {
+  DRAKE_DEMAND(problem != nullptr);
+
+  std::vector<FixedConstraintKinematics<T>> kinematics =
+      manager().ComputeFixedConstraintKinematics(context);
+  constexpr double kInfinity = std::numeric_limits<double>::infinity();
+  for (auto& data : kinematics) {
+    const int num_constraint_equations = data.p_PQs_W.size();
+    // Fixed constraints do not have impulse limits, they are bi-lateral
+    // constraints. Each fixed point pair introduces three constraint
+    // equations.
+    VectorX<T> gamma_lower =
+        VectorX<T>::Constant(num_constraint_equations, -kInfinity);
+    VectorX<T> gamma_upper =
+        VectorX<T>::Constant(num_constraint_equations, kInfinity);
+    // Stiffness and dissipation are set so that the constraint is in the
+    // "near-rigid" regime, [Castro et al., 2022].
+    VectorX<T> stiffness =
+        VectorX<T>::Constant(num_constraint_equations, kInfinity);
+    VectorX<T> relaxation_time =
+        plant().time_step() * VectorX<T>::Ones(num_constraint_equations);
+    // TODO(amcastro-tri): consider exposing this parameter.
+    const double beta = 0.1;
+    const typename SapHolonomicConstraint<T>::Parameters parameters{
+        std::move(gamma_lower), std::move(gamma_upper), std::move(stiffness),
+        std::move(relaxation_time), beta};
+    DRAKE_DEMAND(data.jacobian.size() == 1 || data.jacobian.size() == 2);
+    if (data.jacobian.size() == 1) {
+      // The rigid body is welded and does not have DoFs.
+      problem->AddConstraint(std::make_unique<SapHolonomicConstraint<T>>(
+          std::move(data.p_PQs_W),
+          SapConstraintJacobian<T>(data.jacobian[0].tree,
+                                   std::move(data.jacobian[0].J)),
+          parameters));
+    } else {
+      // Both rigid and deformable body have DoFs.
+      problem->AddConstraint(std::make_unique<SapHolonomicConstraint<T>>(
+          std::move(data.p_PQs_W),
+          SapConstraintJacobian<T>(
+              data.jacobian[0].tree, std::move(data.jacobian[0].J),
+              data.jacobian[1].tree, std::move(data.jacobian[1].J)),
+          parameters));
+    }
+  }
+}
+
+template <typename T>
 void SapDriver<T>::CalcContactProblemCache(
     const systems::Context<T>& context, ContactProblemCache<T>* cache) const {
   std::vector<MatrixX<T>> A;
@@ -606,6 +655,7 @@ void SapDriver<T>::CalcContactProblemCache(
   AddCouplerConstraints(context, &problem);
   AddDistanceConstraints(context, &problem);
   AddBallConstraints(context, &problem);
+  AddFixedConstraints(context, &problem);
 
   // Make a reduced version of the original contact problem using joint locking
   // data.

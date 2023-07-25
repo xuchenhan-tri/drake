@@ -491,7 +491,7 @@ void DeformableDriver<T>::AppendDeformableRigidFixedConstraintKinematics(
       VectorX<T> p_WPs(3 * spec.vertices.size());
       for (int v = 0; v < ssize(spec.vertices); ++v) {
         p_WPs.template segment<3>(3 * v) =
-            p_WVs.template segment<3>(spec.vertices[v]);
+            p_WVs.template segment<3>(3 * spec.vertices[v]);
       }
       VectorX<T> p_PQs_W = p_WQs - p_WPs;
 
