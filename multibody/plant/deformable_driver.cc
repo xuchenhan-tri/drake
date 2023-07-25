@@ -527,22 +527,22 @@ void DeformableDriver<T>::AppendDeformableRigidFixedConstraintKinematics(
       JacobianTreeBlock<T> deformable_jacobian_block{
           clique_index_A, MatrixBlock<T>(std::move(negative_Jv_v_WAp_W))};
 
-      const Frame<T>& frame_W = manager_->plant().world_frame();
-      manager_->internal_tree().CalcJacobianTranslationalVelocity(
-          context, JacobianWrtVariable::kV, rigid_body.body_frame(), frame_W,
-          Eigen::Map<const Matrix3X<T>>(p_WQs.data(), 3, p_WQs.size() / 3),
-          frame_W, frame_W, &Jv_v_WBq_W);
       /* Positions of fixed vertces of the deformable body in the world frame.
        */
       VectorX<T> p_WPs(3 * spec.vertices.size());
       for (int v = 0; v < ssize(spec.vertices); ++v) {
         p_WPs.template segment<3>(3 * v) =
-            p_WVs.template segment<3>(spec.vertices[v]);
+            p_WVs.template segment<3>(3 * spec.vertices[v]);
       }
       VectorX<T> p_PQs_W = p_WQs - p_WPs;
 
       if (tree_index.is_valid()) {
         /* Rigid body is not welded. */
+        const Frame<T>& frame_W = manager_->plant().world_frame();
+        manager_->internal_tree().CalcJacobianTranslationalVelocity(
+            context, JacobianWrtVariable::kV, rigid_body.body_frame(), frame_W,
+            Eigen::Map<const Matrix3X<T>>(p_WQs.data(), 3, p_WQs.size() / 3),
+            frame_W, frame_W, &Jv_v_WBq_W);
         JacobianTreeBlock<T> rigid_jacobian_block{
             tree_index, MatrixBlock<T>(Jv_v_WBq_W.middleCols(
                             tree_topology.tree_velocities_start(tree_index),

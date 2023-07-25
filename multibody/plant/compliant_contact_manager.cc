@@ -816,6 +816,22 @@ void CompliantContactManager<T>::AppendContactResultsForHydroelasticContact(
 }
 
 template <typename T>
+std::vector<FixedConstraintKinematics<T>>
+CompliantContactManager<T>::ComputeFixedConstraintKinematics(
+    const systems::Context<T>& context) const {
+  std::vector<FixedConstraintKinematics<T>> result;
+  if constexpr (std::is_same_v<T, double>) {
+    if (deformable_driver_ != nullptr) {
+      deformable_driver_->AppendDeformableRigidFixedConstraintKinematics(
+          context, &result);
+    }
+  } else {
+    unused(context);
+  }
+  return result;
+}
+
+template <typename T>
 void CompliantContactManager<T>::CalcHydroelasticContactInfo(
     const systems::Context<T>& context,
     std::vector<HydroelasticContactInfo<T>>* contact_info) const {
