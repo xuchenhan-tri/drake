@@ -31,6 +31,7 @@ using drake::multibody::contact_solvers::internal::ContactConfiguration;
 using drake::multibody::contact_solvers::internal::ContactSolverResults;
 using drake::multibody::contact_solvers::internal::ExtractNormal;
 using drake::multibody::contact_solvers::internal::ExtractTangent;
+using drake::multibody::contact_solvers::internal::FixedConstraintKinematics;
 using drake::multibody::contact_solvers::internal::MatrixBlock;
 using drake::multibody::contact_solvers::internal::SapBallConstraint;
 using drake::multibody::contact_solvers::internal::SapConstraint;
@@ -38,6 +39,7 @@ using drake::multibody::contact_solvers::internal::SapConstraintJacobian;
 using drake::multibody::contact_solvers::internal::SapContactProblem;
 using drake::multibody::contact_solvers::internal::SapCouplerConstraint;
 using drake::multibody::contact_solvers::internal::SapDistanceConstraint;
+using drake::multibody::contact_solvers::internal::SapFixedConstraint;
 using drake::multibody::contact_solvers::internal::SapFrictionConeConstraint;
 using drake::multibody::contact_solvers::internal::SapHolonomicConstraint;
 using drake::multibody::contact_solvers::internal::SapLimitConstraint;
@@ -571,6 +573,19 @@ void SapDriver<T>::AddBallConstraints(
 }
 
 template <typename T>
+void SapDriver<T>::AddFixedConstraints(
+    const systems::Context<T>& context,
+    contact_solvers::internal::SapContactProblem<T>* problem) const {
+  DRAKE_DEMAND(problem != nullptr);
+  std::vector<FixedConstraintKinematics<T>> kinematics =
+      manager().ComputeFixedConstraintKinematics(context);
+  for (auto& data : kinematics) {
+    problem->AddConstraint(
+        std::make_unique<SapFixedConstraint<T>>(std::move(data)));
+  }
+}
+
+template <typename T>
 void SapDriver<T>::CalcContactProblemCache(
     const systems::Context<T>& context, ContactProblemCache<T>* cache) const {
   std::vector<MatrixX<T>> A;
@@ -596,6 +611,7 @@ void SapDriver<T>::CalcContactProblemCache(
   AddCouplerConstraints(context, &problem);
   AddDistanceConstraints(context, &problem);
   AddBallConstraints(context, &problem);
+  AddFixedConstraints(context, &problem);
 
   // Make a reduced version of the original contact problem using joint locking
   // data.

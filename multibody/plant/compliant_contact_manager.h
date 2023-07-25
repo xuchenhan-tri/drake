@@ -264,6 +264,11 @@ class CompliantContactManager final
       const systems::Context<T>& context,
       ContactResults<T>* contact_results) const;
 
+  // Computes the kinematics data for all fixed constraints involving deforamble
+  // bodies.
+  std::vector<contact_solvers::internal::FixedConstraintKinematics<T>>
+  ComputeFixedConstraintKinematics(const systems::Context<T>& context) const;
+
   CacheIndexes cache_indexes_;
   // Vector of joint damping coefficients, of size plant().num_velocities().
   // This information is extracted during the call to ExtractModelInfo().

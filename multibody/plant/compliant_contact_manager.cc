@@ -27,6 +27,7 @@ using drake::math::RigidTransform;
 using drake::math::RotationMatrix;
 using drake::multibody::contact_solvers::internal::ContactConfiguration;
 using drake::multibody::contact_solvers::internal::ContactSolverResults;
+using drake::multibody::contact_solvers::internal::FixedConstraintKinematics;
 using drake::multibody::contact_solvers::internal::MatrixBlock;
 using drake::multibody::internal::DiscreteContactPair;
 using drake::multibody::internal::MultibodyTreeTopology;
@@ -827,6 +828,22 @@ void CompliantContactManager<T>::AppendContactResultsForHydroelasticContact(
     // valid for the lifetime of the contact results.
     contact_results->AddContactInfo(&info);
   }
+}
+
+template <typename T>
+std::vector<FixedConstraintKinematics<T>>
+CompliantContactManager<T>::ComputeFixedConstraintKinematics(
+    const systems::Context<T>& context) const {
+  std::vector<FixedConstraintKinematics<T>> result;
+  if constexpr (std::is_same_v<T, double>) {
+    if (deformable_driver_ != nullptr) {
+      deformable_driver_->AppendDeformableRigidFixedConstraintKinematics(
+          context, &result);
+    }
+  } else {
+    unused(context);
+  }
+  return result;
 }
 
 template <typename T>

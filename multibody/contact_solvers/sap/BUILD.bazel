@@ -26,6 +26,7 @@ drake_cc_package_library(
         ":sap_friction_cone_constraint",
         ":sap_holonomic_constraint",
         ":sap_limit_constraint",
+        ":sap_fixed_constraint",
         ":sap_model",
         ":sap_solver",
         ":sap_solver_results",
@@ -138,6 +139,19 @@ drake_cc_library(
     name = "sap_distance_constraint",
     srcs = ["sap_distance_constraint.cc"],
     hdrs = ["sap_distance_constraint.h"],
+    deps = [
+        ":sap_constraint",
+        ":sap_constraint_jacobian",
+        ":sap_holonomic_constraint",
+        "//common:default_scalars",
+        "//common:essential",
+    ],
+)
+
+drake_cc_library(
+    name = "sap_fixed_constraint",
+    srcs = ["sap_fixed_constraint.cc"],
+    hdrs = ["sap_fixed_constraint.h"],
     deps = [
         ":sap_constraint",
         ":sap_constraint_jacobian",

@@ -26,8 +26,10 @@ using drake::geometry::internal::DeformableContactSurface;
 using drake::multibody::contact_solvers::internal::Block3x3SparseMatrix;
 using drake::multibody::contact_solvers::internal::ContactConfiguration;
 using drake::multibody::contact_solvers::internal::ContactSolverResults;
+using drake::multibody::contact_solvers::internal::FixedConstraintKinematics;
 using drake::multibody::contact_solvers::internal::MatrixBlock;
 using drake::multibody::contact_solvers::internal::PartialPermutation;
+using drake::multibody::contact_solvers::internal::SapConstraintJacobian;
 using drake::multibody::fem::FemModel;
 using drake::multibody::fem::FemState;
 using drake::multibody::fem::internal::DirichletBoundaryCondition;
@@ -534,8 +536,6 @@ void DeformableDriver<T>::AppendDeformableRigidFixedConstraintKinematics(
         p_WQs.template segment<3>(3 * v) = X_WB * spec.p_BQs[v].cast<T>();
       }
       negative_Jv_v_WAp_W.SetFromTriplets(jacobian_triplets);
-      JacobianTreeBlock<T> deformable_jacobian_block{
-          clique_index_A, MatrixBlock<T>(std::move(negative_Jv_v_WAp_W))};
 
       /* Positions of fixed vertices of the deformable body in the world frame.
        */
@@ -545,28 +545,52 @@ void DeformableDriver<T>::AppendDeformableRigidFixedConstraintKinematics(
             p_WVs.template segment<3>(3 * spec.vertices[v]);
       }
       VectorX<T> p_PQs_W = p_WQs - p_WPs;
+      // By convention, deformable bodies are assigned object indexes after all
+      // rigid bodies.
+      const int objectA =
+          index + manager_->plant().num_bodies();  // Deformable body.
+      const int objectB = index_B;                 // Rigid body.
+      // TODO(xuchenhan-tri): Remove this copy.
+      VectorX<T> p_BQs(3 * spec.p_BQs.size());
+      for (int i = 0; i < ssize(spec.p_BQs); ++i) {
+        p_BQs.template segment<3>(3 * i) = spec.p_BQs[i];
+      }
 
       if (tree_index.is_valid()) {
+        /* Rigid body is not welded. */
         const Frame<T>& frame_W = manager_->plant().world_frame();
         manager_->internal_tree().CalcJacobianTranslationalVelocity(
             context, JacobianWrtVariable::kV, rigid_body.body_frame(), frame_W,
             Eigen::Map<const Matrix3X<T>>(p_WQs.data(), 3, p_WQs.size() / 3),
             frame_W, frame_W, &Jv_v_WBq_W);
-        /* Rigid body is not welded. */
-        JacobianTreeBlock<T> rigid_jacobian_block{
-            tree_index, MatrixBlock<T>(Jv_v_WBq_W.middleCols(
-                            tree_topology.tree_velocities_start(tree_index),
-                            tree_topology.num_tree_velocities(tree_index)))};
-        result->emplace_back(
-            std::vector<JacobianTreeBlock<T>>{
-                std::move(deformable_jacobian_block),
-                std::move(rigid_jacobian_block)},
-            std::move(p_PQs_W));
+        SapConstraintJacobian<T> J(
+            /* Clique index for deformable. */
+            clique_index_A,
+            /* Jacobian block for deformable. */
+            MatrixBlock<T>(std::move(negative_Jv_v_WAp_W)),
+            /* Clique index for rigid. */ tree_index,
+            /* Jacobian block for rigid. */
+            MatrixBlock<T>(Jv_v_WBq_W.middleCols(
+                tree_topology.tree_velocities_start(tree_index),
+                tree_topology.num_tree_velocities(tree_index))));
+        /* The deformable vertices are always expressed in world frames, i.e.
+         frame A == frame W. */
+        VectorX<T>& p_APs = p_WPs;
+        result->emplace_back(objectA, std::move(p_APs), objectB,
+                             std::move(p_BQs), std::move(p_PQs_W),
+                             std::move(J));
       } else {
-        /* Rigid body is welded. */
-        result->emplace_back(std::vector<JacobianTreeBlock<T>>{std::move(
-                                 deformable_jacobian_block)},
-                             std::move(p_PQs_W));
+        SapConstraintJacobian<T> J(
+            /* Clique index for deformable. */
+            clique_index_A,
+            /* Jacobian block for deformable. */
+            MatrixBlock<T>(std::move(negative_Jv_v_WAp_W)));
+        /* The deformable vertices are always expressed in world frames, i.e.
+         frame A == frame W. */
+        VectorX<T>& p_APs = p_WPs;
+        result->emplace_back(objectA, std::move(p_APs), objectB,
+                             std::move(p_BQs), std::move(p_PQs_W),
+                             std::move(J));
       }
     }
   }

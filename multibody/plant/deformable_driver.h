@@ -8,6 +8,7 @@
 #include "drake/common/drake_copyable.h"
 #include "drake/common/eigen_types.h"
 #include "drake/multibody/contact_solvers/sap/partial_permutation.h"
+#include "drake/multibody/contact_solvers/sap/sap_fixed_constraint.h"
 #include "drake/multibody/fem/discrete_time_integrator.h"
 #include "drake/multibody/plant/contact_pair_kinematics.h"
 #include "drake/multibody/plant/deformable_model.h"
@@ -151,7 +152,8 @@ class DeformableDriver : public ScalarConvertibleComponent<T> {
    @pre result != nullptr. */
   void AppendDeformableRigidFixedConstraintKinematics(
       const systems::Context<T>& context,
-      std::vector<FixedConstraintKinematics<T>>* result) const;
+      std::vector<contact_solvers::internal::FixedConstraintKinematics<T>>*
+          result) const;
 
   /* Evaluates FemState at the next time step for each deformable body and
    copies the them into the corresponding DiscreteValues.

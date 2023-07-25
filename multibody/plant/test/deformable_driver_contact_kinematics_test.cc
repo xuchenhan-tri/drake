@@ -15,6 +15,7 @@ using drake::geometry::internal::DeformableContact;
 using drake::geometry::internal::DeformableContactSurface;
 using drake::math::RigidTransformd;
 using drake::math::RollPitchYawd;
+using drake::multibody::contact_solvers::internal::FixedConstraintKinematics;
 using drake::multibody::contact_solvers::internal::PartialPermutation;
 using drake::systems::Context;
 using drake::systems::DiscreteStateIndex;
@@ -279,12 +280,12 @@ class DeformableDriverContactKinematicsTest
     const FixedConstraintKinematics<double>& constraint_kinematic =
         constraint_kinematics[0];
     if (dynamic_rigid_body) {
-      ASSERT_EQ(constraint_kinematic.jacobian.size(), 2);
+      ASSERT_EQ(constraint_kinematic.J.num_cliques(), 2);
       const Matrix3X<double> J0 =
-          constraint_kinematic.jacobian[0].J.MakeDenseMatrix();
+          constraint_kinematic.J.clique_jacobian(0).MakeDenseMatrix();
       ASSERT_EQ(v0.size(), J0.cols());
       const Matrix3X<double> J1 =
-          constraint_kinematic.jacobian[1].J.MakeDenseMatrix();
+          constraint_kinematic.J.clique_jacobian(1).MakeDenseMatrix();
       const Vector3d v_WR_F(0, 0, 0.5);
       const Vector3d v_WR = X_WF_.rotation() * v_WR_F;
       const Vector3d w_WR(0, 0, 0);
@@ -293,9 +294,9 @@ class DeformableDriverContactKinematicsTest
       ASSERT_EQ(v1.size(), J1.cols());
       EXPECT_TRUE(CompareMatrices(J0 * v0 + J1 * v1, expected_vc, 1e-14));
     } else {
-      ASSERT_EQ(constraint_kinematic.jacobian.size(), 1);
+      ASSERT_EQ(constraint_kinematic.J.num_cliques(), 1);
       const Matrix3X<double> J0 =
-          constraint_kinematic.jacobian[0].J.MakeDenseMatrix();
+          constraint_kinematic.J.clique_jacobian(0).MakeDenseMatrix();
       ASSERT_EQ(v0.size(), J0.cols());
       EXPECT_TRUE(CompareMatrices(J0 * v0, expected_vc, 1e-14));
     }

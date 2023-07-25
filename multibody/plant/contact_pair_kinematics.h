@@ -58,33 +58,9 @@ struct ContactPairKinematics {
   contact_solvers::internal::ContactConfiguration<T> configuration;
 };
 
-// Struct to store kinematics information for each deformable rigid fixed
-// constraint pair. For each fixed constraint, this struct stores Jacobian
-// w.r.t. velocities for each participating tree and displacement (i.e. the
-// constraint function value).
-template <typename T>
-struct FixedConstraintKinematics {
-  DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(FixedConstraintKinematics);
-
-  FixedConstraintKinematics(std::vector<JacobianTreeBlock<T>> jacobian_in,
-                            VectorX<T> p_PQs_W_in)
-      : jacobian(std::move(jacobian_in)), p_PQs_W(std::move(p_PQs_W_in)) {}
-
-  // Jacobian for a discrete constraint pair stored as individual blocks for
-  // each of the trees participating in the contact. Only one or two trees can
-  // participate in a given constraint.
-  std::vector<JacobianTreeBlock<T>> jacobian;
-
-  // Flattened displacement vectors between constrained points.
-  // `p_PQs_W.segment<3>(3*i)` gives p_PiQi_W.
-  VectorX<T> p_PQs_W;
-};
-
 }  // namespace internal
 }  // namespace multibody
 }  // namespace drake
 
 DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
     struct ::drake::multibody::internal::ContactPairKinematics)
-DRAKE_DECLARE_CLASS_TEMPLATE_INSTANTIATIONS_ON_DEFAULT_SCALARS(
-    struct ::drake::multibody::internal::FixedConstraintKinematics)

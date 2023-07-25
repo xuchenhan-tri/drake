@@ -149,6 +149,14 @@ MultibodyConstraintId DeformableModel<T>::AddFixedConstraint(
   }
   body_id_to_constraint_ids_[body_A_id].push_back(constraint_id);
   fixed_constraint_specs_[constraint_id] = std::move(spec);
+
+  const std::vector<geometry::GeometryId>& body_B_collision_geometries =
+      plant_->GetCollisionGeometriesForBody(body_B);
+  /* Filter the collision between the two fixed geometries. */
+  this->mutable_scene_graph(plant_).collision_filter_manager().Apply(
+      geometry::CollisionFilterDeclaration().ExcludeBetween(
+          geometry::GeometrySet(GetGeometryId(body_A_id)),
+          geometry::GeometrySet(body_B_collision_geometries)));
   return constraint_id;
 }
 
