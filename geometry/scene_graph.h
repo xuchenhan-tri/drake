@@ -507,8 +507,8 @@ class SceneGraph final : public systems::LeafSystem<T> {
       SourceId source_id, std::unique_ptr<GeometryInstance> geometry);
 
   // TODO(jwnimmer-tri) Deprecate and remove `source_id` argument.
-  // TODO(xuchenhan-tri): Consider allowing registering deformable geometries to
-  // non-world frames.
+  // TODO(xuchenhan-tri) Consider forbidding registering two deformable
+  // geometries to the same frame.
   /** Registers a new deformable geometry G for this source. This registers
    geometry G on a frame F (indicated by `frame_id`). The registered geometry
    has a meshed representation. The positions of the vertices of this mesh
@@ -536,7 +536,7 @@ class SceneGraph final : public systems::LeafSystem<T> {
    @pre resolution_hint > 0.
    @throws std::exception  if a) the `source_id` does _not_ map to a
                            registered source,
-                           b) frame_id != world_frame_id(),
+                           b) frame_id == world_frame_id(),
                            c) the `geometry` is equal to `nullptr`,
                            d) the geometry's name doesn't satisfy the
                            requirements outlined in GeometryInstance.  */

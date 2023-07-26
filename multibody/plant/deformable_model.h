@@ -245,6 +245,11 @@ class DeformableModel final : public multibody::PhysicalModel<T> {
   void CopyVertexPositions(const systems::Context<T>& context,
                            AbstractValue* output) const;
 
+  /* Sets the poses (in world frame) of all frames associated with the
+   deformable bodies to identity. */
+  void DoCalcFramePoseOutput(const systems::Context<T>& context,
+                             geometry::FramePoseVector<T>* poses) const final;
+
   /* Helper to throw a useful message if a deformable body with the given `id`
    doesn't exist. */
   void ThrowUnlessRegistered(const char* source_method,
@@ -270,6 +275,7 @@ class DeformableModel final : public multibody::PhysicalModel<T> {
   std::vector<DeformableBodyId> body_ids_;
   std::map<MultibodyConstraintId, internal::DeformableRigidFixedConstraintSpec>
       fixed_constraint_specs_;
+  std::map<DeformableBodyId, geometry::FrameId> body_id_to_frame_id_;
   systems::OutputPortIndex vertex_positions_port_index_;
 };
 
