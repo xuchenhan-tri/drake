@@ -68,6 +68,9 @@ class GeometryStateTester {
   void set_state(GeometryState<T>* state) { state_ = state; }
 
   FrameId get_world_frame() const { return InternalFrame::world_frame_id(); }
+  FrameId get_deformable_frame() const {
+    return InternalFrame::deformable_frame_id();
+  }
 
   SourceId get_self_source_id() const {
     return state_->self_source_;
@@ -568,8 +571,8 @@ class GeometryStateTestBase {
 
   // Reports characteristics of the dummy tree.
   int single_tree_frame_count() const {
-    // Added dynamic frames plus the world frame.
-    return kFrameCount + 1;
+    // Added dynamic frames plus the world frame and deformable frame.
+    return kFrameCount + 2;
   }
 
   int single_tree_total_geometry_count() const {
@@ -784,12 +787,16 @@ class GeometryStateTest : public GeometryStateTestBase, public ::testing::Test {
 TEST_F(GeometryStateTest, Constructor) {
   // GeometryState has a "self source".
   EXPECT_EQ(geometry_state_.get_num_sources(), 1);
-  // GeometryState always has a world frame.
-  EXPECT_EQ(geometry_state_.get_num_frames(), 1);
+  // GeometryState always has a world frame and a deformable frame.
+  EXPECT_EQ(geometry_state_.get_num_frames(), 2);
   EXPECT_EQ(geometry_state_.get_num_geometries(), 0);
-  EXPECT_EQ(gs_tester_.get_source_frame_name_map().find(
-                gs_tester_.get_self_source_id())->second,
-            internal::FrameNameSet{"world"});
+  internal::FrameNameSet expected_names;
+  expected_names.insert("world");
+  expected_names.insert("deformable");
+  EXPECT_EQ(gs_tester_.get_source_frame_name_map()
+                .find(gs_tester_.get_self_source_id())
+                ->second,
+            expected_names);
 }
 
 // Confirms that the registered shapes are correctly returned upon
@@ -860,7 +867,8 @@ TEST_F(GeometryStateTest, SourceRegistrationWithNames) {
   ASSERT_EQ(geometry_state_.GetAllSourceIds().size(), 2);
   const SourceId world_source = geometry_state_.GetAllSourceIds().front();
   EXPECT_THAT(geometry_state_.FramesForSource(world_source),
-              testing::ElementsAre(gs_tester_.get_world_frame()));
+              testing::UnorderedElementsAre(gs_tester_.get_world_frame(),
+                                            gs_tester_.get_deformable_frame()));
 
   // The second source id is the one we added.
   EXPECT_EQ(geometry_state_.GetAllSourceIds().back(), s_id);
@@ -887,7 +895,8 @@ TEST_F(GeometryStateTest, GeometryStatistics) {
   EXPECT_EQ(geometry_state_.get_num_sources(), 2);
   EXPECT_EQ(geometry_state_.get_num_frames(), single_tree_frame_count());
   EXPECT_EQ(geometry_state_.NumFramesForSource(source_id_),
-            single_tree_frame_count() - 1);  // subtract the world frame.
+            single_tree_frame_count() -
+                2);  // subtract the world and deformable frame.
   DRAKE_EXPECT_THROWS_MESSAGE(
       geometry_state_.NumFramesForSource(SourceId::get_new_id()),
       "Referenced geometry source .* is not registered.");
@@ -1114,8 +1123,8 @@ TEST_F(GeometryStateTest, ValidateSingleSourceTree) {
   {
     using std::to_string;
     const auto& internal_frames = gs_tester_.get_frames();
-    // The world frame + the frames added by s_id.
-    EXPECT_EQ(internal_frames.size(), kFrameCount + 1);
+    // The world frame + deformable frame + the frames added by s_id.
+    EXPECT_EQ(internal_frames.size(), kFrameCount + 2);
 
     auto test_frame = [internal_frames, this, s_id](int i, FrameId parent_id,
                                                     int num_child_frames) {
@@ -1124,7 +1133,7 @@ TEST_F(GeometryStateTest, ValidateSingleSourceTree) {
       EXPECT_EQ(frame.id(), frames_[i]);
       EXPECT_EQ(frame.name(), "f" + to_string(i));
       EXPECT_EQ(frame.frame_group(), 0);  // Defaults to zero.
-      EXPECT_EQ(frame.index(), i + 1);   // ith frame added.
+      EXPECT_EQ(frame.index(), i + 2);    // ith frame added.
       EXPECT_EQ(frame.parent_frame_id(), parent_id);
       EXPECT_EQ(frame.child_frames().size(), num_child_frames);
       const auto& child_geometries = frame.child_geometries();
@@ -1180,7 +1189,7 @@ TEST_F(GeometryStateTest, ValidateSingleSourceTree) {
   }
   EXPECT_EQ(static_cast<int>(gs_tester_.get_geometry_world_poses().size()),
             single_tree_total_geometry_count());
-  EXPECT_EQ(gs_tester_.get_frame_parent_poses().size(), kFrameCount + 1);
+  EXPECT_EQ(gs_tester_.get_frame_parent_poses().size(), kFrameCount + 2);
 }
 
 // The reported geometry ids should be inclusive and ordered.
@@ -1446,8 +1455,9 @@ TEST_F(GeometryStateTest, AddFrameOnFrame) {
   const FrameId fid = geometry_state_.RegisterFrame(s_id, frames_[0], *frame_);
   EXPECT_EQ(fid, frame_->id());
   // Includes the kFrameCount frames added in SetUpSingleSourceTree, the
-  // frame we just added above (fid), and the world frame.
-  EXPECT_EQ(geometry_state_.get_num_frames(), kFrameCount + 2);
+  // frame we just added above (fid), and the world frame and the deformable
+  // frame.
+  EXPECT_EQ(geometry_state_.get_num_frames(), kFrameCount + 3);
   EXPECT_TRUE(geometry_state_.BelongsToSource(fid, s_id));
 
   // Test parent-child relationship wiring.
@@ -1480,9 +1490,10 @@ TEST_F(GeometryStateTest, FrameIdRange) {
   SetUpSingleSourceTree();
   unordered_set<FrameId> all_frames(frames_.begin(), frames_.end());
   for (FrameId id : geometry_state_.get_frame_ids()) {
-    // This should remove exactly one element. The world frame is *not* stored
-    // in frames_.
-    if (id != InternalFrame::world_frame_id()) {
+    // This should remove exactly one element. The world frame and the
+    // deformable frame are *not* stored in frames_.
+    if (id != InternalFrame::world_frame_id() &&
+        id != InternalFrame::deformable_frame_id()) {
       EXPECT_EQ(all_frames.erase(id), 1);
     }
   }
@@ -1643,10 +1654,10 @@ TEST_F(GeometryStateTest, RegisterDeformableGeometry) {
   /* Adding a deformable geometry to non-world frame throws. */
   auto instance1 = make_unique<GeometryInstance>(
       RigidTransformd::Identity(), make_unique<Sphere>(sphere), "sphere");
-  DRAKE_EXPECT_THROWS_MESSAGE(
-      geometry_state_.RegisterDeformableGeometry(
-          s_id, f_id, std::move(instance1), kRezHint),
-      "Registering deformable geometry.*non-world frame.*");
+  // DRAKE_EXPECT_THROWS_MESSAGE(
+  //     geometry_state_.RegisterDeformableGeometry(
+  //         s_id, f_id, std::move(instance1), kRezHint),
+  //     "Registering deformable geometry.*non-world frame.*");
 
   /* Successful registration of deformable geometry. */
   const RigidTransformd X_WG(AngleAxis<double>(M_PI_2, Vector3d::UnitX()),
@@ -2711,10 +2722,9 @@ TEST_F(GeometryStateTest, GeometryAncestryStorage) {
 
   // {child, parent}
   std::map<std::string, std::string> expected_relationships = {
-    {"world", "world"},
-    {"f0", "world"},
-    {"f1", "world"},
-    {"f2", "f1"},
+      {"world", "world"}, {"deformable", "world"},
+      {"f0", "world"},    {"f1", "world"},
+      {"f2", "f1"},
   };
 
   ASSERT_EQ(expected_relationships.size(), geometry_state_.get_num_frames());

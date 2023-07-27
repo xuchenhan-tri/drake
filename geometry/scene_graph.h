@@ -525,7 +525,6 @@ class SceneGraph final : public systems::LeafSystem<T> {
 
    @experimental
    @param source_id        The id for the source registering the geometry.
-   @param frame_id         The id for the frame F to put the geometry in.
    @param geometry         The geometry G to to be represented in frame F.
    @param resolution_hint  The parameter that guides the level of mesh
                            refinement of the deformable geometry. It has length
@@ -536,9 +535,8 @@ class SceneGraph final : public systems::LeafSystem<T> {
    @pre resolution_hint > 0.
    @throws std::exception  if a) the `source_id` does _not_ map to a
                            registered source,
-                           b) frame_id != world_frame_id(),
-                           c) the `geometry` is equal to `nullptr`,
-                           d) the geometry's name doesn't satisfy the
+                           b) the `geometry` is equal to `nullptr`,
+                           c) the geometry's name doesn't satisfy the
                            requirements outlined in GeometryInstance.  */
   GeometryId RegisterDeformableGeometry(
       SourceId source_id, FrameId frame_id,
@@ -900,6 +898,10 @@ class SceneGraph final : public systems::LeafSystem<T> {
   /** Reports the identifier for the world frame.  */
   static FrameId world_frame_id() {
     return internal::InternalFrame::world_frame_id();
+  }
+
+  static FrameId deformable_frame_id() {
+    return internal::InternalFrame::deformable_frame_id();
   }
 
   /** Returns an inspector on the system's _model_ scene graph data.  */

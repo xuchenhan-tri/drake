@@ -147,12 +147,22 @@ class InternalFrame {
    world frame.  */
   static FrameId world_frame_id();
 
+  static FrameId deformable_frame_id();
+
   /* Reports the reserved frame group for the world frame.  */
   static int world_frame_group() {
     // Pick a sentinel value that can't be mistaken for initialization noise.
     // Users cannot declare geometry frames with negative frame groups
     // so, using this value won't collide with any valid user-specified value.
     return -1234567;
+  }
+
+  /* Reports the reserved frame group for the deformable world frame.  */
+  static int deformable_frame_group() {
+    // Pick a sentinel value that can't be mistaken for initialization noise.
+    // Users cannot declare geometry frames with negative frame groups
+    // so, using this value won't collide with any valid user-specified value.
+    return -1234;
   }
 
  private:

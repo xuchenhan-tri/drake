@@ -34,6 +34,11 @@ FrameId InternalFrame::world_frame_id() {
   return kWorldFrame.access();
 }
 
+FrameId InternalFrame::deformable_frame_id() {
+  static const never_destroyed<FrameId> kDeformableFrame{FrameId::get_new_id()};
+  return kDeformableFrame.access();
+}
+
 }  // namespace internal
 }  // namespace geometry
 }  // namespace drake

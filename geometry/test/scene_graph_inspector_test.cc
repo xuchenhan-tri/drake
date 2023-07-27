@@ -192,12 +192,13 @@ GTEST_TEST(SceneGraphInspector, AllFrameIds) {
 
   const SourceId source_id = tester.mutable_state().RegisterNewSource("source");
 
-  // Always includes the world frame.
-  ASSERT_EQ(tester.inspector().GetAllFrameIds().size(), 1);
+  // Always includes the world frame and the deformable frame.
+  ASSERT_EQ(tester.inspector().GetAllFrameIds().size(), 2);
 
   // Add a number of frames (in addition to the world frame which is always
   // included).
   const FrameId world_id = internal::InternalFrame::world_frame_id();
+  const FrameId deformable_id = internal::InternalFrame::deformable_frame_id();
   const FrameId frame_id_1 =
       tester.mutable_state().RegisterFrame(source_id, GeometryFrame("frame1"));
   const FrameId frame_id_2 =
@@ -207,7 +208,7 @@ GTEST_TEST(SceneGraphInspector, AllFrameIds) {
 
   // We expect the results to be nicely, consistently ordered.
   std::vector<FrameId> expected_ids{frame_id_1, frame_id_2, frame_id_3,
-                                    world_id};
+                                    world_id, deformable_id};
   std::sort(expected_ids.begin(), expected_ids.end());
 
   const std::vector<FrameId> all_frames = tester.inspector().GetAllFrameIds();

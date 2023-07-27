@@ -464,7 +464,7 @@ TEST_F(SceneGraphTest, ModelInspector) {
 
   constexpr double kRezHint = 0.5;
   GeometryId deformable_id = scene_graph_.RegisterDeformableGeometry(
-      source_id, scene_graph_.world_frame_id(),
+      source_id, scene_graph_.deformable_frame_id(),
       make_unique<GeometryInstance>(RigidTransformd::Identity(),
                                     make_unique<Sphere>(1.0),
                                     "deformable_sphere"),
@@ -494,7 +494,7 @@ TEST_F(SceneGraphTest, ModelInspector) {
                                           Role::kUnassigned, "sphere"),
             anchored_id);
   EXPECT_EQ(
-      inspector.GetGeometryIdByName(scene_graph_.world_frame_id(),
+      inspector.GetGeometryIdByName(scene_graph_.deformable_frame_id(),
                                     Role::kUnassigned, "deformable_sphere"),
       deformable_id);
 }

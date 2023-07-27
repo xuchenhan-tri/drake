@@ -131,9 +131,19 @@ GeometryState<T>::GeometryState()
   kinematics_data_.X_WFs.push_back(RigidTransform<T>::Identity());
   kinematics_data_.X_PFs.push_back(RigidTransform<T>::Identity());
 
-  source_frame_id_map_[self_source_] = {world};
+  const FrameId deformable = InternalFrame::deformable_frame_id();
+  // As an arbitrary design choice, we'll say the deformable frame's parent is
+  // world.
+  frames_[deformable] =
+      InternalFrame(self_source_, deformable, "deformable",
+                    InternalFrame::world_frame_group(), 1, world);
+  frame_index_to_id_map_.push_back(deformable);
+  kinematics_data_.X_WFs.push_back(RigidTransform<T>::Identity());
+  kinematics_data_.X_PFs.push_back(RigidTransform<T>::Identity());
+
+  source_frame_id_map_[self_source_] = {world, deformable};
   source_deformable_geometry_id_map_[self_source_] = {};
-  source_frame_name_map_[self_source_] = {"world"};
+  source_frame_name_map_[self_source_] = {"world", "deformable"};
   source_root_frame_map_[self_source_] = {world};
 }
 
@@ -264,7 +274,8 @@ int GeometryState<T>::NumDynamicNonDeformableGeometries() const {
   int count = 0;
   for (const auto& pair : frames_) {
     const InternalFrame& frame = pair.second;
-    if (frame.id() != InternalFrame::world_frame_id()) {
+    if (frame.id() != InternalFrame::world_frame_id() &&
+        frame.id() != InternalFrame::deformable_frame_id()) {
       count += frame.num_child_geometries();
     }
   }
@@ -826,10 +837,7 @@ GeometryId GeometryState<T>::RegisterDeformableGeometry(
   }
 
   const GeometryId geometry_id = geometry->id();
-  if (frame_id != InternalFrame::world_frame_id()) {
-    throw std::logic_error("Registering deformable geometry with id " +
-                           to_string(geometry_id) + " to a non-world frame");
-  }
+  frame_id = InternalFrame::deformable_frame_id();
 
   ValidateRegistrationAndSetTopology(source_id, frame_id, geometry_id);
   source_deformable_geometry_id_map_[source_id].insert(geometry_id);
@@ -982,24 +990,27 @@ void GeometryState<T>::AssignRole(SourceId source_id, GeometryId geometry_id,
                                               geometry_id,
                                               *geometry.proximity_properties());
       }
-      // The set of geometries G such that I need to introduce filtered pairs
-      // (geometry_id, gᵢ) ∀ gᵢ ∈ G. Generally, it consists of those proximity
-      // geometries affixed to the same frame as geometry_id (that frame would
-      // be the world frame for anchored geometry). To that end, we'll blindly
-      // add the id for the geometry's frame to the set. Worst case, there are
-      // no other geometries affixed to that frame -- attempting to apply
-      // filters in that case would be a harmless act.
-      GeometrySet ids_for_filtering;
-      ids_for_filtering.Add(geometry.frame_id());
-      // Apply collision filter between geometry id and any geometries that have
-      // been identified. If none have been identified, this makes no changes.
-      geometry_engine_->collision_filter().Apply(
-          CollisionFilterDeclaration().ExcludeBetween(GeometrySet(geometry_id),
-                                                      ids_for_filtering),
-          [this](const GeometrySet& set) {
-            return this->CollectIds(set, Role::kProximity);
-          },
-          true /* is_invariant */);
+      if (!geometry.is_deformable()) {
+        // The set of geometries G such that I need to introduce filtered pairs
+        // (geometry_id, gᵢ) ∀ gᵢ ∈ G. Generally, it consists of those proximity
+        // geometries affixed to the same frame as geometry_id (that frame would
+        // be the world frame for anchored geometry). To that end, we'll blindly
+        // add the id for the geometry's frame to the set. Worst case, there are
+        // no other geometries affixed to that frame -- attempting to apply
+        // filters in that case would be a harmless act.
+        GeometrySet ids_for_filtering;
+        ids_for_filtering.Add(geometry.frame_id());
+        // Apply collision filter between geometry id and any geometries that
+        // have been identified. If none have been identified, this makes no
+        // changes.
+        geometry_engine_->collision_filter().Apply(
+            CollisionFilterDeclaration().ExcludeBetween(
+                GeometrySet(geometry_id), ids_for_filtering),
+            [this](const GeometrySet& set) {
+              return this->CollectIds(set, Role::kProximity);
+            },
+            true /* is_invariant */);
+      }
     } break;
     case RoleAssign::kReplace:
       // Give the engine a chance to compare properties before and after.
@@ -1362,7 +1373,8 @@ void GeometryState<T>::ValidateRegistrationAndSetTopology(
   }
 
   SourceId frame_source_id = source_id;
-  if (frame_id == InternalFrame::world_frame_id()) {
+  if (frame_id == InternalFrame::world_frame_id() ||
+      frame_id == InternalFrame::deformable_frame_id()) {
     // Explicitly validate the source id because it won't happen in acquiring
     // the world frame.
     FindOrThrow(source_id, source_frame_id_map_,
@@ -1700,7 +1712,8 @@ template <typename T>
 const InternalFrame& GeometryState<T>::ValidateAndGetFrame(
     SourceId source_id, FrameId frame_id) const {
   // Handle the special case of the world frame; source_id will *not* own it.
-  if (frame_id == InternalFrame::world_frame_id()) {
+  if (frame_id == InternalFrame::world_frame_id() ||
+      frame_id == InternalFrame::deformable_frame_id()) {
     FindOrThrow(source_id, source_frame_id_map_, [source_id]() {
       return get_missing_id_message(source_id);
     });
