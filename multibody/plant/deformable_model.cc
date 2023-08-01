@@ -87,7 +87,7 @@ void DeformableModel<T>::SetWallBoundaryCondition(DeformableBodyId id,
   for (int n = 0; n < num_nodes; ++n) {
     const int dof_index = kDim * n;
     const auto p_WV = p_WVs.template segment<kDim>(dof_index);
-    if (is_inside_wall(p_WV)) {
+    if (is_inside_wall(p_WV) || p_WV(0) < 0.01 || p_WV(0) > 0.99) {
       /* Set this node to be subject to zero Dirichlet BC. */
       bc.AddBoundaryCondition(fem::FemNodeIndex(n),
                               {p_WV, Vector3<T>::Zero(), Vector3<T>::Zero()});

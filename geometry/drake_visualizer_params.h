@@ -30,7 +30,7 @@ struct DrakeVisualizerParams {
   Role role{Role::kIllustration};
 
   /** The color to apply to any geometry that hasn't defined one.  */
-  Rgba default_color{0.9, 0.9, 0.9, 1.0};
+  Rgba default_color{0.7, 0.5, 0.4, 1.0};
 
   /** When using the hydroelastic contact model, collision geometries that are
    _declared_ as geometric primitives are frequently represented by some
