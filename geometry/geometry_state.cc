@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <iostream>
 #include <memory>
 #include <string>
 #include <utility>
@@ -1241,7 +1242,6 @@ void GeometryState<T>::AddRenderer(
   render::RenderEngine* render_engine = renderer.get();
   render_engines_[name] = std::move(renderer);
   bool accepted = false;
-  // TODO(xuchenhan-tri): account for deformable geometries here.
   for (auto& id_geo_pair : geometries_) {
     InternalGeometry& geometry = id_geo_pair.second;
     // To add this geometry to the renderer, it must:
@@ -1250,16 +1250,21 @@ void GeometryState<T>::AddRenderer(
     //      declared *any* acceptable renderers or if this renderer's name has
     //      been explicitly included in its acceptable set.
     if (geometry.has_perception_role()) {
-      const PerceptionProperties* properties = geometry.perception_properties();
-      DRAKE_DEMAND(properties != nullptr);
-      auto accepting_renderers = properties->GetPropertyOrDefault(
-          "renderer", "accepting", set<string>{});
-      if (accepting_renderers.empty() || accepting_renderers.count(name) > 0) {
-        const GeometryId id = id_geo_pair.first;
-        accepted |= render_engine->RegisterVisual(
-            id, geometry.shape(), *properties, RigidTransformd(geometry.X_FG()),
-            geometry.is_dynamic());
-        // TODO(xuchenhan-tri): Handle compatible deformable geometries.
+      if (geometry.is_deformable()) {
+
+      } else {
+        const PerceptionProperties* properties =
+            geometry.perception_properties();
+        DRAKE_DEMAND(properties != nullptr);
+        auto accepting_renderers = properties->GetPropertyOrDefault(
+            "renderer", "accepting", set<string>{});
+        if (accepting_renderers.empty() ||
+            accepting_renderers.count(name) > 0) {
+          const GeometryId id = id_geo_pair.first;
+          accepted |= render_engine->RegisterVisual(
+              id, geometry.shape(), *properties,
+              RigidTransformd(geometry.X_FG()), geometry.is_dynamic());
+        }
       }
     }
   }
