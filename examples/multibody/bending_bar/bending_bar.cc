@@ -23,8 +23,7 @@
 #include "drake/systems/primitives/adder.h"
 #include "drake/systems/primitives/constant_vector_source.h"
 
-DEFINE_double(simulation_time, 25.0,
-              "Desired duration of the simulation [s].");
+DEFINE_double(simulation_time, 30.0, "Desired duration of the simulation [s].");
 DEFINE_double(realtime_rate, 0.0, "Desired real time rate.");
 DEFINE_double(time_step, 1.0e-2,
               "Discrete time step for the system [s]. Must be positive.");
@@ -37,6 +36,7 @@ DEFINE_double(bar_beta, 0.01,
               "Stiffness damping coefficient for the deformable body [1/s].");
 DEFINE_double(t0, 3.0, "Time to start pressing [s].");
 DEFINE_double(tn, 20.0, "Time to stop pressing [s].");
+DEFINE_double(tl, 25.0, "Time to release the bar [s].");
 DEFINE_double(k, 100.0, "Slope of force [N/s].");
 
 using drake::geometry::AddContactMaterial;
@@ -79,7 +79,8 @@ class ForceControl : public systems::LeafSystem<double> {
 
   /* Constructs a ForceControl system with the given parameters. The output
    force is k*(t-t0) + f0 and is capped at k(tn-t0)+f0. */
-  ForceControl(double t0, double tn, double k) : t0_(t0), tn_(tn), k_(k) {
+  ForceControl(double t0, double tn, double tl, double k)
+      : t0_(t0), tn_(tn), tl_(tl), k_(k) {
     this->DeclareVectorOutputPort("gripper force", BasicVector<double>(1),
                                   &ForceControl::SetAppliedForce);
   }
@@ -91,15 +92,19 @@ class ForceControl : public systems::LeafSystem<double> {
     const double t = context.get_time();
     if (t > t0_) {
       force = k_ * (t - t0_) + f0_;
-    }
+    } 
     if (t > tn_) {
       force = k_ * (tn_ - t0_) + f0_;
+    } 
+    if (t > tl_) {
+      force = -100;
     }
     output->get_mutable_value() << force;
   }
 
   double t0_{0.0};
   double tn_{0.0};
+  double tl_{0.0};
   double f0_{-9.81};
   double k_{20};
 };
@@ -135,7 +140,8 @@ int do_main() {
   plant.AddJointActuator("collision_joint_actuator", collision_joint);
 
   /* Set up collision and visualization geometries. */
-  RigidTransformd X_WG(math::RollPitchYaw<double>(1.57, 0, 0), Vector3d::Zero());
+  RigidTransformd X_WG(math::RollPitchYaw<double>(1.57, 0, 0),
+                       Vector3d::Zero());
   Cylinder cylinder{0.05, 0.3};
   plant.RegisterCollisionGeometry(collision_body, X_WG, cylinder, "collision",
                                   rigid_proximity_props);
@@ -178,7 +184,7 @@ int do_main() {
   plant.Finalize();
 
   const auto& control =
-      *builder.AddSystem<ForceControl>(FLAGS_t0, FLAGS_tn, FLAGS_k);
+      *builder.AddSystem<ForceControl>(FLAGS_t0, FLAGS_tn, FLAGS_tl, FLAGS_k);
   builder.Connect(control.get_output_port(), plant.get_actuation_input_port());
 
   /* It's essential to connect the vertex position port in DeformableModel to
