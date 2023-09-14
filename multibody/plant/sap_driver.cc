@@ -172,15 +172,15 @@ std::vector<RotationMatrix<T>> SapDriver<T>::AddContactConstraints(
   // TODO(amcastro-tri): consider exposing these parameters.
   constexpr double sigma = 1.0e-3;
 
-  const std::vector<DiscreteContactPair<T>>& contact_pairs =
+  const DiscreteContactData<DiscreteContactPair<T>>& contact_pairs =
       manager().EvalDiscreteContactPairs(context);
   const int num_contacts = contact_pairs.size();
 
   // Quick no-op exit.
   if (num_contacts == 0) return std::vector<RotationMatrix<T>>();
 
-  std::vector<ContactPairKinematics<T>> contact_kinematics =
-      manager().CalcContactKinematics(context);
+  const DiscreteContactData<ContactPairKinematics<T>>& contact_kinematics =
+      manager().EvalContactKinematics(context);
 
   std::vector<RotationMatrix<T>> R_WC;
   R_WC.reserve(num_contacts);
@@ -190,7 +190,7 @@ std::vector<RotationMatrix<T>> SapDriver<T>::AddContactConstraints(
     const T stiffness = discrete_pair.stiffness;
     const T dissipation_time_scale = discrete_pair.dissipation_time_scale;
     const T friction = discrete_pair.friction_coefficient;
-    ContactConfiguration<T>& configuration =
+    const ContactConfiguration<T>& configuration =
         contact_kinematics[icontact].configuration;
     const auto& jacobian_blocks = contact_kinematics[icontact].jacobian;
 
@@ -800,7 +800,7 @@ void SapDriver<T>::CalcContactSolverResults(
     throw std::runtime_error(msg);
   }
 
-  const std::vector<DiscreteContactPair<T>>& discrete_pairs =
+  const DiscreteContactData<DiscreteContactPair<T>>& discrete_pairs =
       manager().EvalDiscreteContactPairs(context);
   const int num_contacts = discrete_pairs.size();
 
