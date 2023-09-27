@@ -9,11 +9,14 @@
 #include "drake/common/identifier.h"
 #include "drake/multibody/fem/deformable_body_config.h"
 #include "drake/multibody/fem/fem_model.h"
-#include "drake/multibody/plant/multibody_plant.h"
 #include "drake/multibody/plant/physical_model.h"
+#include "drake/multibody/tree/body.h"
 
 namespace drake {
 namespace multibody {
+
+template <typename T>
+class MultibodyPlant;
 
 /** Uniquely identifies a deformable body. It is valid before and after
  Finalize(). */
@@ -37,10 +40,7 @@ class DeformableModel final : public multibody::PhysicalModel<T> {
   /** Constructs a DeformableModel to be owned by the given MultibodyPlant.
    @pre plant != nullptr.
    @pre Finalize() has not been called on `plant`. */
-  explicit DeformableModel(MultibodyPlant<T>* plant) : plant_(plant) {
-    DRAKE_DEMAND(plant_ != nullptr);
-    DRAKE_DEMAND(!plant_->is_finalized());
-  }
+  explicit DeformableModel(MultibodyPlant<T>* plant);
 
   /** Returns the number of deformable bodies registered with this
    DeformableModel. */

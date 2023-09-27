@@ -3,6 +3,7 @@
 
 #include <gtest/gtest.h>
 
+#include "drake/multibody/plant/discrete_contact_data.h"
 #include "drake/multibody/plant/discrete_update_manager.h"
 #include "drake/multibody/plant/multibody_plant.h"
 #include "drake/multibody/plant/test/dummy_model.h"
@@ -183,9 +184,6 @@ class DoubleOnlyDiscreteUpdateManager final
   void DoCalcAccelerationKinematicsCache(
       const systems::Context<T>&,
       internal::AccelerationKinematicsCache<T>*) const final {}
-
-  void DoCalcDiscreteValues(const systems::Context<T>&,
-                            systems::DiscreteValues<T>*) const final {}
 
   void DoCalcContactResults(const systems::Context<T>&,
                             ContactResults<T>*) const final {}

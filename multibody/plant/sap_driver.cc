@@ -122,8 +122,8 @@ void SapDriver<T>::CalcLinearDynamicsMatrix(const systems::Context<T>& context,
   }
 
   if constexpr (std::is_same_v<T, double>) {
-    if (manager().deformable_driver_ != nullptr) {
-      manager().deformable_driver_->AppendLinearDynamicsMatrix(context, A);
+    if (manager().deformable_driver() != nullptr) {
+      manager().deformable_driver()->AppendLinearDynamicsMatrix(context, A);
     }
   }
 }
@@ -145,9 +145,9 @@ void SapDriver<T>::CalcFreeMotionVelocities(const systems::Context<T>& context,
       context.get_discrete_state(manager().multibody_state_index()).value();
   const auto v0 = x0.bottomRows(this->plant().num_velocities());
   if constexpr (std::is_same_v<T, double>) {
-    if (manager().deformable_driver_ != nullptr) {
+    if (manager().deformable_driver() != nullptr) {
       const VectorX<T>& deformable_v_star =
-          manager().deformable_driver_->EvalParticipatingFreeMotionVelocities(
+          manager().deformable_driver()->EvalParticipatingFreeMotionVelocities(
               context);
       const int rigid_dofs = v0.size();
       const int deformable_dofs = deformable_v_star.size();
@@ -611,9 +611,9 @@ void SapDriver<T>::CalcContactProblemCache(
   CalcFreeMotionVelocities(context, &v_star);
   const int num_rigid_bodies = plant().num_bodies();
   const int num_deformable_bodies =
-      (manager().deformable_driver_ == nullptr)
+      (manager().deformable_driver() == nullptr)
           ? 0
-          : manager().deformable_driver_->num_deformable_bodies();
+          : manager().deformable_driver()->num_deformable_bodies();
   const int num_objects = num_rigid_bodies + num_deformable_bodies;
   cache->sap_problem = std::make_unique<SapContactProblem<T>>(
       plant().time_step(), std::move(A), std::move(v_star));
@@ -709,7 +709,7 @@ void SapDriver<T>::AddCliqueContribution(
     EigenPtr<VectorX<T>> values) const {
   if (clique >= tree_topology().num_trees()) {
     const DeformableDriver<double>* deformable_driver =
-        manager().deformable_driver_.get();
+        manager().deformable_driver();
     DRAKE_THROW_UNLESS(deformable_driver != nullptr);
     if constexpr (std::is_same_v<T, double>) {
       const int num_deformable_dofs = values->size() - plant().num_velocities();
@@ -754,9 +754,9 @@ void SapDriver<T>::CalcContactSolverResults(
   }
 
   if constexpr (std::is_same_v<T, double>) {
-    if (manager().deformable_driver_ != nullptr) {
+    if (manager().deformable_driver() != nullptr) {
       const VectorX<double> deformable_v0 =
-          manager().deformable_driver_->EvalParticipatingVelocities(context);
+          manager().deformable_driver()->EvalParticipatingVelocities(context);
       const int rigid_dofs = v0.size();
       const int deformable_dofs = deformable_v0.size();
       v0.conservativeResize(rigid_dofs + deformable_dofs);
