@@ -246,8 +246,11 @@ void DeformableDriver<T>::AppendDiscreteContactPairs(
   const DeformableContact<T>& deformable_contact =
       EvalDeformableContact(context);
 
-  for (const DeformableContactSurface<double>& surface :
-       deformable_contact.contact_surfaces()) {
+  for (int surface_index = 0;
+       surface_index < ssize(deformable_contact.contact_surfaces());
+       ++surface_index) {
+    const DeformableContactSurface<T>& surface =
+        deformable_contact.contact_surfaces()[surface_index];
     /* While our discrete solvers might model constraints as compliant, an
     infinite stiffness indicates to use the stiffest approximation possible
     without sacrifycing numerical conditioning. SAP will use the "near rigid"
@@ -281,9 +284,9 @@ void DeformableDriver<T>::AppendDiscreteContactPairs(
       const T& phi0 = surface.signed_distances()[i];
       const T fn0 = NAN;  // not used.
       const T d = NAN;    // not used.
-      result->AppendDeformableData(
-          DiscreteContactPair<T>{surface.id_A(), surface.id_B(), p_WC,
-                                 nhat_BA_W, phi0, fn0, k, d, tau, mu});
+      result->AppendDeformableData(DiscreteContactPair<T>{
+          surface.id_A(), surface.id_B(), p_WC, nhat_BA_W, phi0, fn0, k, d, tau,
+          mu, surface_index, i});
     }
   }
 }

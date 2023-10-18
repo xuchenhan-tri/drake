@@ -2,6 +2,7 @@
 
 #include "drake/common/test_utilities/eigen_matrix_compare.h"
 #include "drake/geometry/drake_visualizer.h"
+#include "drake/geometry/kinematics_vector.h"
 #include "drake/geometry/proximity_properties.h"
 #include "drake/multibody/plant/compliant_contact_manager.h"
 #include "drake/multibody/plant/deformable_driver.h"
@@ -79,8 +80,8 @@ class DeformableIntegrationTest : public ::testing::Test {
     const RigidTransformd X_WG(RollPitchYawd(kSlopeAngle, 0, 0),
                                Vector3d(0, 0, -0.7));
     const Box box(10, 10, 1);
-    plant_->RegisterCollisionGeometry(plant_->world_body(), X_WG, box,
-                                      "ground_collision", proximity_prop);
+    ground_collision_id_ = plant_->RegisterCollisionGeometry(
+        plant_->world_body(), X_WG, box, "ground_collision", proximity_prop);
     IllustrationProperties illustration_props;
     illustration_props.AddProperty("phong", "diffuse",
                                    Vector4d(0.1, 0.8, 0.1, 0.8));
@@ -126,6 +127,7 @@ class DeformableIntegrationTest : public ::testing::Test {
   const DeformableDriver<double>* driver_{nullptr};
   unique_ptr<systems::Diagram<double>> diagram_{nullptr};
   DeformableBodyId body_id_;
+  GeometryId ground_collision_id_;
 
  private:
   DeformableBodyId RegisterDeformableOctahedron(DeformableModel<double>* model,
@@ -185,13 +187,13 @@ TEST_F(DeformableIntegrationTest, SteadyState) {
       manager_->EvalContactSolverResults(plant_context);
   /* The contact force at each contact point C expressed in the world frame. */
   const VectorXd& f_C_W = contact_solver_results.tau_contact;
-  /* The contact force applied to the deformable body B expressed in the world
+  /* The contact force applied to the deformable body A expressed in the world
    frame. */
-  Vector3d f_B_W = Vector3d::Zero();
+  Vector3d f_A_W = Vector3d::Zero();
   /* All contact forces are in the world frame, so we add them up to get the
    force on the body. */
   for (int i = 0; i < f_C_W.size(); i += 3) {
-    f_B_W += f_C_W.segment<3>(i);
+    f_A_W += f_C_W.segment<3>(i);
   }
   /* Computes the total gravitational force on the body. */
   const double volume = CalcDeformableReferenceVolume();
@@ -199,7 +201,7 @@ TEST_F(DeformableIntegrationTest, SteadyState) {
       volume * kMassDensity * (-plant_->gravity_field().gravity_vector());
   /* Verify the contact force balances gravity. */
   constexpr double kForceThreshold = 1e-5;  // unit: N.
-  EXPECT_TRUE(CompareMatrices(expected_contact_force, f_B_W, kForceThreshold));
+  EXPECT_TRUE(CompareMatrices(expected_contact_force, f_A_W, kForceThreshold));
 }
 
 }  // namespace
