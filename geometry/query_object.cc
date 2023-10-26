@@ -99,7 +99,7 @@ std::vector<PenetrationAsPointPair<T>>
 QueryObject<T>::ComputePointPairPenetration() const {
   ThrowIfNotCallable();
 
-  FullPoseUpdate();
+  FullPoseAndConfigurationUpdate();
   const GeometryState<T>& state = geometry_state();
   return state.ComputePointPairPenetration();
 }
@@ -109,7 +109,7 @@ std::vector<SortedPair<GeometryId>> QueryObject<T>::FindCollisionCandidates()
     const {
   ThrowIfNotCallable();
   // TODO(amcastro-tri): Modify this when the cache system is in place.
-  FullPoseUpdate();
+  FullPoseAndConfigurationUpdate();
   const GeometryState<T>& state = geometry_state();
   return state.FindCollisionCandidates();
 }
@@ -118,7 +118,7 @@ template <typename T>
 bool QueryObject<T>::HasCollisions() const {
   ThrowIfNotCallable();
 
-  FullPoseUpdate();
+  FullPoseAndConfigurationUpdate();
   const GeometryState<T>& state = geometry_state();
   return state.HasCollisions();
 }
@@ -131,7 +131,7 @@ QueryObject<T>::ComputeContactSurfaces(
     HydroelasticContactRepresentation representation) const {
   ThrowIfNotCallable();
 
-  FullPoseUpdate();
+  FullPoseAndConfigurationUpdate();
   const GeometryState<T>& state = geometry_state();
   return state.ComputeContactSurfaces(representation);
 }
@@ -148,7 +148,7 @@ QueryObject<T>::ComputeContactSurfacesWithFallback(
 
   ThrowIfNotCallable();
 
-  FullPoseUpdate();
+  FullPoseAndConfigurationUpdate();
   const GeometryState<T>& state = geometry_state();
   state.ComputeContactSurfacesWithFallback(representation, surfaces,
                                            point_pairs);
@@ -174,7 +174,7 @@ QueryObject<T>::ComputeSignedDistancePairwiseClosestPoints(
     const double max_distance) const {
   ThrowIfNotCallable();
 
-  FullPoseUpdate();
+  FullPoseAndConfigurationUpdate();
   const GeometryState<T>& state = geometry_state();
   return state.ComputeSignedDistancePairwiseClosestPoints(max_distance);
 }
@@ -184,7 +184,7 @@ SignedDistancePair<T> QueryObject<T>::ComputeSignedDistancePairClosestPoints(
     GeometryId geometry_id_A, GeometryId geometry_id_B) const {
   ThrowIfNotCallable();
 
-  FullPoseUpdate();
+  FullPoseAndConfigurationUpdate();
   const GeometryState<T>& state = geometry_state();
   return state.ComputeSignedDistancePairClosestPoints(geometry_id_A,
                                                       geometry_id_B);
@@ -197,7 +197,7 @@ QueryObject<T>::ComputeSignedDistanceToPoint(
     const double threshold) const {
   ThrowIfNotCallable();
 
-  FullPoseUpdate();
+  FullPoseAndConfigurationUpdate();
   const GeometryState<T>& state = geometry_state();
   return state.ComputeSignedDistanceToPoint(p_WQ, threshold);
 }
@@ -209,7 +209,7 @@ void QueryObject<T>::RenderColorImage(const ColorRenderCamera& camera,
                                       ImageRgba8U* color_image_out) const {
   ThrowIfNotCallable();
 
-  FullPoseUpdate();
+  FullPoseAndConfigurationUpdate();
   const GeometryState<T>& state = geometry_state();
   return state.RenderColorImage(camera, parent_frame, X_PC, color_image_out);
 }
@@ -221,7 +221,7 @@ void QueryObject<T>::RenderDepthImage(const DepthRenderCamera& camera,
                                       ImageDepth32F* depth_image_out) const {
   ThrowIfNotCallable();
 
-  FullPoseUpdate();
+  FullPoseAndConfigurationUpdate();
   const GeometryState<T>& state = geometry_state();
   return state.RenderDepthImage(camera, parent_frame, X_PC, depth_image_out);
 }
@@ -233,7 +233,7 @@ void QueryObject<T>::RenderLabelImage(const ColorRenderCamera& camera,
                                       ImageLabel16I* label_image_out) const {
   ThrowIfNotCallable();
 
-  FullPoseUpdate();
+  FullPoseAndConfigurationUpdate();
   const GeometryState<T>& state = geometry_state();
   return state.RenderLabelImage(camera, parent_frame, X_PC, label_image_out);
 }
@@ -242,7 +242,7 @@ template <typename T>
 const render::RenderEngine* QueryObject<T>::GetRenderEngineByName(
     const std::string& name) const {
   ThrowIfNotCallable();
-  FullPoseUpdate();
+  FullPoseAndConfigurationUpdate();
 
   const GeometryState<T>& state = geometry_state();
   return state.GetRenderEngineByName(name);

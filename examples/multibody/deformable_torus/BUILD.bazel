@@ -54,6 +54,9 @@ drake_cc_binary(
     data = [
         "simple_gripper.sdf",
         "torus.vtk",
+        "textured_torus.obj",
+        "textured_torus.mtl",
+        "dots.png",
     ],
     test_rule_args = [
         "-simulation_time=0.1",
@@ -64,7 +67,13 @@ drake_cc_binary(
         ":point_source_force_field",
         ":suction_cup_controller",
         "//geometry:drake_visualizer",
+        "//geometry/render_gl",
+        "//lcm",
+        "//systems/sensors:image_to_lcm_image_array_t",
+        "//systems/lcm:lcm_pubsub_system",
+        "//systems/sensors:rgbd_sensor",
         "//geometry:scene_graph",
+        "//geometry/proximity",
         "//multibody/parsing",
         "//multibody/plant",
         "//systems/analysis:simulator",

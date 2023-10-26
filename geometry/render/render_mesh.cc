@@ -330,6 +330,39 @@ vector<RenderMesh> LoadRenderMeshesFromObj(
   return meshes;
 }
 
+RenderMesh MakeRenderMeshFromTriangleSurfaceMesh(
+    const TriangleSurfaceMesh<double>& mesh,
+    const GeometryProperties& properties, const Rgba& default_diffuse,
+    const DiagnosticPolicy& policy) {
+  RenderMesh mesh_data;
+  /* This is the default material. No material was assigned to the faces.
+   We'll apply the fallback logic. */
+  mesh_data.material = MakeMeshFallbackMaterial(properties, "", default_diffuse,
+                                                policy, mesh_data.uv_state);
+  const int vertex_count = mesh.num_vertices();
+  const int element_count = mesh.num_elements();
+  mesh_data.positions.resize(vertex_count, 3);
+  mesh_data.normals.resize(vertex_count, 3);
+  mesh_data.uvs.resize(vertex_count, 2);
+  mesh_data.indices.resize(element_count, 3);
+  for (int i = 0; i < element_count; ++i) {
+    const SurfaceTriangle& t = mesh.element(i);
+    mesh_data.indices.row(i) =
+        Vector3<unsigned int>(t.vertex(0), t.vertex(1), t.vertex(2));
+    const double area = mesh.area(i);
+    const Vector3<double> weighted_normal = area * mesh.face_normal(i);
+    for (int j = 0; j < 3; ++j) {
+      mesh_data.normals.row(t.vertex(j)) += weighted_normal;
+    }
+  }
+  for (int i = 0; i < vertex_count; ++i) {
+    mesh_data.positions.row(i) = mesh.vertex(i);
+    mesh_data.uvs.row(i).setZero();
+    mesh_data.normals.row(i).normalize();
+  }
+  return mesh_data;
+}
+
 }  // namespace internal
 }  // namespace geometry
 }  // namespace drake

@@ -13,6 +13,7 @@
 #include "drake/common/copyable_unique_ptr.h"
 #include "drake/common/eigen_types.h"
 #include "drake/common/reset_on_copy.h"
+#include "drake/common/ssize.h"
 #include "drake/geometry/geometry_roles.h"
 #include "drake/geometry/render/render_engine.h"
 #include "drake/geometry/render/render_material.h"
@@ -139,6 +140,8 @@ class RenderEngineGl final : public render::RenderEngine {
     const math::RigidTransformd& X_WG;
     const PerceptionProperties& properties;
     bool accepted{true};
+    bool is_deformable{false};
+    const VolumeMesh<double>* control_mesh_ptr{nullptr};
   };
 
   // Adds the mesh data associated with the given filename to geometries_.
@@ -155,9 +158,19 @@ class RenderEngineGl final : public render::RenderEngine {
                         const PerceptionProperties& properties,
                         const math::RigidTransformd& X_WG) final;
 
+  // @see RenderEngine::DoRegisterDeformable().
+  bool DoRegisterDeformable(
+      GeometryId id,
+      const std::vector<geometry::internal::RenderMesh>& render_meshes,
+      const PerceptionProperties& properties) final;
+
   // @see RenderEngine::DoUpdateVisualPose().
   void DoUpdateVisualPose(GeometryId id,
                           const math::RigidTransformd& X_WG) final;
+
+  // @see RenderEngine::DoUpdateDeformableConfiguration.
+  void DoUpdateDeformableConfiguration(
+      GeometryId id, const std::vector<VectorX<double>>& q_WGs) final;
 
   // @see RenderEngine::DoRemoveGeometry().
   bool DoRemoveGeometry(GeometryId id) final;
@@ -256,7 +269,8 @@ class RenderEngineGl final : public render::RenderEngine {
   // Creates an OpenGlGeometry from the mesh defined by the given `mesh_data`.
   // The geometry is added to geometries_ and its index is returned.
   // This is *not* threadsafe.
-  int CreateGlGeometry(const geometry::internal::RenderMesh& mesh_data);
+  int CreateGlGeometry(const geometry::internal::RenderMesh& mesh_data,
+                       bool is_dynamic = false);
 
   // Given a geometry that has its buffers (and vertex counts assigned), ties
   // all of the buffer data into the vertex array attributes.
@@ -387,6 +401,8 @@ class RenderEngineGl final : public render::RenderEngine {
 
   // Mapping from the obj's canonical filename to RenderGlMeshes.
   std::unordered_map<std::string, std::vector<RenderGlMesh>> meshes_;
+  // Similar to `meshes_`, but keep track of obj' for deformable geometries.
+  std::unordered_map<GeometryId, std::vector<RenderGlMesh>> deformable_meshes_;
 
   // These are caches of reusable RenderTargets. There is a unique render target
   // for each unique image size (BufferDim) and output image type. The

@@ -1,3 +1,4 @@
+#include <iostream>
 #include <memory>
 
 #include <gflags/gflags.h>
@@ -7,8 +8,13 @@
 #include "drake/examples/multibody/deformable_torus/point_source_force_field.h"
 #include "drake/examples/multibody/deformable_torus/suction_cup_controller.h"
 #include "drake/geometry/drake_visualizer.h"
+#include "drake/geometry/proximity/mesh_to_vtk.h"
+#include "drake/geometry/proximity/volume_to_surface_mesh.h"
+#include "drake/geometry/proximity/vtk_to_volume_mesh.h"
 #include "drake/geometry/proximity_properties.h"
+#include "drake/geometry/render_gl/factory.h"
 #include "drake/geometry/scene_graph.h"
+#include "drake/lcm/drake_lcm.h"
 #include "drake/math/rigid_transform.h"
 #include "drake/multibody/fem/deformable_body_config.h"
 #include "drake/multibody/parsing/parser.h"
@@ -19,6 +25,10 @@
 #include "drake/systems/analysis/simulator.h"
 #include "drake/systems/framework/diagram.h"
 #include "drake/systems/framework/diagram_builder.h"
+#include "drake/systems/lcm/lcm_publisher_system.h"
+#include "drake/systems/sensors/image_to_lcm_image_array_t.h"
+#include "drake/systems/sensors/pixel_types.h"
+#include "drake/systems/sensors/rgbd_sensor.h"
 
 DEFINE_double(simulation_time, 12.0, "Desired duration of the simulation [s].");
 DEFINE_double(realtime_rate, 1.0, "Desired real time rate.");
@@ -46,16 +56,19 @@ using drake::geometry::Ellipsoid;
 using drake::geometry::GeometryInstance;
 using drake::geometry::IllustrationProperties;
 using drake::geometry::Mesh;
+using drake::geometry::PerceptionProperties;
 using drake::geometry::ProximityProperties;
-using drake::geometry::Sphere;
+using drake::geometry::RenderEngineGlParams;
+using drake::geometry::render::ColorRenderCamera;
+using drake::geometry::render::DepthRenderCamera;
+using drake::geometry::render::RenderLabel;
 using drake::math::RigidTransformd;
+using drake::math::RotationMatrixd;
 using drake::multibody::AddMultibodyPlant;
 using drake::multibody::Body;
 using drake::multibody::CoulombFriction;
 using drake::multibody::DeformableBodyId;
 using drake::multibody::DeformableModel;
-using drake::multibody::ModelInstanceIndex;
-using drake::multibody::MultibodyPlant;
 using drake::multibody::MultibodyPlantConfig;
 using drake::multibody::Parser;
 using drake::multibody::PrismaticJoint;
@@ -63,6 +76,8 @@ using drake::multibody::SpatialInertia;
 using drake::multibody::fem::DeformableBodyConfig;
 using drake::systems::BasicVector;
 using drake::systems::Context;
+using drake::systems::sensors::PixelType;
+using drake::systems::sensors::RgbdSensor;
 using Eigen::Vector2d;
 using Eigen::Vector3d;
 using Eigen::Vector4d;
@@ -71,85 +86,6 @@ using Eigen::VectorXd;
 namespace drake {
 namespace examples {
 namespace {
-
-/* Adds a suction gripper to the given MultibodyPlant and assign
- `proximity_props` to all the registered collision geometries. Returns the
- ModelInstanceIndex of the gripper model. */
-ModelInstanceIndex AddSuctionGripper(
-    MultibodyPlant<double>* plant, const ProximityProperties& proximity_props) {
-  const double radius = 0.02;
-  const double length = 0.1;
-  const auto M = SpatialInertia<double>::SolidCapsuleWithMass(
-      0.1, radius, length, Vector3d::UnitZ());
-  ModelInstanceIndex model_instance = plant->AddModelInstance("instance");
-  const auto& body = plant->AddRigidBody("cup_body", model_instance, M);
-  const Capsule capsule{radius, length};
-  IllustrationProperties cup_illustration_props;
-  cup_illustration_props.AddProperty("phong", "diffuse",
-                                     Vector4d(0.9, 0.1, 0.1, 0.8));
-  plant->RegisterVisualGeometry(body, RigidTransformd::Identity(), capsule,
-                                "cup_visual", cup_illustration_props);
-  /* Add a visual hint for the center of the suction force source. */
-  const Sphere sphere{0.0075};
-  IllustrationProperties source_illustration_props;
-  source_illustration_props.AddProperty("phong", "diffuse",
-                                        Vector4d(0.1, 0.9, 0.1, 0.8));
-  plant->RegisterVisualGeometry(body, RigidTransformd(Vector3d(0, 0, -0.07)),
-                                sphere, "source_visual",
-                                source_illustration_props);
-  plant->RegisterCollisionGeometry(body, RigidTransformd::Identity(), capsule,
-                                   "cup_collision", proximity_props);
-  /* Adds an actuated joint between the suction cup body and the world. */
-  const RigidTransformd X_WF(Vector3d(0.04, 0, -0.05));
-  const auto& prismatic_joint = plant->AddJoint<PrismaticJoint>(
-      "translate_z_joint", plant->world_body(), X_WF, body, std::nullopt,
-      Vector3d::UnitZ());
-  plant->GetMutableJointByName<PrismaticJoint>("translate_z_joint")
-      .set_default_translation(0.5);
-  const auto actuator_index =
-      plant->AddJointActuator("prismatic joint actuator", prismatic_joint)
-          .index();
-  plant->get_mutable_joint_actuator(actuator_index)
-      .set_controller_gains({1e4, 1});
-
-  return model_instance;
-}
-
-/* Adds a parallel gripper to the given MultibodyPlant and assign
- `proximity_props` to all the registered collision geometries. Returns the
- ModelInstanceIndex of the gripper model. */
-ModelInstanceIndex AddParallelGripper(
-    MultibodyPlant<double>* plant, const ProximityProperties& proximity_props) {
-  // TODO(xuchenhan-tri): Consider using a schunk gripper from the manipulation
-  // station instead.
-  Parser parser(plant);
-  ModelInstanceIndex model_instance = parser.AddModelsFromUrl(
-      "package://drake/examples/multibody/deformable_torus/simple_gripper.sdf")
-                                          [0];
-  /* Add collision geometries. */
-  const RigidTransformd X_BG =
-      RigidTransformd(math::RollPitchYawd(M_PI_2, 0, 0), Vector3d::Zero());
-  const Body<double>& left_finger = plant->GetBodyByName("left_finger");
-  const Body<double>& right_finger = plant->GetBodyByName("right_finger");
-  /* The size of the fingers is set to match the visual geometries in
-   simple_gripper.sdf. */
-  Capsule capsule(0.01, 0.08);
-  plant->RegisterCollisionGeometry(left_finger, X_BG, capsule,
-                                   "left_finger_collision", proximity_props);
-  plant->RegisterCollisionGeometry(right_finger, X_BG, capsule,
-                                   "right_finger_collision", proximity_props);
-  /* Get joints so that we can set initial conditions. */
-  PrismaticJoint<double>& left_slider =
-      plant->GetMutableJointByName<PrismaticJoint>("left_slider");
-  PrismaticJoint<double>& right_slider =
-      plant->GetMutableJointByName<PrismaticJoint>("right_slider");
-  /* Initialize the gripper in an "open" position. */
-  const double kInitialWidth = 0.085;
-  left_slider.set_default_translation(-kInitialWidth / 2.0);
-  right_slider.set_default_translation(kInitialWidth / 2.0);
-
-  return model_instance;
-}
 
 int do_main() {
   systems::DiagramBuilder<double> builder;
@@ -160,7 +96,9 @@ int do_main() {
   plant_config.discrete_contact_approximation = "sap";
 
   auto [plant, scene_graph] = AddMultibodyPlant(plant_config, &builder);
-
+  const std::string render_name("renderer");
+  scene_graph.AddRenderer(render_name,
+                          MakeRenderEngineGl(RenderEngineGlParams()));
   /* Minimum required proximity properties for rigid bodies to interact with
    deformable bodies.
    1. A valid Coulomb friction coefficient, and
@@ -184,13 +122,6 @@ int do_main() {
   plant.RegisterVisualGeometry(plant.world_body(), X_WG, ground,
                                "ground_visual", std::move(illustration_props));
 
-  /* Add a parallel gripper or a suction gripper depending on the runtime flag.
-   */
-  const bool use_suction = FLAGS_gripper == "suction";
-  ModelInstanceIndex gripper_instance =
-      use_suction ? AddSuctionGripper(&plant, rigid_proximity_props)
-                  : AddParallelGripper(&plant, rigid_proximity_props);
-
   /* Set up a deformable torus. */
   auto owned_deformable_model =
       std::make_unique<DeformableModel<double>>(&plant);
@@ -201,25 +132,37 @@ int do_main() {
   deformable_config.set_mass_density(FLAGS_density);
   deformable_config.set_stiffness_damping_coefficient(FLAGS_beta);
 
+  const std::string textured_torus_obj = FindResourceOrThrow(
+      "drake/examples/multibody/deformable_torus/textured_torus.obj");
   const std::string torus_vtk = FindResourceOrThrow(
       "drake/examples/multibody/deformable_torus/torus.vtk");
   /* Load the geometry and scale it down to 65% (to showcase the scaling
    capability and to make the torus suitable for grasping by the gripper). */
   const double scale = 0.65;
+
   auto torus_mesh = std::make_unique<Mesh>(torus_vtk, scale);
+  auto torus_render_mesh = std::make_unique<Mesh>(textured_torus_obj);
   /* Minor diameter of the torus inferred from the vtk file. */
   const double kL = 0.09 * scale;
   /* Set the initial pose of the torus such that its bottom face is touching the
    ground. */
-  const RigidTransformd X_WB(Vector3<double>(0.0, 0.0, kL / 2.0));
+  const RigidTransformd X_WT(Vector3<double>(0.0, 0.0, kL / 2.0 + 0.5));
   auto torus_instance = std::make_unique<GeometryInstance>(
-      X_WB, std::move(torus_mesh), "deformable_torus");
+      X_WT, std::move(torus_mesh), "deformable_torus");
+  auto visual_torus_instance = std::make_unique<GeometryInstance>(
+      X_WT, std::move(torus_render_mesh), "deformable_torus_visual");
 
   /* Minimumly required proximity properties for deformable bodies: A valid
    Coulomb friction coefficient. */
   ProximityProperties deformable_proximity_props;
   AddContactMaterial({}, {}, surface_friction, &deformable_proximity_props);
   torus_instance->set_proximity_properties(deformable_proximity_props);
+
+  PerceptionProperties perception_properties;
+  perception_properties.AddProperty("phong", "diffuse",
+                                    Vector4d{1.0, 1.0, 1.0, 1.0});
+  perception_properties.AddProperty("label", "id", RenderLabel(42));
+  visual_torus_instance->set_perception_properties(perception_properties);
 
   /* Registration of all deformable geometries ostensibly requires a resolution
    hint parameter that dictates how the shape is tessellated. In the case of a
@@ -229,17 +172,8 @@ int do_main() {
   // positive. Remove the requirement of a resolution hint for meshed shapes.
   const double unused_resolution_hint = 1.0;
   owned_deformable_model->RegisterDeformableBody(
-      std::move(torus_instance), deformable_config, unused_resolution_hint);
-
-  /* Add an external suction force if using a suction gripper. */
-  const PointSourceForceField* suction_force_ptr{nullptr};
-  if (use_suction) {
-    auto suction_force = std::make_unique<PointSourceForceField>(
-        plant, plant.GetBodyByName("cup_body"), Vector3d(0, 0, -0.07), 0.1);
-    suction_force_ptr = suction_force.get();
-    owned_deformable_model->AddExternalForce(std::move(suction_force));
-  }
-
+      std::move(torus_instance), deformable_config, unused_resolution_hint,
+      std::move(visual_torus_instance));
   const DeformableModel<double>* deformable_model =
       owned_deformable_model.get();
   plant.AddPhysicalModel(std::move(owned_deformable_model));
@@ -255,36 +189,51 @@ int do_main() {
       scene_graph.get_source_configuration_port(plant.get_source_id().value()));
 
   /* Add a visualizer that emits LCM messages for visualization. */
-  geometry::DrakeVisualizerParams params;
-  geometry::DrakeVisualizerd::AddToBuilder(&builder, scene_graph, nullptr,
-                                           params);
+  drake::lcm::DrakeLcm lcm;
+  geometry::DrakeVisualizerd::AddToBuilder(&builder, scene_graph, &lcm);
 
-  /* Add a controller appropriate for the type of gripper. */
-  if (use_suction) {
-    const double kInitialHeight = 0.5;
-    const double kStartSuctionHeight =
-        0.15;  // The height at which to turn on suction.
-    const double kApproachTime = 3.0;      // Time to start the action
-    const double kStartSuctionTime = 4.0;  // Time to turn on suction
-    const double kRetrieveTime = 6.0;      // Time to retrieve the gripper
-    const double kDropTime = 9.0;          // Time to turn off suction
-    const auto& suction = *builder.AddSystem<SuctionCupController>(
-        kInitialHeight, kStartSuctionHeight, kApproachTime, kStartSuctionTime,
-        kRetrieveTime, kDropTime);
-    builder.Connect(suction.maximum_force_density_port(),
-                    suction_force_ptr->maximum_force_density_input_port());
-    builder.Connect(suction.desired_state_output_port(),
-                    plant.get_desired_state_input_port(gripper_instance));
-  } else {
-    /* Set the width between the fingers for open and closed states as well as
-     the height to which the gripper lifts the deformable torus. */
-    const double kOpenWidth = kL * 1.5;
-    const double kClosedWidth = kL * 0.4;
-    const double kLiftedHeight = 0.18;
-    const auto& control = *builder.AddSystem<ParallelGripperController>(
-        kOpenWidth, kClosedWidth, kLiftedHeight);
-    builder.Connect(control.get_output_port(),
-                    plant.get_desired_state_input_port(gripper_instance));
+  // Create the camera.
+  const ColorRenderCamera color_camera{
+      {render_name, {1280, 960, M_PI_4}, {0.1, 2.0}, {}}, false};
+  const DepthRenderCamera depth_camera{color_camera.core(), {0.1, 2.0}};
+  // We need to position and orient the camera. We have the camera body frame
+  // B (see rgbd_sensor.h) and the camera frame C (see camera_info.h).
+  // By default X_BC = I in the RgbdSensor. So, to aim the camera, Cz = Bz
+  // should point from the camera position to the origin. By points *down* the
+  // image, so we need to align it in the -Wz direction. So,  we compute the
+  // basis using camera Y-ish in the By ≈ -Wz direction to compute Bx, and
+  // then use Bx an and Bz to compute By.
+  const Vector3d p_WB(0.3, -1, 0.25);
+  // Set rotation looking at the origin.
+  const Vector3d Bz_W = -p_WB.normalized();
+  const Vector3d Bx_W = -Vector3d::UnitZ().cross(Bz_W).normalized();
+  const Vector3d By_W = Bz_W.cross(Bx_W).normalized();
+  const RotationMatrixd R_WB =
+      RotationMatrixd::MakeFromOrthonormalColumns(Bx_W, By_W, Bz_W);
+  const RigidTransformd X_WB(R_WB, p_WB);
+
+  auto camera = builder.AddSystem<RgbdSensor>(scene_graph.world_frame_id(),
+                                              X_WB, color_camera, depth_camera);
+  builder.Connect(scene_graph.get_query_output_port(),
+                  camera->query_object_input_port());
+  // Broadcast the images to Meldis (available after #18862 is finished).
+  auto image_to_lcm_image_array =
+      builder.template AddSystem<systems::sensors::ImageToLcmImageArrayT>();
+  image_to_lcm_image_array->set_name("converter");
+
+  systems::lcm::LcmPublisherSystem* image_array_lcm_publisher =
+      builder.template AddSystem(
+          systems::lcm::LcmPublisherSystem::Make<lcmt_image_array>(
+              "DRAKE_RGBD_CAMERA_IMAGES", &lcm, 0.1 /* publish period */));
+  image_array_lcm_publisher->set_name("publisher");
+
+  builder.Connect(image_to_lcm_image_array->image_array_t_msg_output_port(),
+                  image_array_lcm_publisher->get_input_port());
+  {
+    const auto& port =
+        image_to_lcm_image_array->DeclareImageInputPort<PixelType::kRgba8U>(
+            "color");
+    builder.Connect(camera->color_image_output_port(), port);
   }
 
   auto diagram = builder.Build();

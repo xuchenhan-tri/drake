@@ -15,6 +15,7 @@
 #include "drake/geometry/geometry_frame.h"
 #include "drake/geometry/geometry_instance.h"
 #include "drake/geometry/geometry_roles.h"
+#include "drake/geometry/proximity/volume_to_surface_mesh.h"
 #include "drake/geometry/proximity_engine.h"
 #include "drake/geometry/proximity_properties.h"
 #include "drake/geometry/render/render_engine.h"
@@ -848,15 +849,16 @@ GeometryId GeometryState<T>::RegisterDeformableGeometry(
     SourceId source_id, FrameId frame_id,
     std::unique_ptr<GeometryInstance> geometry, double resolution_hint) {
   if (geometry == nullptr) {
-    throw std::logic_error("Registering null geometry to frame " +
-                           to_string(frame_id) + ", on source " +
-                           to_string(source_id) + ".");
+    throw std::logic_error(
+        fmt::format("Registering null geometry to frame {} on source {}.",
+                    to_string(frame_id), to_string(source_id)));
   }
 
   const GeometryId geometry_id = geometry->id();
   if (frame_id != InternalFrame::world_frame_id()) {
-    throw std::logic_error("Registering deformable geometry with id " +
-                           to_string(geometry_id) + " to a non-world frame");
+    throw std::logic_error(fmt::format(
+        "Registering deformable geometry with id {} to a non-world frame",
+        to_string(geometry_id)));
   }
 
   ValidateRegistrationAndSetTopology(source_id, frame_id, geometry_id);
@@ -957,7 +959,7 @@ void GeometryState<T>::ChangeShape(SourceId source_id, GeometryId geometry_id,
     // unchecked version because we just need the engine mechanism; no
     // further GeometryState checking.
     RemoveFromAllRenderersUnchecked(geometry_id);
-    AddToCompatibleRenderersUnchecked(*geometry);
+    AddToCompatibleRenderersUnchecked(geometry->id());
   }
 }
 
@@ -1083,7 +1085,7 @@ void GeometryState<T>::AssignRole(SourceId source_id, GeometryId geometry_id,
 
   geometry.SetRole(std::move(properties));
 
-  const bool added_to_renderer = AddToCompatibleRenderersUnchecked(geometry);
+  const bool added_to_renderer = AddToCompatibleRenderersUnchecked(geometry_id);
 
   if (!added_to_renderer && render_engines_.size() > 0) {
     // TODO(SeanCurtis-TRI): This message would be better with a geometry name.
@@ -1256,6 +1258,7 @@ void GeometryState<T>::AddRenderer(
         accepted |= render_engine->RegisterVisual(
             id, geometry.shape(), *properties, RigidTransformd(geometry.X_FG()),
             geometry.is_dynamic());
+        // TODO(xuchenhan-tri): Handle compatible deformable geometries.
       }
     }
   }
@@ -1394,6 +1397,9 @@ void GeometryState<T>::SetGeometryConfiguration(
     internal::KinematicsData<T>* kinematics_data) const {
   const GeometryIdSet& g_ids =
       GetValueOrThrow(source_id, source_deformable_geometry_id_map_);
+  // TODO(xuchenhan-tri): Some deformable geometries are embedded geometires.
+  // For those, interpolate positions from their parent geometries instead of
+  // reading from configurations.
   for (const auto g_id : g_ids) {
     kinematics_data->q_WGs[g_id] = configurations.value(g_id);
   }
@@ -1473,9 +1479,12 @@ template <typename T>
 void GeometryState<T>::FinalizeConfigurationUpdate(
     const internal::KinematicsData<T>& kinematics_data,
     internal::ProximityEngine<T>* proximity_engine,
-    std::vector<render::RenderEngine*>) const {
+    std::vector<render::RenderEngine*> render_engines) const {
   proximity_engine->UpdateDeformableVertexPositions(kinematics_data.q_WGs);
-  // TODO(xuchenhan-tri): Update render engine as necessary.
+  for (auto* render_engine : render_engines) {
+    render_engine->UpdateDeformableConfigurations(
+        kinematics_data.q_WGs, deformable_perception_mesh_interpolators_);
+  }
 }
 
 template <typename T>
@@ -1688,7 +1697,16 @@ bool GeometryState<T>::RemoveFromRendererUnchecked(
 }
 
 template <typename T>
-bool GeometryState<T>::AddToCompatibleRenderersUnchecked(
+bool GeometryState<T>::AddToCompatibleRenderersUnchecked(const GeometryId id) {
+  const InternalGeometry& geometry = geometries_.at(id);
+  if (geometry.is_deformable()) {
+    return AddDeformableToCompatibleRenderersUnchecked(id);
+  }
+  return AddRigidToCompatibleRenderersUnchecked(geometry);
+}
+
+template <typename T>
+bool GeometryState<T>::AddRigidToCompatibleRenderersUnchecked(
     const internal::InternalGeometry& geometry) {
   const PerceptionProperties& properties = *geometry.perception_properties();
 
@@ -1705,6 +1723,56 @@ bool GeometryState<T>::AddToCompatibleRenderersUnchecked(
           engine->RegisterVisual(geometry.id(), geometry.shape(), properties,
                                  X_WG, geometry.is_dynamic()) ||
           added_to_renderer;
+    }
+  }
+  if (added_to_renderer) {
+    // Increment version number only if some renderer picks up the role
+    // assignment.
+    geometry_version_.modify_perception();
+  }
+  return added_to_renderer;
+}
+
+template <typename T>
+bool GeometryState<T>::AddDeformableToCompatibleRenderersUnchecked(
+    const GeometryId id) {
+  InternalGeometry& geometry = geometries_[id];
+  const PerceptionProperties& properties = *geometry.perception_properties();
+  auto accepting_renderers =
+      properties.GetPropertyOrDefault("renderer", "accepting", set<string>{});
+  const auto default_rgba = properties.GetPropertyOrDefault(
+      "phong", "diffuse", Rgba{0.9, 0.9, 0.9, 1.0});
+
+  const VolumeMesh<double>* control_mesh_ptr = geometry.reference_mesh();
+  DRAKE_DEMAND(control_mesh_ptr != nullptr);
+  const VolumeMesh<double>& control_mesh = *control_mesh_ptr;
+
+  std::vector<internal::RenderMesh> render_meshes;
+  const auto render_meshes_file =
+      properties.GetPropertyOrDefault("render", "mesh", string{});
+  if (render_meshes_file.empty()) {
+    // If no render mesh is specified, use the surface triangle mesh of the
+    // volume mesh as the render mesh.
+    auto [surface_mesh, interpolator] =
+        internal::ExtractSurfaceMeshAndInterpolator(control_mesh);
+    deformable_perception_mesh_interpolators_.emplace(id,
+                                                      std::move(interpolator));
+    render_meshes.emplace_back(internal::MakeRenderMeshFromTriangleSurfaceMesh(
+        surface_mesh, properties, default_rgba, {}));
+  } else {
+    // TODO(xuchenhan-tri): figure out whether this requires abs path.
+    render_meshes = internal::LoadRenderMeshesFromObj(render_meshes_file,
+                                                      properties, default_rgba);
+    deformable_perception_mesh_interpolators_.emplace(
+        id, internal::MeshDeformationInterpolator(render_meshes, control_mesh));
+  }
+
+  bool added_to_renderer{false};
+  for (auto& [name, engine] : render_engines_) {
+    if (accepting_renderers.empty() || accepting_renderers.count(name) > 0) {
+      added_to_renderer = engine->RegisterDeformable(
+                              geometry.id(), render_meshes, properties) ||
+                          added_to_renderer;
     }
   }
   if (added_to_renderer) {

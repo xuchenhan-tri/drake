@@ -7,6 +7,7 @@
 
 #include "drake/common/diagnostic_policy.h"
 #include "drake/geometry/geometry_properties.h"
+#include "drake/geometry/proximity/triangle_surface_mesh.h"
 #include "drake/geometry/render/render_material.h"
 #include "drake/geometry/rgba.h"
 
@@ -91,6 +92,11 @@ std::vector<RenderMesh> LoadRenderMeshesFromObj(
     const std::filesystem::path& obj_path, const GeometryProperties& properties,
     const Rgba& default_diffuse,
     const drake::internal::DiagnosticPolicy& policy = {});
+
+RenderMesh MakeRenderMeshFromTriangleSurfaceMesh(
+    const TriangleSurfaceMesh<double>& mesh,
+    const GeometryProperties& properties, const Rgba& default_diffuse,
+    const drake::internal::DiagnosticPolicy& policy);
 
 }  // namespace internal
 }  // namespace geometry

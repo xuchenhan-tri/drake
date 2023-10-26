@@ -20,6 +20,7 @@
 #include "drake/geometry/internal_frame.h"
 #include "drake/geometry/internal_geometry.h"
 #include "drake/geometry/kinematics_vector.h"
+#include "drake/geometry/mesh_deformation_interpolator.h"
 #include "drake/geometry/proximity_engine.h"
 #include "drake/geometry/render/render_camera.h"
 #include "drake/geometry/render/render_engine.h"
@@ -776,7 +777,11 @@ class GeometryState {
   // All other changes to GeometryState data must happen elsewhere.
   // @returns `true` if the geometry was added to *any* renderer.
   bool AddToCompatibleRenderersUnchecked(
+      const GeometryId geometry_id);
+  bool AddRigidToCompatibleRenderersUnchecked(
       const internal::InternalGeometry& geometry);
+  bool AddDeformableToCompatibleRenderersUnchecked(
+      const GeometryId geometry_id);
 
   // Attempts to remove the geometry with the given id from *all* render
   // engines. The only GeometryState-level data structure modified is the
@@ -905,6 +910,12 @@ class GeometryState {
 
   // The geometry data, keyed on unique geometry identifiers.
   std::unordered_map<GeometryId, internal::InternalGeometry> geometries_;
+
+  // Map geometry Ids of deformable geometries that have perception properties
+  // to their perception mesh representations' embedding in the control
+  // (reference) mesh.
+  std::unordered_map<GeometryId, internal::MeshDeformationInterpolator>
+      deformable_perception_mesh_interpolators_;
 
   // This provides the look up from the internal index of a frame to its frame
   // id. It is constructed so that the index value of any position in the vector
