@@ -908,6 +908,14 @@ drake_cc_googletest(
 )
 
 drake_cc_googletest(
+    name = "cache_entry_test",
+    deps = [
+        ":plant",
+        "//systems/analysis:simulator",
+    ],
+)
+
+drake_cc_googletest(
     name = "box_test",
     timeout = "moderate",
     data = ["test/box.sdf"],

@@ -1,6 +1,7 @@
 #include "drake/multibody/plant/compliant_contact_manager.h"
 
 #include <algorithm>
+#include <iostream>
 #include <limits>
 #include <memory>
 #include <string>
@@ -194,6 +195,8 @@ template <typename T>
 void CompliantContactManager<T>::DoCalcContactSolverResults(
     const systems::Context<T>& context,
     ContactSolverResults<T>* contact_results) const {
+  std::cout << "CalcContactSolverResults at time " << context.get_time()
+            << std::endl;
   if (plant().get_discrete_contact_solver() == DiscreteContactSolver::kSap) {
     if constexpr (std::is_same_v<T, symbolic::Expression>) {
       throw std::logic_error(

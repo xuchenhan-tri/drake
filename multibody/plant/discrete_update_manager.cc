@@ -1,5 +1,6 @@
 #include "drake/multibody/plant/discrete_update_manager.h"
 
+#include <iostream>
 #include <limits>
 #include <utility>
 
@@ -424,6 +425,8 @@ void DiscreteUpdateManager<T>::SampleDiscreteInputPortForces(
         "context. As a result, the external force input ports are sampled "
         "continuously instead. See issue #12643.");
   }
+  std::cout << "Sampling discrete input port forces at time "
+            << context.get_time() << std::endl;
   // Actually sample the discrete forces.
   auto& cache_entry_value =
       discrete_input_forces_cache_entry.get_mutable_cache_entry_value(context);
@@ -488,6 +491,7 @@ void DiscreteUpdateManager<T>::CalcContactResults(
   plant().ValidateContext(context);
   contact_results->Clear();
   contact_results->set_plant(&plant());
+  std::cout << "CalcContactResults at time " << context.get_time() << std::endl;
 
   switch (plant().get_contact_model()) {
     case ContactModel::kPoint:
