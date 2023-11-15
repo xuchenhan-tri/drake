@@ -29,9 +29,6 @@ template <typename T>
 void DiscreteUpdateManager<T>::CalcDiscreteValues(
     const systems::Context<T>& context,
     systems::DiscreteValues<T>* updates) const {
-  // The discrete sampling of input ports needs to be the first step of a
-  // discrete update.
-  SampleDiscreteInputPortForces(context);
   DRAKE_DEMAND(updates != nullptr);
   // Perform discrete updates for deformable bodies if they exist.
   if constexpr (std::is_same_v<T, double>) {
@@ -41,6 +38,9 @@ void DiscreteUpdateManager<T>::CalcDiscreteValues(
   }
   // Perform discrete updates for rigid bodies.
   DoCalcDiscreteValues(context, updates);
+  // The discrete sampling of input ports needs to be the last step of a
+  // discrete update.
+  SampleDiscreteInputPortForces(context);
 }
 
 template <typename T>
