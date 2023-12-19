@@ -26,11 +26,13 @@
 #include "drake/systems/framework/diagram.h"
 #include "drake/systems/framework/diagram_builder.h"
 #include "drake/systems/lcm/lcm_publisher_system.h"
+#include "drake/systems/sensors/camera_config_functions.h"
 #include "drake/systems/sensors/image_to_lcm_image_array_t.h"
 #include "drake/systems/sensors/pixel_types.h"
 #include "drake/systems/sensors/rgbd_sensor.h"
 
-DEFINE_double(simulation_time, 12.0, "Desired duration of the simulation [s].");
+DEFINE_double(simulation_time, 800.0,
+              "Desired duration of the simulation [s].");
 DEFINE_double(realtime_rate, 1.0, "Desired real time rate.");
 DEFINE_double(time_step, 1e-2,
               "Discrete time step for the system [s]. Must be positive.");
@@ -42,9 +44,8 @@ DEFINE_double(density, 1e3,
               "up by the suction gripper.");
 DEFINE_double(beta, 0.01,
               "Stiffness damping coefficient for the deformable body [1/s].");
-DEFINE_string(gripper, "parallel",
-              "Type of gripper used to pick up the deformable torus. Options "
-              "are: 'parallel' and 'suction'.");
+DEFINE_bool(use_texture, false,
+            "Whether to use a textured surface mesh for rendering.");
 
 using drake::examples::deformable_torus::ParallelGripperController;
 using drake::examples::deformable_torus::PointSourceForceField;
@@ -74,8 +75,11 @@ using drake::multibody::Parser;
 using drake::multibody::PrismaticJoint;
 using drake::multibody::SpatialInertia;
 using drake::multibody::fem::DeformableBodyConfig;
+using drake::schema::Transform;
 using drake::systems::BasicVector;
 using drake::systems::Context;
+using drake::systems::sensors::ApplyCameraConfig;
+using drake::systems::sensors::CameraConfig;
 using drake::systems::sensors::PixelType;
 using drake::systems::sensors::RgbdSensor;
 using Eigen::Vector2d;
@@ -96,8 +100,8 @@ int do_main() {
   plant_config.discrete_contact_approximation = "sap";
 
   auto [plant, scene_graph] = AddMultibodyPlant(plant_config, &builder);
-  const std::string render_name("renderer");
-  scene_graph.AddRenderer(render_name,
+  const std::string renderer_name("gl_renderer");
+  scene_graph.AddRenderer(renderer_name,
                           MakeRenderEngineGl(RenderEngineGlParams()));
   /* Minimum required proximity properties for rigid bodies to interact with
    deformable bodies.
@@ -112,8 +116,8 @@ int do_main() {
   rigid_proximity_props.AddProperty(geometry::internal::kHydroGroup,
                                     geometry::internal::kRezHint, 0.01);
   /* Set up a ground. */
-  Box ground{4, 4, 4};
-  const RigidTransformd X_WG(Eigen::Vector3d{0, 0, -2});
+  Box ground{0.2, 0.2, 0.2};
+  const RigidTransformd X_WG(Eigen::Vector3d{0, 0, -0.2});
   plant.RegisterCollisionGeometry(plant.world_body(), X_WG, ground,
                                   "ground_collision", rigid_proximity_props);
   IllustrationProperties illustration_props;
@@ -132,8 +136,6 @@ int do_main() {
   deformable_config.set_mass_density(FLAGS_density);
   deformable_config.set_stiffness_damping_coefficient(FLAGS_beta);
 
-  const std::string textured_torus_obj = FindResourceOrThrow(
-      "drake/examples/multibody/deformable_torus/textured_torus.obj");
   const std::string torus_vtk = FindResourceOrThrow(
       "drake/examples/multibody/deformable_torus/torus.vtk");
   /* Load the geometry and scale it down to 65% (to showcase the scaling
@@ -141,16 +143,13 @@ int do_main() {
   const double scale = 0.65;
 
   auto torus_mesh = std::make_unique<Mesh>(torus_vtk, scale);
-  auto torus_render_mesh = std::make_unique<Mesh>(textured_torus_obj);
   /* Minor diameter of the torus inferred from the vtk file. */
   const double kL = 0.09 * scale;
   /* Set the initial pose of the torus such that its bottom face is touching the
    ground. */
-  const RigidTransformd X_WT(Vector3<double>(0.0, 0.0, kL / 2.0 + 0.5));
+  const RigidTransformd X_WT(Vector3<double>(0.0, 0.0, kL / 2.0));
   auto torus_instance = std::make_unique<GeometryInstance>(
       X_WT, std::move(torus_mesh), "deformable_torus");
-  auto visual_torus_instance = std::make_unique<GeometryInstance>(
-      X_WT, std::move(torus_render_mesh), "deformable_torus_visual");
 
   /* Minimumly required proximity properties for deformable bodies: A valid
    Coulomb friction coefficient. */
@@ -159,10 +158,15 @@ int do_main() {
   torus_instance->set_proximity_properties(deformable_proximity_props);
 
   PerceptionProperties perception_properties;
-  perception_properties.AddProperty("phong", "diffuse",
-                                    Vector4d{1.0, 1.0, 1.0, 1.0});
-  perception_properties.AddProperty("label", "id", RenderLabel(42));
-  visual_torus_instance->set_perception_properties(perception_properties);
+  if (FLAGS_use_texture) {
+    const std::string textured_torus_obj = FindResourceOrThrow(
+        "drake/examples/multibody/deformable_torus/textured_torus.obj");
+    perception_properties.AddProperty("render", "mesh", textured_torus_obj);
+  } else {
+    perception_properties.AddProperty("phong", "diffuse",
+                                      Vector4d{0.9, 0.7, 0.2, 1.0});
+  }
+  torus_instance->set_perception_properties(perception_properties);
 
   /* Registration of all deformable geometries ostensibly requires a resolution
    hint parameter that dictates how the shape is tessellated. In the case of a
@@ -172,8 +176,7 @@ int do_main() {
   // positive. Remove the requirement of a resolution hint for meshed shapes.
   const double unused_resolution_hint = 1.0;
   owned_deformable_model->RegisterDeformableBody(
-      std::move(torus_instance), deformable_config, unused_resolution_hint,
-      std::move(visual_torus_instance));
+      std::move(torus_instance), deformable_config, unused_resolution_hint);
   const DeformableModel<double>* deformable_model =
       owned_deformable_model.get();
   plant.AddPhysicalModel(std::move(owned_deformable_model));
@@ -192,15 +195,11 @@ int do_main() {
   drake::lcm::DrakeLcm lcm;
   geometry::DrakeVisualizerd::AddToBuilder(&builder, scene_graph, &lcm);
 
-  // Create the camera.
-  const ColorRenderCamera color_camera{
-      {render_name, {1280, 960, M_PI_4}, {0.1, 2.0}, {}}, false};
-  const DepthRenderCamera depth_camera{color_camera.core(), {0.1, 2.0}};
   // We need to position and orient the camera. We have the camera body frame
   // B (see rgbd_sensor.h) and the camera frame C (see camera_info.h).
   // By default X_BC = I in the RgbdSensor. So, to aim the camera, Cz = Bz
   // should point from the camera position to the origin. By points *down* the
-  // image, so we need to align it in the -Wz direction. So,  we compute the
+  // image, so we need to align it in the -Wz direction. So, we compute the
   // basis using camera Y-ish in the By ≈ -Wz direction to compute Bx, and
   // then use Bx an and Bz to compute By.
   const Vector3d p_WB(0.3, -1, 0.25);
@@ -212,29 +211,13 @@ int do_main() {
       RotationMatrixd::MakeFromOrthonormalColumns(Bx_W, By_W, Bz_W);
   const RigidTransformd X_WB(R_WB, p_WB);
 
-  auto camera = builder.AddSystem<RgbdSensor>(scene_graph.world_frame_id(),
-                                              X_WB, color_camera, depth_camera);
-  builder.Connect(scene_graph.get_query_output_port(),
-                  camera->query_object_input_port());
-  // Broadcast the images to Meldis (available after #18862 is finished).
-  auto image_to_lcm_image_array =
-      builder.template AddSystem<systems::sensors::ImageToLcmImageArrayT>();
-  image_to_lcm_image_array->set_name("converter");
-
-  systems::lcm::LcmPublisherSystem* image_array_lcm_publisher =
-      builder.template AddSystem(
-          systems::lcm::LcmPublisherSystem::Make<lcmt_image_array>(
-              "DRAKE_RGBD_CAMERA_IMAGES", &lcm, 0.1 /* publish period */));
-  image_array_lcm_publisher->set_name("publisher");
-
-  builder.Connect(image_to_lcm_image_array->image_array_t_msg_output_port(),
-                  image_array_lcm_publisher->get_input_port());
-  {
-    const auto& port =
-        image_to_lcm_image_array->DeclareImageInputPort<PixelType::kRgba8U>(
-            "color");
-    builder.Connect(camera->color_image_output_port(), port);
-  }
+  // Create the camera.
+  const CameraConfig camera_config{.width = 1920,
+                                   .height = 1080,
+                                   .X_PB = Transform(X_WB),
+                                   .renderer_name = renderer_name,
+                                   .show_rgb = true};
+  ApplyCameraConfig(camera_config, &builder);
 
   auto diagram = builder.Build();
   std::unique_ptr<Context<double>> diagram_context =

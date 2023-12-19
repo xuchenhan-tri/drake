@@ -15,6 +15,7 @@
 #include "drake/common/reset_on_copy.h"
 #include "drake/common/ssize.h"
 #include "drake/geometry/geometry_roles.h"
+#include "drake/geometry/proximity/mesh_deformer.h"
 #include "drake/geometry/render/render_engine.h"
 #include "drake/geometry/render/render_material.h"
 #include "drake/geometry/render/render_mesh.h"
@@ -32,6 +33,44 @@ namespace drake {
 namespace geometry {
 namespace render_gl {
 namespace internal {
+
+class DeformableMesh {
+ public:
+  DeformableMesh(int index, TriangleSurfaceMesh<double> mesh)
+      : index_(index), mesh_(std::move(mesh)), deformer_(&mesh_) {}
+
+  DeformableMesh(const DeformableMesh& other)
+      : DeformableMesh(other.index_, other.mesh_) {}
+
+  DeformableMesh& operator=(const DeformableMesh& other) {
+    if (this == &other) return *this;
+    mesh_ = other.mesh();
+    return *this;
+  }
+
+  DeformableMesh(DeformableMesh&& other)
+      : DeformableMesh(other.index_, std::move(other.mesh_)) {}
+
+  DeformableMesh& operator=(DeformableMesh&& other) {
+    if (this == &other) return *this;
+    mesh_ = std::move(other.mesh_);
+    return *this;
+  }
+
+  // Index into geometries_ containing the instance for a RenderMesh.
+  int index() const { return index_; }
+
+  const TriangleSurfaceMesh<double>& mesh() const { return mesh_; }
+
+  void UpdateVertexPositions(const Eigen::Ref<const VectorX<double>>& q) {
+    deformer_.SetAllPositions(q);
+  }
+
+ private:
+  int index_{};
+  TriangleSurfaceMesh<double> mesh_;
+  geometry::internal::MeshDeformer<TriangleSurfaceMesh<double>> deformer_;
+};
 
 /* See documentation of MakeRenderEngineGl().
 
@@ -401,8 +440,11 @@ class RenderEngineGl final : public render::RenderEngine {
 
   // Mapping from the obj's canonical filename to RenderGlMeshes.
   std::unordered_map<std::string, std::vector<RenderGlMesh>> meshes_;
-  // Similar to `meshes_`, but keep track of obj' for deformable geometries.
-  std::unordered_map<GeometryId, std::vector<RenderGlMesh>> deformable_meshes_;
+
+  // Mapping from GeometryIds of deformable geometries to their mesh
+  // representations that may potentially consists of more than one mesh.
+  std::unordered_map<GeometryId, std::vector<DeformableMesh>>
+      deformable_meshes_;
 
   // These are caches of reusable RenderTargets. There is a unique render target
   // for each unique image size (BufferDim) and output image type. The

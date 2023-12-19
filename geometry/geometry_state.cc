@@ -1241,6 +1241,7 @@ void GeometryState<T>::AddRenderer(
   render::RenderEngine* render_engine = renderer.get();
   render_engines_[name] = std::move(renderer);
   bool accepted = false;
+  // TODO(xuchenhan-tri): account for deformable geometries here.
   for (auto& id_geo_pair : geometries_) {
     InternalGeometry& geometry = id_geo_pair.second;
     // To add this geometry to the renderer, it must:
@@ -1740,8 +1741,10 @@ bool GeometryState<T>::AddDeformableToCompatibleRenderersUnchecked(
   const PerceptionProperties& properties = *geometry.perception_properties();
   auto accepting_renderers =
       properties.GetPropertyOrDefault("renderer", "accepting", set<string>{});
+  /* Default an arbitrary RGBA for diffuse. Specific renderer can choose to
+   override the default diffuse color based on their parameters. */
   const auto default_rgba = properties.GetPropertyOrDefault(
-      "phong", "diffuse", Rgba{0.9, 0.9, 0.9, 1.0});
+      "phong", "diffuse", Rgba{1.0, 1.0, 1.0, 1.0});
 
   const VolumeMesh<double>* control_mesh_ptr = geometry.reference_mesh();
   DRAKE_DEMAND(control_mesh_ptr != nullptr);
@@ -1760,7 +1763,6 @@ bool GeometryState<T>::AddDeformableToCompatibleRenderersUnchecked(
     render_meshes.emplace_back(internal::MakeRenderMeshFromTriangleSurfaceMesh(
         surface_mesh, properties, default_rgba, {}));
   } else {
-    // TODO(xuchenhan-tri): figure out whether this requires abs path.
     render_meshes = internal::LoadRenderMeshesFromObj(render_meshes_file,
                                                       properties, default_rgba);
     deformable_perception_mesh_interpolators_.emplace(

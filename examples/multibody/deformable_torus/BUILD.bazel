@@ -72,6 +72,7 @@ drake_cc_binary(
         "//systems/sensors:image_to_lcm_image_array_t",
         "//systems/lcm:lcm_pubsub_system",
         "//systems/sensors:rgbd_sensor",
+        "//systems/sensors:camera_config_functions",
         "//geometry:scene_graph",
         "//geometry/proximity",
         "//multibody/parsing",

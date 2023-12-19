@@ -697,6 +697,24 @@ RenderEngineGlParams CleanupLights(RenderEngineGlParams params) {
   return params;
 }
 
+DeformableMesh MakeDeformableMesh(RenderMesh render_mesh, int index) {
+  const int num_vertices = render_mesh.positions.rows();
+  const int num_triangles = render_mesh.indices.rows();
+  std::vector<Vector3<double>> vertices;
+  vertices.reserve(num_vertices);
+  std::vector<SurfaceTriangle> triangles;
+  triangles.reserve(num_triangles);
+  for (int v = 0; v < num_vertices; ++v) {
+    vertices.emplace_back(render_mesh.positions.row(v));
+  }
+  for (int t = 0; t < num_triangles; ++t) {
+    triangles.emplace_back(render_mesh.indices(t, 0), render_mesh.indices(t, 1),
+                           render_mesh.indices(t, 2));
+  }
+  return DeformableMesh(
+      index, TriangleSurfaceMesh(std::move(triangles), std::move(vertices)));
+}
+
 }  // namespace
 
 RenderEngineGl::RenderEngineGl(RenderEngineGlParams params)
@@ -880,22 +898,37 @@ bool RenderEngineGl::DoRegisterDeformable(
     GeometryId id, const std::vector<RenderMesh>& render_meshes,
     const PerceptionProperties& properties) {
   opengl_context_->MakeCurrent();
-  std::vector<RenderGlMesh> gl_meshes;
+  std::vector<DeformableMesh> meshes;
+  bool accepted = true;
   for (const auto& render_mesh : render_meshes) {
     const int mesh_index =
         CreateGlGeometry(render_mesh, /* is_deformable */ true);
     DRAKE_DEMAND(mesh_index >= 0);
-    gl_meshes.push_back({.mesh_index = mesh_index,
-                         .uv_state = render_mesh.uv_state,
-                         .mesh_material = render_mesh.material});
-  }
-  bool accepted = true;
-  for (const auto& gl_mesh : gl_meshes) {
-    RegistrationData data{id, RigidTransformd::Identity(), properties};
-    AddGeometryInstance(gl_mesh.mesh_index, &data, Vector3d(1, 1, 1));
+    meshes.emplace_back(MakeDeformableMesh(render_mesh, mesh_index));
+
+    RenderMaterial material;
+    const auto mesh_filename =
+        properties.GetPropertyOrDefault("render", "mesh", string{});
+    // If the material in render_mesh is defined by the file, we use it
+    // Otherwise, we recreate the fallback material based on user data and
+    // defaults from `parameters_`. We need to do this because the defaults in
+    // `render_meshes` may not respect the defaults set in this renderer.
+    if (render_mesh.material.from_mesh_file) {
+      material = render_mesh.material;
+    } else {
+      material = MakeMeshFallbackMaterial(
+          properties, mesh_filename, parameters_.default_diffuse,
+          drake::internal::DiagnosticPolicy(), render_mesh.uv_state);
+    }
+    PerceptionProperties mesh_properties(properties);
+    mesh_properties.UpdateProperty("phong", "diffuse_map",
+                                   material.diffuse_map.string());
+    mesh_properties.UpdateProperty("phong", "diffuse", material.diffuse);
+    RegistrationData data{id, RigidTransformd::Identity(), mesh_properties};
+    AddGeometryInstance(mesh_index, &data, Vector3d(1, 1, 1));
     accepted &= data.accepted;
   }
-  deformable_meshes_[id] = std::move(gl_meshes);
+  deformable_meshes_.insert(std::make_pair(id, std::move(meshes)));
   return accepted;
 }
 
@@ -913,8 +946,8 @@ void RenderEngineGl::DoUpdateVisualPose(GeometryId id,
 void RenderEngineGl::DoUpdateDeformableConfiguration(
     GeometryId id, const std::vector<VectorX<double>>& q_WGs) {
   DRAKE_DEMAND(deformable_meshes_.count(id) > 0);
-  const std::vector<RenderGlMesh>& gl_meshes = deformable_meshes_.at(id);
-  DRAKE_DEMAND(gl_meshes.size() == q_WGs.size());
+  std::vector<DeformableMesh>& meshes = deformable_meshes_.at(id);
+  DRAKE_DEMAND(meshes.size() == q_WGs.size());
 
   auto convert_to_gl_floats = [](const VectorX<double>& q) {
     std::vector<GLfloat> result(q.size());
@@ -925,17 +958,42 @@ void RenderEngineGl::DoUpdateDeformableConfiguration(
   };
 
   for (int i = 0; i < ssize(q_WGs); ++i) {
-    const RenderGlMesh& gl_mesh = gl_meshes[i];
     const VectorX<double> q_WG = q_WGs[i];
+    DeformableMesh& mesh = meshes[i];
     // Find the OpenGL geometry.
-    OpenGlGeometry& geometry = geometries_[gl_mesh.mesh_index];
+    OpenGlGeometry& geometry = geometries_[mesh.index()];
     const std::vector<GLfloat> vertex_position_data =
         convert_to_gl_floats(q_WG);
-    std::size_t position_offset = 0;
-    glNamedBufferSubData(geometry.vertex_buffer, position_offset,
+    //  Update vertex position data.
+    std::size_t positions_offset = 0;
+    glNamedBufferSubData(geometry.vertex_buffer,
+                         positions_offset * sizeof(GLfloat),
                          vertex_position_data.size() * sizeof(GLfloat),
                          vertex_position_data.data());
-    // TODO(xuchenhan-tri): update the normals too.
+
+    //  Update vertex normal data.
+    mesh.UpdateVertexPositions(q_WG);
+    VectorX<double> nhat_Ws = VectorX<double>::Zero(q_WG.size());
+    const TriangleSurfaceMesh<double>& tri_mesh = mesh.mesh();
+    const int num_verts = q_WG.size() / 3;
+    DRAKE_DEMAND(tri_mesh.num_vertices() == num_verts);
+    for (int f = 0; f < tri_mesh.num_triangles(); ++f) {
+      const Vector3<double> area_weighted_normal =
+          tri_mesh.area(f) * tri_mesh.face_normal(f);
+      for (int v = 0; v < 3; ++v) {
+        const int vertex = tri_mesh.element(f).vertex(v);
+        nhat_Ws.segment<3>(3 * vertex) += area_weighted_normal;
+      }
+    }
+    for (int v = 0; v < num_verts; ++v) {
+      nhat_Ws.segment<3>(3 * v).normalize();
+    }
+    const std::vector<GLfloat> vertex_normal_data =
+        convert_to_gl_floats(nhat_Ws);
+    std::size_t normals_offset = q_WG.size();
+    glNamedBufferSubData(
+        geometry.vertex_buffer, normals_offset * sizeof(GLfloat),
+        vertex_normal_data.size() * sizeof(GLfloat), vertex_normal_data.data());
   }
 }
 

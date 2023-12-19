@@ -231,7 +231,7 @@ class OpenGlContext::Impl {
   void DisplayWindow(const int width, const int height) {
     if (width != window_width_ || height != window_height_) {
       XResizeWindow(display(), window_, width, height);
-      WaitForExposeEvent();
+      if (IsWindowViewable()) WaitForExposeEvent();
       window_width_ = width;
       window_height_ = height;
     }
