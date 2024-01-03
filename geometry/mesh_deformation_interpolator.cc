@@ -19,9 +19,14 @@ using std::array;
 BarycentricInterpolator::BarycentricInterpolator(
     const Eigen::Matrix<double, Eigen::Dynamic, 3, Eigen::RowMajor>& positions,
     const VolumeMesh<double>& control_mesh)
-    : num_control_vertices_(positions.rows()) {
-  const double kTol = 1e-6;
-  for (int v = 0; v < num_control_vertices_; ++v) {
+    : num_total_vertices_(control_mesh.num_vertices()) {
+  // We allow some slack on the requirement that all passive points are inside
+  // the control mesh to account for errors caused by floating point numerics.
+  // The result is that some points may be incorrectly classified as inside a
+  // nearby tetrahedron. Since the tolerance is tight, we expect the visual
+  // result from these different interpolations to be close to each other.
+  const double kTol = 1e-8;
+  for (int v = 0; v < positions.rows(); ++v) {
     const Vector3d p_WV = positions.row(v);
     bool matched = false;
     for (int e = 0; e < control_mesh.num_elements(); ++e) {
@@ -37,31 +42,31 @@ BarycentricInterpolator::BarycentricInterpolator(
       }
     }
     if (!matched) {
-      throw std::runtime_error("Passive vertex outside of the control mesh.");
+      throw std::runtime_error("Passive point outside of the control mesh.");
     }
   }
 }
 
 VectorXd BarycentricInterpolator::operator()(const VectorXd& q) const {
-  DRAKE_THROW_UNLESS(q.size() != 3 * num_control_vertices_);
+  DRAKE_THROW_UNLESS(q.size() == 3 * num_total_vertices_);
   VectorXd result(3 * vertex_indices_.size());
   for (int i = 0; i < ssize(vertex_indices_); ++i) {
-    Vector3d p_WV = Vector3d::Zero();
+    Vector3d p_FV = Vector3d::Zero();
     const Vector4d& bary = barycentric_coordinates_[i];
     const Vector4i& indices = vertex_indices_[i];
     for (int j = 0; j < 4; ++j) {
-      p_WV += bary[j] * q.segment<3>(3 * indices[j]);
+      p_FV += bary[j] * q.segment<3>(3 * indices[j]);
     }
-    result.segment<3>(3 * i) = p_WV;
+    result.segment<3>(3 * i) = p_FV;
   }
   return result;
 }
 
 VectorXd VertexSelector::operator()(const VectorXd& q) const {
-  DRAKE_THROW_UNLESS(q.size() >= 3 * ssize(selected_vertices));
-  VectorXd result(3 * selected_vertices.size());
-  for (int i = 0; i < ssize(selected_vertices); ++i) {
-    result.segment<3>(3 * i) = q.segment<3>(3 * selected_vertices[i]);
+  DRAKE_THROW_UNLESS(q.size() == 3 * num_total_vertices_);
+  VectorXd result(3 * selected_vertices_.size());
+  for (int i = 0; i < ssize(selected_vertices_); ++i) {
+    result.segment<3>(3 * i) = q.segment<3>(3 * selected_vertices_[i]);
   }
   return result;
 }
@@ -72,22 +77,20 @@ MeshDeformationInterpolator::MeshDeformationInterpolator(
   for (const auto& mesh : driven_meshes) {
     const Eigen::Matrix<double, Eigen::Dynamic, 3, Eigen::RowMajor>& positions =
         mesh.positions;
-    data_.push_back(BarycentricInterpolator(positions, control_mesh));
+    interpolators_.push_back(BarycentricInterpolator(positions, control_mesh));
   }
 }
 
-/* Constructor for a single driven mesh whose vertices form a subset of the
- set of vertices of the control mesh. */
 MeshDeformationInterpolator::MeshDeformationInterpolator(
     VertexSelector selector) {
-  data_.emplace_back(std::move(selector));
+  interpolators_.emplace_back(std::move(selector));
 }
 
 std::vector<VectorXd> MeshDeformationInterpolator::Interpolate(
     const VectorXd& q) const {
   std::vector<VectorXd> result;
-  result.reserve(data_.size());
-  for (const auto& interpolator : data_) {
+  result.reserve(interpolators_.size());
+  for (const auto& interpolator : interpolators_) {
     result.emplace_back(std::visit(
         [&q](const auto& f) {
           return f(q);
@@ -160,9 +163,8 @@ ExtractSurfaceMeshAndInterpolator(const VolumeMesh<double>& control_mesh) {
     for (int j = 0; j < 3; ++j) unique_vertices.insert(triangle[j]);
   }
 
-  /* This is the *second* documented responsibility of this function: Populate
-   the mapping from surface to volume so that we can efficiently extract the
-   *surface* vertex positions from the *volume* vertex input. */
+  /* Populate the mapping from surface to volume so that we can efficiently
+   *extract the surface* vertex positions from the *volume* vertex input. */
   std::vector<int> surface_to_volume_vertices;
   surface_to_volume_vertices.insert(surface_to_volume_vertices.begin(),
                                     unique_vertices.begin(),
@@ -179,9 +181,9 @@ ExtractSurfaceMeshAndInterpolator(const VolumeMesh<double>& control_mesh) {
     volume_to_surface[surface_to_volume_vertices[j]] = j;
   }
 
-  /* This is the *first* documented responsibility: Create the topology of the
-   surface triangle mesh for each volume mesh. Each triangle consists of three
-   indices into the set of *surface* vertex positions. */
+  /* Create the topology of the surface triangle mesh for each volume mesh. Each
+   triangle consists of three indices into the set of *surface* vertex
+   positions. */
   std::vector<SurfaceTriangle> surface_triangles;
   surface_triangles.reserve(border_triangles.size());
   for (auto& [triangle_key, face] : border_triangles) {
@@ -195,8 +197,8 @@ ExtractSurfaceMeshAndInterpolator(const VolumeMesh<double>& control_mesh) {
   for (int v = 0; v < volume_vertex_count; ++v) {
     q.segment<3>(3 * v) = control_mesh.vertex(v);
   }
-  const VertexSelector selector{.selected_vertices =
-                                    std::move(surface_to_volume_vertices)};
+  const VertexSelector selector{std::move(surface_to_volume_vertices),
+                                control_mesh};
   const VectorXd driven_qs = selector(q);
   std::vector<Vector3<double>> vertex_positions(driven_qs.size() / 3);
   for (int i = 0; i < ssize(vertex_positions); ++i) {

@@ -280,6 +280,16 @@ drake_cc_library(
     ],
 )
 
+drake_cc_googletest(
+    name = "mesh_deformation_interpolator_test",
+    deps = [
+        ":mesh_deformation_interpolator",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//common/test_utilities:expect_throws_message",
+        "//geometry/proximity:make_sphere_mesh",
+    ],
+)
+
 drake_cc_library(
     name = "proximity_properties",
     srcs = ["proximity_properties.cc"],
