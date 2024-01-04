@@ -93,6 +93,12 @@ std::vector<RenderMesh> LoadRenderMeshesFromObj(
     const Rgba& default_diffuse,
     const drake::internal::DiagnosticPolicy& policy = {});
 
+/* Constructs a render mesh from a triangle surface mesh. The vertex normals are
+ computed using area-weighted face normals incident to the vertex. UvState
+ with be set to UvState::kNone and all uv coordinates are set to zero. The
+ material of the resulting render mesh is created using the protocol in
+ MakeMeshFallbackMaterial() with the given `properties` and `default_diffuse`.
+ */
 RenderMesh MakeRenderMeshFromTriangleSurfaceMesh(
     const TriangleSurfaceMesh<double>& mesh,
     const GeometryProperties& properties, const Rgba& default_diffuse,

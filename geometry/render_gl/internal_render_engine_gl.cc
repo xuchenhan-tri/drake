@@ -964,14 +964,14 @@ void RenderEngineGl::DoUpdateDeformableConfiguration(
     OpenGlGeometry& geometry = geometries_[mesh.index()];
     const std::vector<GLfloat> vertex_position_data =
         convert_to_gl_floats(q_WG);
-    //  Update vertex position data.
+    // Update vertex position data.
     std::size_t positions_offset = 0;
     glNamedBufferSubData(geometry.vertex_buffer,
                          positions_offset * sizeof(GLfloat),
                          vertex_position_data.size() * sizeof(GLfloat),
                          vertex_position_data.data());
 
-    //  Update vertex normal data.
+    // Update vertex normal data.
     mesh.UpdateVertexPositions(q_WG);
     VectorX<double> nhat_Ws = VectorX<double>::Zero(q_WG.size());
     const TriangleSurfaceMesh<double>& tri_mesh = mesh.mesh();
