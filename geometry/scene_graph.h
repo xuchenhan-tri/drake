@@ -550,8 +550,8 @@ class SceneGraph final : public systems::LeafSystem<T> {
    assigned in the given GeometryInstance `geometry`. The positions of the
    vertices of these meshes representation are defined in the frame F (i.e.,
    `q_FG`) and are driven by the configurations received from the corresponding
-   source configuration port (see get_source_configuration_port()). Returns the
-   unique geometry id of the registered geometry.
+   source configuration port (see get_source_configuration_port()). This
+   function returns the unique geometry id of the registered geometry.
 
    Roles will be assigned to the registered geometry if the corresponding
    %GeometryInstance `geometry` has had properties assigned. Each role assigned

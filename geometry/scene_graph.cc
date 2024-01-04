@@ -107,7 +107,8 @@ SceneGraph<T>::SceneGraph()
 
 template <typename T>
 template <typename U>
-SceneGraph<T>::SceneGraph(const SceneGraph<U>& other) : SceneGraph() {
+SceneGraph<T>::SceneGraph(const SceneGraph<U>& other)
+    : SceneGraph() {
   model_ = GeometryState<T>(other.model_);
 
   // We need to guarantee that the same source ids map to the same port indices.
@@ -153,7 +154,8 @@ bool SceneGraph<T>::SourceIsRegistered(SourceId id) const {
 }
 
 template <typename T>
-const InputPort<T>& SceneGraph<T>::get_source_pose_port(SourceId id) const {
+const InputPort<T>& SceneGraph<T>::get_source_pose_port(
+    SourceId id) const {
   ThrowUnlessRegistered(id, "Can't acquire pose port for unknown source id: ");
   return this->get_input_port(input_source_ids_.at(id).pose_port);
 }
@@ -489,7 +491,8 @@ std::vector<FrameId> SceneGraph<T>::GetDynamicFrames(
 }
 
 template <typename T>
-void SceneGraph<T>::CalcPoseUpdate(const Context<T>& context, int*) const {
+void SceneGraph<T>::CalcPoseUpdate(const Context<T>& context,
+                                   int*) const {
   // TODO(SeanCurtis-TRI): Update this when the cache is available.
   // This method is const and the context is const. Ultimately, this will pull
   // cached entities to do the query work. For now, we have to const cast the
@@ -522,12 +525,14 @@ void SceneGraph<T>::CalcPoseUpdate(const Context<T>& context, int*) const {
         }
         const auto& poses =
             pose_port.template Eval<FramePoseVector<T>>(context);
-        state.SetFramePoses(source_id, poses, &kinematics_data);
+        state.SetFramePoses(
+            source_id, poses, &kinematics_data);
       }
     }
   }
 
-  state.FinalizePoseUpdate(kinematics_data, &state.mutable_proximity_engine(),
+  state.FinalizePoseUpdate(kinematics_data,
+                           &state.mutable_proximity_engine(),
                            state.GetMutableRenderEngines());
 }
 
@@ -558,8 +563,8 @@ void SceneGraph<T>::CalcConfigurationUpdate(const Context<T>& context,
               state.GetName(source_id), source_id));
         }
         const auto& configs =
-            configuration_port.template Eval<GeometryConfigurationVector<T>>(
-                context);
+            configuration_port
+                .template Eval<GeometryConfigurationVector<T>>(context);
         state.SetGeometryConfiguration(source_id, configs, &kinematics_data);
       }
     }
