@@ -26,6 +26,7 @@ using Eigen::Vector3d;
 using Eigen::Vector4d;
 using Eigen::Vector4i;
 using Eigen::VectorXd;
+using geometry::internal::DeformableTriangleSurfaceMesh;
 using geometry::internal::LoadRenderMeshesFromObj;
 using geometry::internal::MakeMeshFallbackMaterial;
 using geometry::internal::RenderMaterial;
@@ -697,7 +698,8 @@ RenderEngineGlParams CleanupLights(RenderEngineGlParams params) {
   return params;
 }
 
-DeformableMesh MakeDeformableMesh(RenderMesh render_mesh, int index) {
+DeformableTriangleSurfaceMesh<double> MakeDeformableMesh(
+    RenderMesh render_mesh) {
   const int num_vertices = render_mesh.positions.rows();
   const int num_triangles = render_mesh.indices.rows();
   std::vector<Vector3<double>> vertices;
@@ -711,8 +713,8 @@ DeformableMesh MakeDeformableMesh(RenderMesh render_mesh, int index) {
     triangles.emplace_back(render_mesh.indices(t, 0), render_mesh.indices(t, 1),
                            render_mesh.indices(t, 2));
   }
-  return DeformableMesh(
-      index, TriangleSurfaceMesh(std::move(triangles), std::move(vertices)));
+  return DeformableTriangleSurfaceMesh<double>(
+      TriangleSurfaceMesh(std::move(triangles), std::move(vertices)));
 }
 
 }  // namespace
@@ -898,13 +900,13 @@ bool RenderEngineGl::DoRegisterDeformable(
     GeometryId id, const std::vector<RenderMesh>& render_meshes,
     const PerceptionProperties& properties) {
   opengl_context_->MakeCurrent();
-  std::vector<DeformableMesh> meshes;
+  std::vector<DeformableGlMesh> meshes;
   bool accepted = true;
   for (const auto& render_mesh : render_meshes) {
     const int mesh_index =
         CreateGlGeometry(render_mesh, /* is_deformable */ true);
     DRAKE_DEMAND(mesh_index >= 0);
-    meshes.emplace_back(MakeDeformableMesh(render_mesh, mesh_index));
+    meshes.emplace_back(mesh_index, MakeDeformableMesh(render_mesh));
 
     RenderMaterial material;
     const auto mesh_filename =
@@ -946,7 +948,7 @@ void RenderEngineGl::DoUpdateVisualPose(GeometryId id,
 void RenderEngineGl::DoUpdateDeformableConfiguration(
     GeometryId id, const std::vector<VectorX<double>>& q_WGs) {
   DRAKE_DEMAND(deformable_meshes_.count(id) > 0);
-  std::vector<DeformableMesh>& meshes = deformable_meshes_.at(id);
+  std::vector<DeformableGlMesh>& meshes = deformable_meshes_.at(id);
   DRAKE_DEMAND(meshes.size() == q_WGs.size());
 
   auto convert_to_gl_floats = [](const VectorX<double>& q) {
@@ -959,9 +961,9 @@ void RenderEngineGl::DoUpdateDeformableConfiguration(
 
   for (int i = 0; i < ssize(q_WGs); ++i) {
     VectorX<double> q_WG = q_WGs[i];
-    DeformableMesh& mesh = meshes[i];
+    DeformableGlMesh& gl_mesh = meshes[i];
     // Find the OpenGL geometry.
-    OpenGlGeometry& geometry = geometries_[mesh.index()];
+    OpenGlGeometry& geometry = geometries_[gl_mesh.mesh_index];
     const std::vector<GLfloat> vertex_position_data =
         convert_to_gl_floats(q_WG);
     // Update vertex position data.
@@ -972,6 +974,7 @@ void RenderEngineGl::DoUpdateDeformableConfiguration(
                          vertex_position_data.data());
 
     // Update vertex normal data.
+    DeformableTriangleSurfaceMesh<double>& mesh = gl_mesh.deformable_mesh;
     mesh.UpdateVertexPositions(q_WG);
     VectorX<double> nhat_Ws = VectorX<double>::Zero(q_WG.size());
     const TriangleSurfaceMesh<double>& tri_mesh = mesh.mesh();

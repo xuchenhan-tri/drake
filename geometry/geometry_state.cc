@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <functional>
-#include <iostream>
 #include <memory>
 #include <string>
 #include <utility>
@@ -1251,7 +1250,8 @@ void GeometryState<T>::AddRenderer(
     //      been explicitly included in its acceptable set.
     if (geometry.has_perception_role()) {
       if (geometry.is_deformable()) {
-
+        // TODO(xuchenhan-tri): Existing deformable geometries with render
+        // properties need to be added.
       } else {
         const PerceptionProperties* properties =
             geometry.perception_properties();

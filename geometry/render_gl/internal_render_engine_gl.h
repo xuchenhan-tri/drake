@@ -8,6 +8,7 @@
 #include <string>
 #include <tuple>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "drake/common/copyable_unique_ptr.h"
@@ -15,7 +16,7 @@
 #include "drake/common/reset_on_copy.h"
 #include "drake/common/ssize.h"
 #include "drake/geometry/geometry_roles.h"
-#include "drake/geometry/proximity/mesh_deformer.h"
+#include "drake/geometry/proximity/deformable_mesh.h"
 #include "drake/geometry/render/render_engine.h"
 #include "drake/geometry/render/render_material.h"
 #include "drake/geometry/render/render_mesh.h"
@@ -403,9 +404,20 @@ class RenderEngineGl final : public render::RenderEngine {
   // Mapping from the obj's canonical filename to RenderGlMeshes.
   std::unordered_map<std::string, std::vector<RenderGlMesh>> meshes_;
 
+  struct DeformableGlMesh {
+    DeformableGlMesh(
+        int mesh_index_in,
+        geometry::internal::DeformableTriangleSurfaceMesh<double> mesh)
+        : mesh_index(mesh_index_in), deformable_mesh(std::move(mesh)) {}
+
+    // Index into geometries_ containing the instance for a RenderMesh.
+    int mesh_index{};
+    geometry::internal::DeformableTriangleSurfaceMesh<double> deformable_mesh;
+  };
+
   // Mapping from GeometryIds of deformable geometries to their mesh
   // representations that may potentially consists of more than one mesh.
-  std::unordered_map<GeometryId, std::vector<DeformableMesh>>
+  std::unordered_map<GeometryId, std::vector<DeformableGlMesh>>
       deformable_meshes_;
 
   // These are caches of reusable RenderTargets. There is a unique render target
