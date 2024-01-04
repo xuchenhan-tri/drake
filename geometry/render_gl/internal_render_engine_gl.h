@@ -34,44 +34,6 @@ namespace geometry {
 namespace render_gl {
 namespace internal {
 
-class DeformableMesh {
- public:
-  DeformableMesh(int index, TriangleSurfaceMesh<double> mesh)
-      : index_(index), mesh_(std::move(mesh)), deformer_(&mesh_) {}
-
-  DeformableMesh(const DeformableMesh& other)
-      : DeformableMesh(other.index_, other.mesh_) {}
-
-  DeformableMesh& operator=(const DeformableMesh& other) {
-    if (this == &other) return *this;
-    mesh_ = other.mesh();
-    return *this;
-  }
-
-  DeformableMesh(DeformableMesh&& other)
-      : DeformableMesh(other.index_, std::move(other.mesh_)) {}
-
-  DeformableMesh& operator=(DeformableMesh&& other) {
-    if (this == &other) return *this;
-    mesh_ = std::move(other.mesh_);
-    return *this;
-  }
-
-  // Index into geometries_ containing the instance for a RenderMesh.
-  int index() const { return index_; }
-
-  const TriangleSurfaceMesh<double>& mesh() const { return mesh_; }
-
-  void UpdateVertexPositions(const Eigen::Ref<const VectorX<double>>& q) {
-    deformer_.SetAllPositions(q);
-  }
-
- private:
-  int index_{};
-  TriangleSurfaceMesh<double> mesh_;
-  geometry::internal::MeshDeformer<TriangleSurfaceMesh<double>> deformer_;
-};
-
 /* See documentation of MakeRenderEngineGl().
 
  A discussion on using RenderEngineGl in multiple threads.
