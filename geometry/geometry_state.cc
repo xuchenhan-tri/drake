@@ -1403,9 +1403,6 @@ void GeometryState<T>::SetGeometryConfiguration(
     internal::KinematicsData<T>* kinematics_data) const {
   const GeometryIdSet& g_ids =
       GetValueOrThrow(source_id, source_deformable_geometry_id_map_);
-  // TODO(xuchenhan-tri): Some deformable geometries are embedded geometires.
-  // For those, interpolate positions from their parent geometries instead of
-  // reading from configurations.
   for (const auto g_id : g_ids) {
     kinematics_data->q_WGs[g_id] = configurations.value(g_id);
   }
