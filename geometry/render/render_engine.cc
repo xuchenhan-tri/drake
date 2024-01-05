@@ -1,6 +1,7 @@
 #include "drake/geometry/render/render_engine.h"
 
 #include <typeinfo>
+#include <utility>
 
 #include <fmt/format.h>
 
@@ -53,20 +54,61 @@ bool RenderEngine::RegisterVisual(GeometryId id,
   return accepted;
 }
 
+bool RenderEngine::RegisterDeformable(
+    GeometryId id, const std::vector<internal::RenderMesh>& render_meshes,
+    const PerceptionProperties& properties) {
+  bool accepted = DoRegisterDeformable(id, render_meshes, properties);
+  if (accepted) {
+    std::vector<int> mesh_dofs;
+    for (const auto& mesh : render_meshes) {
+      mesh_dofs.emplace_back(mesh.positions.size());
+    }
+    deformable_mesh_dofs_[id] = std::move(mesh_dofs);
+  }
+  return accepted;
+}
+
 bool RenderEngine::RemoveGeometry(GeometryId id) {
   const bool removed = DoRemoveGeometry(id);
   // The derived sub-class should report geometry removal if and only if the
   // base class is tracking the id.
   if (removed) {
-    DRAKE_DEMAND(update_ids_.erase(id) > 0 || anchored_ids_.erase(id) > 0);
-  } else {
-    DRAKE_DEMAND(update_ids_.count(id) == 0 || anchored_ids_.count(id) == 0);
+    DRAKE_DEMAND(update_ids_.erase(id) > 0 || anchored_ids_.erase(id) > 0 ||
+                 deformable_mesh_dofs_.erase(id) > 0);
   }
+  DRAKE_DEMAND(!has_geometry(id));
   return removed;
 }
 
 bool RenderEngine::has_geometry(GeometryId id) const {
-  return update_ids_.count(id) > 0 || anchored_ids_.count(id) > 0;
+  return update_ids_.count(id) > 0 || anchored_ids_.count(id) > 0 ||
+         deformable_mesh_dofs_.count(id) > 0;
+}
+
+void RenderEngine::UpdateDeformableConfigurations(
+    GeometryId id, const std::vector<VectorX<double>>& q_WGs) {
+  if (deformable_mesh_dofs_.count(id) == 0) {
+    throw std::runtime_error(fmt::format(
+        "No deformable geometry with id {} has been registered.", id));
+  }
+  const std::vector<int>& mesh_dofs = deformable_mesh_dofs_.at(id);
+  if (mesh_dofs.size() != q_WGs.size()) {
+    throw std::runtime_error(
+        fmt::format("{} meshes are registered with deformable geometry with id "
+                    "{}, but vertex positions for {} meshes are provided for "
+                    "the configuration update.",
+                    mesh_dofs.size(), id, q_WGs.size()));
+  }
+  for (int i = 0; i < ssize(mesh_dofs); ++i) {
+    if (mesh_dofs[i] != q_WGs[i].size()) {
+      throw std::runtime_error(fmt::format(
+          "There are {} dofs for mesh {} registered with deformable "
+          "geometry with id {}; however, the positions with {} dofs "
+          "are supplied in the configuration update",
+          mesh_dofs[i], i, id, q_WGs[i].size()));
+    }
+  }
+  DoUpdateDeformableConfiguration(id, q_WGs);
 }
 
 RenderLabel RenderEngine::GetRenderLabelOrThrow(
@@ -81,6 +123,21 @@ RenderLabel RenderEngine::GetRenderLabelOrThrow(
         "missing render labels in the properties.");
   }
   return label;
+}
+
+bool RenderEngine::DoRegisterDeformable(
+    GeometryId, const std::vector<internal::RenderMesh>&,
+    const PerceptionProperties&) {
+  throw std::runtime_error(
+      fmt::format("{}: does not support deformable geometry rendering.",
+                  NiceTypeName::Get(*this)));
+}
+
+void RenderEngine::DoUpdateDeformableConfiguration(
+    GeometryId, const std::vector<VectorX<double>>&) {
+  throw std::runtime_error(
+      fmt::format("{}: does not support deformable geometry rendering.",
+                  NiceTypeName::Get(*this)));
 }
 
 void RenderEngine::DoRenderColorImage(const ColorRenderCamera&,

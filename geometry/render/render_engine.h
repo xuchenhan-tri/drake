@@ -141,16 +141,26 @@ class RenderEngine : public ShapeReifier {
                       const math::RigidTransformd& X_WG,
                       bool needs_updates = true);
 
-  // TODO(xuchenhan-tri): internal RenderMesh in public API.
+  /** Requests registration of the given geometry with this render engine. The
+   geometry is uniquely identified by the given `id`. The renderer is allowed to
+   examine the given `properties` and choose to _not_ register the geometry.
+
+   Typically, derived classes will attempt to validate the RenderLabel value
+   stored in the `(label, id)` property (or its configured default value if
+   no such property exists). In that case, attempting to assign
+   RenderLabel::kEmpty or RenderLabel::kUnspecified will cause an exception to
+   be thrown (as @ref reserved_render_label "documented").
+
+   @param id             The geometry id of the shape to register.
+   @param properties     The perception properties provided for this geometry.
+   @param X_WG           The pose of the geometry relative to the world frame W.
+   @returns True if the %RenderEngine implementation accepted the shape for
+            registration.
+   @throws std::exception this %RenderEngine does not support rendering
+   deformable geometries. */
   bool RegisterDeformable(
       GeometryId id, const std::vector<internal::RenderMesh>& render_meshes,
-      const PerceptionProperties& properties) {
-    bool accepted = DoRegisterDeformable(id, render_meshes, properties);
-    if (accepted) {
-      num_deformable_render_meshes_[id] = render_meshes.size();
-    }
-    return accepted;
-  }
+      const PerceptionProperties& properties);
 
   /** Removes the geometry indicated by the given `id` from the engine.
    @param id    The id of the geometry to remove.
@@ -178,34 +188,21 @@ class RenderEngine : public ShapeReifier {
     }
   }
 
-  /** Updates the configuration of all deformable geometries (see
-   RegisterDeformable()).
-
-   @param q_WGs  The vertex positions of all deformable geometries in SceneGraph
-                 (measured and expressed in the world frame).
-   @param render_mesh_interpolators
-                Maps GeometryIds of all deformable geometries in SceneGraph
-                 with perception roles to the interpolator that maps vertex
-                 positions of the control mesh to the vertex positions of the
-                 driven rendering meshes (all measured and expressed in the
-                 world frame). */
-  template <typename T>
+  /** Updates the configurations of all meshes associated with the given
+   deformable geometry (see RegisterDeformable()).
+   @param id     The unique identifier of a deformable geometry registered with
+   this %RenderEngine.
+   @param q_WGs  The vertex positions of all meshes associated with the give
+   deformable geometry. (measured and expressed in the world frame).
+   @throws std::exception if no geometry with the given `id` is registered as
+   deformable geometry in this `RenderEngine`.
+   @throws std::exception if the sizes of `q_WGs` is incompatible with the
+   number of degree of freedoms of the meshes register with the deformable
+   geometry.
+   @throws std::exception if this %RenderEngine does not support deformable
+   geometry rendering. */
   void UpdateDeformableConfigurations(
-      const std::unordered_map<GeometryId, VectorX<T>>& q_WGs,
-      const std::unordered_map<GeometryId,
-                               internal::MeshDeformationInterpolator>
-          render_mesh_interpolators) {
-    for (const auto& [id, num_meshes] : num_deformable_render_meshes_) {
-      const VectorX<double>& q_WG =
-          geometry::internal::convert_to_double(q_WGs.at(id));
-      const internal::MeshDeformationInterpolator& interpolator =
-          render_mesh_interpolators.at(id);
-      /* Interpolate to get the configurations of the driven meshes. */
-      const std::vector<VectorX<double>> q_WDs = interpolator.Interpolate(q_WG);
-      DRAKE_DEMAND(ssize(q_WDs) == num_meshes);
-      DoUpdateDeformableConfiguration(id, q_WDs);
-    }
-  }
+      GeometryId id, const std::vector<VectorX<double>>& q_WGs);
 
   /** Updates the renderer's viewpoint with given pose X_WR.
 
@@ -300,12 +297,9 @@ class RenderEngine : public ShapeReifier {
                                 const PerceptionProperties& properties,
                                 const math::RigidTransformd& X_WG) = 0;
 
-  virtual bool DoRegisterDeformable(GeometryId,
-                                    const std::vector<internal::RenderMesh>&,
-                                    const PerceptionProperties&) {
-    // TODO(xuchenhan-tri): Make this pure virtual.
-    return false;
-  }
+  virtual bool DoRegisterDeformable(
+      GeometryId id, const std::vector<internal::RenderMesh>& render_meshes,
+      const PerceptionProperties& properties);
 
   /** The NVI-function for updating the pose of a render geometry (identified
    by `id`) to the given pose X_WG.
@@ -316,7 +310,7 @@ class RenderEngine : public ShapeReifier {
                                   const math::RigidTransformd& X_WG) = 0;
 
   /** The NVI-function for updating the configuration of a deformable geometry
-   (identified by `id`) to the given configuration.
+   (identified by `id`) to the given configuration. Defaults to throw.
 
    @param id       The id of the deformable geometry whose configuration is
    being set.
@@ -325,10 +319,7 @@ class RenderEngine : public ShapeReifier {
    be equal to the number of render meshes registered with this deformable
    geometry. */
   virtual void DoUpdateDeformableConfiguration(
-      GeometryId, const std::vector<VectorX<double>>&) {
-    // TODO(xuchenhan-tri): Make this pure virtual and force all derived
-    // classes to update the configuration.
-  }
+      GeometryId, const std::vector<VectorX<double>>& q_WGs);
 
   /** The NVI-function for removing the geometry with the given `id`.
    @param id  The id of the geometry to remove.
@@ -463,28 +454,30 @@ class RenderEngine : public ShapeReifier {
  private:
   friend class RenderEngineTester;
 
-  // The following two sets store all registered geometry ids. It must be the
-  // case that the members of the two maps are disjoint and span all of the
-  // registered geometries. This dichotomy facilitates updating only those
-  // geometries registered as movable.
+  // The following two sets and one map store all registered geometry ids. It
+  // must be the case that the members of these sets and map are disjoint and
+  // span all of the registered geometries, with the two sets spanning all
+  // registered rigid geometries. This facilitates updating only deformable
+  // geometries and rigid geometries registered as movable.
 
   // The set of rigid geometry ids whose pose needs to be updated.
   // See UpdateVisualPose().
   std::unordered_set<GeometryId> update_ids_;
 
-  // Maps deformable geometry ids to the number of render meshes used to render
-  // the deformable geometry. Deformable geometries always need to have their
-  // configurations updated. See UpdateDeformableConfigurations().
-  std::unordered_map<GeometryId, int> num_deformable_render_meshes_;
-
   // The set of geometry ids whose pose is fixed at registration time.
   std::unordered_set<GeometryId> anchored_ids_;
+
+  // Maps ids of deformable geometries registered to this render engine to the
+  // number of degrees of freedom in the each of the render mesh associated with
+  // this deformable geometry. Deformable geometries always need to have their
+  // configurations updated. See UpdateDeformableConfigurations().
+  std::unordered_map<GeometryId, std::vector<int>> deformable_mesh_dofs_;
 
   // The default render label to apply to geometries that don't otherwise
   // provide one. Default constructor is RenderLabel::kUnspecified via the
   // RenderLabel default constructor.
   RenderLabel default_render_label_{};
-};  // namespace render
+};
 
 }  // namespace render
 }  // namespace geometry
