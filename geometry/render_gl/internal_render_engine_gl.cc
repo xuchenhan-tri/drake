@@ -698,25 +698,6 @@ RenderEngineGlParams CleanupLights(RenderEngineGlParams params) {
   return params;
 }
 
-DeformableTriangleSurfaceMesh<double> MakeDeformableMesh(
-    RenderMesh render_mesh) {
-  const int num_vertices = render_mesh.positions.rows();
-  const int num_triangles = render_mesh.indices.rows();
-  std::vector<Vector3<double>> vertices;
-  vertices.reserve(num_vertices);
-  std::vector<SurfaceTriangle> triangles;
-  triangles.reserve(num_triangles);
-  for (int v = 0; v < num_vertices; ++v) {
-    vertices.emplace_back(render_mesh.positions.row(v));
-  }
-  for (int t = 0; t < num_triangles; ++t) {
-    triangles.emplace_back(render_mesh.indices(t, 0), render_mesh.indices(t, 1),
-                           render_mesh.indices(t, 2));
-  }
-  return DeformableTriangleSurfaceMesh<double>(
-      TriangleSurfaceMesh(std::move(triangles), std::move(vertices)));
-}
-
 }  // namespace
 
 RenderEngineGl::RenderEngineGl(RenderEngineGlParams params)
@@ -900,13 +881,13 @@ bool RenderEngineGl::DoRegisterDeformable(
     GeometryId id, const std::vector<RenderMesh>& render_meshes,
     const PerceptionProperties& properties) {
   opengl_context_->MakeCurrent();
-  std::vector<DeformableGlMesh> meshes;
+  std::vector<int> gl_mesh_indices;
   bool accepted = true;
   for (const auto& render_mesh : render_meshes) {
     const int mesh_index =
         CreateGlGeometry(render_mesh, /* is_deformable */ true);
     DRAKE_DEMAND(mesh_index >= 0);
-    meshes.emplace_back(mesh_index, MakeDeformableMesh(render_mesh));
+    gl_mesh_indices.emplace_back(mesh_index);
 
     RenderMaterial material;
     const auto mesh_filename =
@@ -930,7 +911,7 @@ bool RenderEngineGl::DoRegisterDeformable(
     AddGeometryInstance(mesh_index, &data, Vector3d(1, 1, 1));
     accepted &= data.accepted;
   }
-  deformable_meshes_.insert(std::make_pair(id, std::move(meshes)));
+  deformable_meshes_.emplace(id, std::move(gl_mesh_indices));
   return accepted;
 }
 
@@ -945,11 +926,11 @@ void RenderEngineGl::DoUpdateVisualPose(GeometryId id,
   }
 }
 
-void RenderEngineGl::DoUpdateDeformableConfiguration(
-    GeometryId id, const std::vector<VectorX<double>>& q_WGs) {
+void RenderEngineGl::DoUpdateDeformableConfigurations(
+    GeometryId id, const std::vector<VectorX<double>>& q_WGs,
+    const std::vector<VectorX<double>>& nhats_W) {
   DRAKE_DEMAND(deformable_meshes_.count(id) > 0);
-  std::vector<DeformableGlMesh>& meshes = deformable_meshes_.at(id);
-  DRAKE_DEMAND(meshes.size() == q_WGs.size());
+  std::vector<int>& gl_mesh_indices = deformable_meshes_.at(id);
 
   auto convert_to_gl_floats = [](const VectorX<double>& q) {
     std::vector<GLfloat> result(q.size());
@@ -961,9 +942,9 @@ void RenderEngineGl::DoUpdateDeformableConfiguration(
 
   for (int i = 0; i < ssize(q_WGs); ++i) {
     VectorX<double> q_WG = q_WGs[i];
-    DeformableGlMesh& gl_mesh = meshes[i];
+    VectorX<double> nhat_W = nhats_W[i];
     // Find the OpenGL geometry.
-    OpenGlGeometry& geometry = geometries_[gl_mesh.mesh_index];
+    OpenGlGeometry& geometry = geometries_[gl_mesh_indices[i]];
     const std::vector<GLfloat> vertex_position_data =
         convert_to_gl_floats(q_WG);
     // Update vertex position data.
@@ -972,27 +953,9 @@ void RenderEngineGl::DoUpdateDeformableConfiguration(
                          positions_offset * sizeof(GLfloat),
                          vertex_position_data.size() * sizeof(GLfloat),
                          vertex_position_data.data());
-
-    // Update vertex normal data.
-    DeformableTriangleSurfaceMesh<double>& mesh = gl_mesh.deformable_mesh;
-    mesh.UpdateVertexPositions(q_WG);
-    VectorX<double> nhat_Ws = VectorX<double>::Zero(q_WG.size());
-    const TriangleSurfaceMesh<double>& tri_mesh = mesh.mesh();
-    const int num_verts = q_WG.size() / 3;
-    DRAKE_DEMAND(tri_mesh.num_vertices() == num_verts);
-    for (int f = 0; f < tri_mesh.num_triangles(); ++f) {
-      const Vector3<double> area_weighted_normal =
-          tri_mesh.area(f) * tri_mesh.face_normal(f);
-      for (int v = 0; v < 3; ++v) {
-        const int vertex = tri_mesh.element(f).vertex(v);
-        nhat_Ws.segment<3>(3 * vertex) += area_weighted_normal;
-      }
-    }
-    for (int v = 0; v < num_verts; ++v) {
-      nhat_Ws.segment<3>(3 * v).normalize();
-    }
     const std::vector<GLfloat> vertex_normal_data =
-        convert_to_gl_floats(nhat_Ws);
+        convert_to_gl_floats(nhat_W);
+    // Update vertex normal data.
     std::size_t normals_offset = q_WG.size();
     glNamedBufferSubData(
         geometry.vertex_buffer, normals_offset * sizeof(GLfloat),

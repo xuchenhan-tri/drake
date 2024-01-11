@@ -14,7 +14,6 @@
 #include "drake/common/ssize.h"
 #include "drake/geometry/geometry_ids.h"
 #include "drake/geometry/geometry_roles.h"
-#include "drake/geometry/mesh_deformation_interpolator.h"
 #include "drake/geometry/proximity/volume_mesh.h"
 #include "drake/geometry/render/render_camera.h"
 #include "drake/geometry/render/render_label.h"
@@ -141,6 +140,7 @@ class RenderEngine : public ShapeReifier {
                       const math::RigidTransformd& X_WG,
                       bool needs_updates = true);
 
+  // TODO(xuchenhan-tri): Bring RenderMesh out of internal namespace.
   /** Requests registration of the given geometry with this render engine. The
    geometry is uniquely identified by the given `id`. The renderer is allowed to
    examine the given `properties` and choose to _not_ register the geometry.
@@ -190,19 +190,22 @@ class RenderEngine : public ShapeReifier {
 
   /** Updates the configurations of all meshes associated with the given
    deformable geometry (see RegisterDeformable()).
-   @param id     The unique identifier of a deformable geometry registered with
-   this %RenderEngine.
-   @param q_WGs  The vertex positions of all meshes associated with the give
-   deformable geometry. (measured and expressed in the world frame).
+   @param id       The unique identifier of a deformable geometry registered
+   with this %RenderEngine.
+   @param q_WG     The vertex positions of all meshes associated with the given
+   deformable geometry (measured and expressed in the world frame).
+   @param nhat_W   The vertex normals of all meshes associated with the given
+   deformable geometry (measured and expressed in the world frame).
    @throws std::exception if no geometry with the given `id` is registered as
    deformable geometry in this `RenderEngine`.
-   @throws std::exception if the sizes of `q_WGs` is incompatible with the
-   number of degree of freedoms of the meshes register with the deformable
-   geometry.
+   @throws std::exception if the sizes of `q_WG` or `nhat_W` are incompatible
+   with the number of degrees of freedom of the meshes register with the
+   deformable geometry.
    @throws std::exception if this %RenderEngine does not support deformable
    geometry rendering. */
   void UpdateDeformableConfigurations(
-      GeometryId id, const std::vector<VectorX<double>>& q_WGs);
+      GeometryId id, const std::vector<VectorX<double>>& q_WG,
+      const std::vector<VectorX<double>>& nhat_W);
 
   /** Updates the renderer's viewpoint with given pose X_WR.
 
@@ -277,7 +280,7 @@ class RenderEngine : public ShapeReifier {
   // Allow derived classes to implement Cloning via copy-construction.
   DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(RenderEngine)
 
-  /** The NVI-function for sub-classes to implement actual geometry
+  /** The NVI-function for sub-classes to implement actual rigid geometry
    registration. If the derived class chooses not to register this particular
    shape, it should return false.
 
@@ -297,6 +300,22 @@ class RenderEngine : public ShapeReifier {
                                 const PerceptionProperties& properties,
                                 const math::RigidTransformd& X_WG) = 0;
 
+  /** The NVI-function for sub-classes to implement actual deformable geometry
+   registration. If the derived class chooses not to register this particular
+   shape, it should return false.
+
+   A derived render engine can choose not to register geometry because, e.g., it
+   doesn't have default properties. This is the primary mechanism which enables
+   different renderers to use different geometries for the same frame.
+   For example, a low-fidelity renderer may use simple geometry whereas a
+   high-fidelity renderer would require a very detailed geometry. Both
+   geometries would have PerceptionProperties, but, based on the provided
+   property groups and values, one would be accepted and registered with one
+   render engine implementation and the other geometry with another render
+   engine.
+
+   In accessing the RenderLabel property in `properties` derived class should
+   _exclusively_ use GetRenderLabelOrThrow().  */
   virtual bool DoRegisterDeformable(
       GeometryId id, const std::vector<internal::RenderMesh>& render_meshes,
       const PerceptionProperties& properties);
@@ -310,16 +329,20 @@ class RenderEngine : public ShapeReifier {
                                   const math::RigidTransformd& X_WG) = 0;
 
   /** The NVI-function for updating the configuration of a deformable geometry
-   (identified by `id`) to the given configuration. Defaults to throw.
+   (identified by `id`) to the given configurations and normals. Defaults to
+   throw.
 
    @param id       The id of the deformable geometry whose configuration is
    being set.
-   @param q_WGs     The configurations of the render meshes representing the
+   @param q_WGs    The configurations of the render meshes representing the
    deformable geometry, measured in the world frame. Its size is guaranteed to
    be equal to the number of render meshes registered with this deformable
-   geometry. */
-  virtual void DoUpdateDeformableConfiguration(
-      GeometryId, const std::vector<VectorX<double>>& q_WGs);
+   geometry.
+   @param nhats_W  The vertex normals of all meshes associated with the given
+   deformable geometry (measured and expressed in the world frame). */
+  virtual void DoUpdateDeformableConfigurations(
+      GeometryId, const std::vector<VectorX<double>>& q_WGs,
+      const std::vector<VectorX<double>>& nhats_W);
 
   /** The NVI-function for removing the geometry with the given `id`.
    @param id  The id of the geometry to remove.

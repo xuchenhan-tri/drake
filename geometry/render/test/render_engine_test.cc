@@ -78,8 +78,11 @@ GTEST_TEST(RenderEngine, DeformableGeometryRegistrationAndUpdate) {
 
   geometry::internal::RenderMesh mesh;
   mesh.positions.resize(1, 3);
+  mesh.normals.resize(1, 3);
   const Vector3d initial_q = Vector3d(1, 2, 3);
+  const Vector3d initial_normal = Vector3d(-1, 0, 0);
   mesh.positions.row(0) = initial_q;
+  mesh.normals.row(0) = initial_normal;
   PerceptionProperties properties;
   GeometryId id0 = GeometryId::get_new_id();
   GeometryId id1 = GeometryId::get_new_id();
@@ -100,10 +103,22 @@ GTEST_TEST(RenderEngine, DeformableGeometryRegistrationAndUpdate) {
     EXPECT_EQ(q1[0], initial_q);
   }
 
+  {
+    const std::vector<VectorXd>& n0 = engine.world_normals(id0);
+    ASSERT_EQ(n0.size(), 1);
+    EXPECT_EQ(n0[0], initial_normal);
+    const std::vector<VectorXd>& n1 = engine.world_normals(id1);
+    ASSERT_EQ(n1.size(), 1);
+    EXPECT_EQ(n1[0], initial_normal);
+  }
+
   // Update id0 but not id1.
   VectorXd new_q(3);
+  VectorXd new_normal(3);
   new_q << 4, 5, 6;
-  engine.UpdateDeformableConfigurations(id0, {new_q});
+  new_normal << 7, 8, 9;
+  new_normal.normalize();
+  engine.UpdateDeformableConfigurations(id0, {new_q}, {new_normal});
   {
     const std::vector<VectorXd>& q0 = engine.world_configurations(id0);
     ASSERT_EQ(q0.size(), 1);
@@ -112,6 +127,39 @@ GTEST_TEST(RenderEngine, DeformableGeometryRegistrationAndUpdate) {
     ASSERT_EQ(q1.size(), 1);
     EXPECT_EQ(q1[0], initial_q);
   }
+  {
+    const std::vector<VectorXd>& n0 = engine.world_normals(id0);
+    ASSERT_EQ(n0.size(), 1);
+    EXPECT_EQ(n0[0], new_normal);
+    const std::vector<VectorXd>& n1 = engine.world_normals(id1);
+    ASSERT_EQ(n1.size(), 1);
+    EXPECT_EQ(n1[0], initial_normal);
+  }
+
+  // Now we test for throw conditions for the update.
+  // Non-existant geometry.
+  GeometryId fake_id = GeometryId::get_new_id();
+  DRAKE_EXPECT_THROWS_MESSAGE(
+      engine.UpdateDeformableConfigurations(fake_id, {new_q}, {new_normal}),
+      "No deformable geometry with id.*");
+  // Wrong number of vertex positions/normals.
+  DRAKE_EXPECT_THROWS_MESSAGE(
+      engine.UpdateDeformableConfigurations(id0, {new_q, new_q}, {new_normal}),
+      "Wrong number of vertex positions and/or normals.*");
+  DRAKE_EXPECT_THROWS_MESSAGE(
+      engine.UpdateDeformableConfigurations(id0, {new_q},
+                                            {new_normal, new_normal}),
+      "Wrong number of vertex positions and/or normals.*");
+  // Wrong size for the vertex positions/normal vectors.
+  VectorXd incorrectly_sized_vector(4);
+  DRAKE_EXPECT_THROWS_MESSAGE(
+      engine.UpdateDeformableConfigurations(id0, {incorrectly_sized_vector},
+                                            {new_normal}),
+      "Wrong DoFs in vertex positions and/or normals.*");
+  DRAKE_EXPECT_THROWS_MESSAGE(
+      engine.UpdateDeformableConfigurations(id0, {new_q},
+                                            {incorrectly_sized_vector}),
+      "Wrong DoFs in vertex positions and/or normals.*");
 }
 
 // Tests the RenderEngine-specific functionality for managing registration of

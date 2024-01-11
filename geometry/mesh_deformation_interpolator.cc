@@ -17,17 +17,18 @@ using Eigen::VectorXd;
 using std::array;
 
 BarycentricInterpolator::BarycentricInterpolator(
-    const Eigen::Matrix<double, Eigen::Dynamic, 3, Eigen::RowMajor>& positions,
+    const std::vector<Vector3<double>>& positions,
     const VolumeMesh<double>& control_mesh)
-    : num_total_vertices_(control_mesh.num_vertices()) {
+    : num_control_vertices_(control_mesh.num_vertices()) {
   // We allow some slack on the requirement that all passive points are inside
-  // the control mesh to account for errors caused by floating point numerics.
-  // The result is that some points may be incorrectly classified as inside a
-  // nearby tetrahedron. Since the tolerance is tight, we expect the visual
-  // result from these different interpolations to be close to each other.
+  // the control mesh to account for errors caused by floating point numerics
+  // when the driven points are on the surface of the control mesh. The result
+  // is that some points may be incorrectly classified as inside a nearby
+  // tetrahedron. Since the tolerance is tight, we expect the visual result from
+  // these different interpolations to be close to each other.
   const double kTol = 1e-8;
-  for (int v = 0; v < positions.rows(); ++v) {
-    const Vector3d p_WV = positions.row(v);
+  for (int v = 0; v < ssize(positions); ++v) {
+    const Vector3d p_WV = positions[v];
     bool matched = false;
     for (int e = 0; e < control_mesh.num_elements(); ++e) {
       const Vector4d bary = control_mesh.CalcBarycentric(p_WV, e);
@@ -48,7 +49,7 @@ BarycentricInterpolator::BarycentricInterpolator(
 }
 
 VectorXd BarycentricInterpolator::operator()(const VectorXd& q) const {
-  DRAKE_THROW_UNLESS(q.size() == 3 * num_total_vertices_);
+  DRAKE_THROW_UNLESS(q.size() == 3 * num_control_vertices_);
   VectorXd result(3 * vertex_indices_.size());
   for (int i = 0; i < ssize(vertex_indices_); ++i) {
     Vector3d p_FV = Vector3d::Zero();
@@ -63,7 +64,7 @@ VectorXd BarycentricInterpolator::operator()(const VectorXd& q) const {
 }
 
 VectorXd VertexSelector::operator()(const VectorXd& q) const {
-  DRAKE_THROW_UNLESS(q.size() == 3 * num_total_vertices_);
+  DRAKE_THROW_UNLESS(q.size() == 3 * num_control_vertices_);
   VectorXd result(3 * selected_vertices_.size());
   for (int i = 0; i < ssize(selected_vertices_); ++i) {
     result.segment<3>(3 * i) = q.segment<3>(3 * selected_vertices_[i]);
@@ -71,37 +72,64 @@ VectorXd VertexSelector::operator()(const VectorXd& q) const {
   return result;
 }
 
-MeshDeformationInterpolator::MeshDeformationInterpolator(
-    const std::vector<RenderMesh>& driven_meshes,
+DrivenTriangleSurfaceMesh::DrivenTriangleSurfaceMesh(
+    TriangleSurfaceMesh<double> surface_mesh,
+    const VolumeMesh<double>& control_mesh)
+    : interpolator_(
+          BarycentricInterpolator(surface_mesh.vertices(), control_mesh)),
+      deformable_surface_mesh_(std::move(surface_mesh)) {}
+
+DrivenTriangleSurfaceMesh::DrivenTriangleSurfaceMesh(
+    std::variant<BarycentricInterpolator, VertexSelector> interpolator,
+    DeformableTriangleSurfaceMesh<double> deformable_surface_mesh)
+    : interpolator_(std::move(interpolator)),
+      deformable_surface_mesh_(std::move(deformable_surface_mesh)) {}
+
+int DrivenTriangleSurfaceMesh::num_control_vertices() const {
+  return std::visit(
+      [](auto&& interpolator) {
+        return interpolator.num_control_vertices();
+      },
+      interpolator_);
+}
+
+void DrivenTriangleSurfaceMesh::SetControlMeshPositions(
+    const VectorX<double>& q_M) {
+  deformable_surface_mesh_.UpdateVertexPositions(std::visit(
+      [&q_M](const auto& f) {
+        return f(q_M);
+      },
+      interpolator_));
+}
+
+VectorX<double> DrivenTriangleSurfaceMesh::GetDrivenVertexPositions() const {
+  const TriangleSurfaceMesh<double>& tri_mesh = deformable_surface_mesh_.mesh();
+  VectorX<double> q_M(3 * tri_mesh.num_vertices());
+  for (int v = 0; v < tri_mesh.num_vertices(); ++v) {
+    q_M.segment<3>(3 * v) = tri_mesh.vertices()[v];
+  }
+  return q_M;
+}
+
+VectorX<double> DrivenTriangleSurfaceMesh::GetDrivenVertexNormals() const {
+  const TriangleSurfaceMesh<double>& tri_mesh = deformable_surface_mesh_.mesh();
+  VectorX<double> nhats_M = VectorX<double>::Zero(3 * tri_mesh.num_vertices());
+  for (int f = 0; f < tri_mesh.num_triangles(); ++f) {
+    const Vector3<double> area_weighted_normal =
+        tri_mesh.area(f) * tri_mesh.face_normal(f);
+    for (int v = 0; v < 3; ++v) {
+      const int vertex = tri_mesh.element(f).vertex(v);
+      nhats_M.segment<3>(3 * vertex) += area_weighted_normal;
+    }
+  }
+  for (int v = 0; v < tri_mesh.num_vertices(); ++v) {
+    nhats_M.segment<3>(3 * v).normalize();
+  }
+  return nhats_M;
+}
+
+DrivenTriangleSurfaceMesh MakeDrivenSurfaceMesh(
     const VolumeMesh<double>& control_mesh) {
-  for (const auto& mesh : driven_meshes) {
-    const Eigen::Matrix<double, Eigen::Dynamic, 3, Eigen::RowMajor>& positions =
-        mesh.positions;
-    interpolators_.push_back(BarycentricInterpolator(positions, control_mesh));
-  }
-}
-
-MeshDeformationInterpolator::MeshDeformationInterpolator(
-    VertexSelector selector) {
-  interpolators_.emplace_back(std::move(selector));
-}
-
-std::vector<VectorXd> MeshDeformationInterpolator::Interpolate(
-    const VectorXd& q) const {
-  std::vector<VectorXd> result;
-  result.reserve(interpolators_.size());
-  for (const auto& interpolator : interpolators_) {
-    result.emplace_back(std::visit(
-        [&q](const auto& f) {
-          return f(q);
-        },
-        interpolator));
-  }
-  return result;
-}
-
-std::pair<TriangleSurfaceMesh<double>, MeshDeformationInterpolator>
-ExtractSurfaceMeshAndInterpolator(const VolumeMesh<double>& control_mesh) {
   /* For each tet mesh, extract all the border triangles. Those are the
    triangles that are only referenced by a single tet. So, for every tet, we
    examine its four constituent triangle and determine if any other tet
@@ -146,17 +174,11 @@ ExtractSurfaceMeshAndInterpolator(const VolumeMesh<double>& control_mesh) {
       }
     }
   }
-  /* Record the expected minimum number of vertex positions to be received.
-   For simplicity we choose a generous upper bound: the total number of
-   vertices in the tetrahedral mesh, even though we really only need the
-   positions of the vertices on the surface. */
+
   const int volume_vertex_count = control_mesh.num_vertices();
 
-  /* Using a set because the vertices will be nicely ordered. Ideally, we'll
-   be extracting a subset of the vertex positions from the input port. We
-   optimize cache coherency if we march in a monotonically increasing pattern.
-   So, we'll map triangle vertex indices to volume vertex indices in a
-   strictly monotonically increasing relationship. */
+  /* Using a set because the vertices will be nicely ordered as required by
+   the contract of this function. */
   std::set<int> unique_vertices;
   for (const auto& [triangle_key, triangle] : border_triangles) {
     unused(triangle_key);
@@ -181,8 +203,8 @@ ExtractSurfaceMeshAndInterpolator(const VolumeMesh<double>& control_mesh) {
     volume_to_surface[surface_to_volume_vertices[j]] = j;
   }
 
-  /* Create the topology of the surface triangle mesh for each volume mesh. Each
-   triangle consists of three indices into the set of *surface* vertex
+  /* Create the topology of the surface triangle mesh for each volume mesh.
+   Each triangle consists of three indices into the set of *surface* vertex
    positions. */
   std::vector<SurfaceTriangle> surface_triangles;
   surface_triangles.reserve(border_triangles.size());
@@ -197,8 +219,7 @@ ExtractSurfaceMeshAndInterpolator(const VolumeMesh<double>& control_mesh) {
   for (int v = 0; v < volume_vertex_count; ++v) {
     q.segment<3>(3 * v) = control_mesh.vertex(v);
   }
-  const VertexSelector selector{std::move(surface_to_volume_vertices),
-                                control_mesh};
+  VertexSelector selector{std::move(surface_to_volume_vertices), control_mesh};
   const VectorXd driven_qs = selector(q);
   std::vector<Vector3<double>> vertex_positions(driven_qs.size() / 3);
   for (int i = 0; i < ssize(vertex_positions); ++i) {
@@ -207,8 +228,10 @@ ExtractSurfaceMeshAndInterpolator(const VolumeMesh<double>& control_mesh) {
   TriangleSurfaceMesh<double> triangle_mesh(std::move(surface_triangles),
                                             std::move(vertex_positions));
 
-  return {std::move(triangle_mesh),
-          MeshDeformationInterpolator(std::move(selector))};
+  return DrivenTriangleSurfaceMesh(
+      std::variant<BarycentricInterpolator, VertexSelector>(
+          std::move(selector)),
+      DeformableTriangleSurfaceMesh<double>(std::move(triangle_mesh)));
 }
 
 }  // namespace internal

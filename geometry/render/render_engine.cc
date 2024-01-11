@@ -86,29 +86,32 @@ bool RenderEngine::has_geometry(GeometryId id) const {
 }
 
 void RenderEngine::UpdateDeformableConfigurations(
-    GeometryId id, const std::vector<VectorX<double>>& q_WGs) {
+    GeometryId id, const std::vector<VectorX<double>>& q_WG,
+    const std::vector<VectorX<double>>& nhat_W) {
   if (deformable_mesh_dofs_.count(id) == 0) {
     throw std::runtime_error(fmt::format(
         "No deformable geometry with id {} has been registered.", id));
   }
   const std::vector<int>& mesh_dofs = deformable_mesh_dofs_.at(id);
-  if (mesh_dofs.size() != q_WGs.size()) {
-    throw std::runtime_error(
-        fmt::format("{} meshes are registered with deformable geometry with id "
-                    "{}, but vertex positions for {} meshes are provided for "
-                    "the configuration update.",
-                    mesh_dofs.size(), id, q_WGs.size()));
+  if (mesh_dofs.size() != q_WG.size() || mesh_dofs.size() != nhat_W.size()) {
+    throw std::runtime_error(fmt::format(
+        "Wrong number of vertex positions and/or normals. {} meshes are "
+        "registered with deformable geometry with id {}, but vertex positions "
+        "for {} meshes and vertex normals for {} meshes are provided for the "
+        "configuration update.",
+        mesh_dofs.size(), id, q_WG.size(), nhat_W.size()));
   }
   for (int i = 0; i < ssize(mesh_dofs); ++i) {
-    if (mesh_dofs[i] != q_WGs[i].size()) {
+    if (mesh_dofs[i] != q_WG[i].size() || mesh_dofs[i] != nhat_W[i].size()) {
       throw std::runtime_error(fmt::format(
-          "There are {} dofs for mesh {} registered with deformable "
-          "geometry with id {}; however, the positions with {} dofs "
-          "are supplied in the configuration update",
-          mesh_dofs[i], i, id, q_WGs[i].size()));
+          "Wrong DoFs in vertex positions and/or normals. There are {} dofs "
+          "for mesh {} registered with deformable geometry with id {}; "
+          "however, positions with {} dofs and normals with {} dofs are "
+          "supplied in the configuration update.",
+          mesh_dofs[i], i, id, q_WG[i].size(), nhat_W[i].size()));
     }
   }
-  DoUpdateDeformableConfiguration(id, q_WGs);
+  DoUpdateDeformableConfigurations(id, q_WG, nhat_W);
 }
 
 RenderLabel RenderEngine::GetRenderLabelOrThrow(
@@ -133,8 +136,9 @@ bool RenderEngine::DoRegisterDeformable(
                   NiceTypeName::Get(*this)));
 }
 
-void RenderEngine::DoUpdateDeformableConfiguration(
-    GeometryId, const std::vector<VectorX<double>>&) {
+void RenderEngine::DoUpdateDeformableConfigurations(
+    GeometryId, const std::vector<VectorX<double>>&,
+    const std::vector<VectorX<double>>&) {
   throw std::runtime_error(
       fmt::format("{}: does not support deformable geometry rendering.",
                   NiceTypeName::Get(*this)));

@@ -137,6 +137,12 @@ class DummyRenderEngine : public render::RenderEngine {
     return X_WGs_.at(id);
   }
 
+  /* Returns the most recent vertex normals of the render meshes for the
+   deformable geometry with the given `id` in the world frame.  */
+  const std::vector<Eigen::VectorXd>& world_normals(GeometryId id) const {
+    return nhats_W_.at(id);
+  }
+
   /* Returns the most recent configurations of the render meshes for the
    deformable geometry with the given `id` in the world frame.  */
   const std::vector<Eigen::VectorXd>& world_configurations(
@@ -176,12 +182,17 @@ class DummyRenderEngine : public render::RenderEngine {
     using Eigen::VectorXd;
     registered_geometries_.insert(id);
     std::vector<VectorXd> initial_positions;
+    std::vector<VectorXd> initial_normals;
     for (int i = 0; i < ssize(render_meshes); ++i) {
       VectorXd flat_positions = Eigen::Map<const VectorXd>(
           render_meshes[i].positions.data(), render_meshes[i].positions.size());
       initial_positions.push_back(std::move(flat_positions));
+      VectorXd flat_normals = Eigen::Map<const VectorXd>(
+          render_meshes[i].normals.data(), render_meshes[i].normals.size());
+      initial_normals.push_back(std::move(flat_normals));
     }
     q_WGs_[id] = std::move(initial_positions);
+    nhats_W_[id] = std::move(initial_normals);
     return true;
   }
 
@@ -194,9 +205,11 @@ class DummyRenderEngine : public render::RenderEngine {
     X_WGs_[id] = X_WG;
   }
 
-  void DoUpdateDeformableConfiguration(
-      GeometryId id, const std::vector<VectorX<double>>& q_WGs) override {
+  void DoUpdateDeformableConfigurations(
+      GeometryId id, const std::vector<VectorX<double>>& q_WGs,
+      const std::vector<VectorX<double>>& nhats_W) override {
     q_WGs_[id] = q_WGs;
+    nhats_W_[id] = nhats_W;
   }
 
   /* Removes the given geometry id (if it is registered).  */
@@ -242,6 +255,10 @@ class DummyRenderEngine : public render::RenderEngine {
   // The current configurations of the deformable render meshes in the world
   // frame.
   std::map<GeometryId, std::vector<Eigen::VectorXd>> q_WGs_;
+
+  // The current vertex normals of the deformable render meshes in the world
+  // frame.
+  std::map<GeometryId, std::vector<Eigen::VectorXd>> nhats_W_;
 
   // TODO(SeanCurtis-TRI) Shuffle this around so that the updated ids no longer
   //  redundantly stores the updated poses; those should be accessible via

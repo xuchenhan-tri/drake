@@ -170,9 +170,10 @@ class RenderEngineGl final : public render::RenderEngine {
   void DoUpdateVisualPose(GeometryId id,
                           const math::RigidTransformd& X_WG) final;
 
-  // @see RenderEngine::DoUpdateDeformableConfiguration.
-  void DoUpdateDeformableConfiguration(
-      GeometryId id, const std::vector<VectorX<double>>& q_WGs) final;
+  // @see RenderEngine::DoUpdateDeformableConfigurations.
+  void DoUpdateDeformableConfigurations(
+      GeometryId id, const std::vector<VectorX<double>>& q_WG,
+      const std::vector<VectorX<double>>& nhat_W) final;
 
   // @see RenderEngine::DoRemoveGeometry().
   bool DoRemoveGeometry(GeometryId id) final;
@@ -404,21 +405,10 @@ class RenderEngineGl final : public render::RenderEngine {
   // Mapping from the obj's canonical filename to RenderGlMeshes.
   std::unordered_map<std::string, std::vector<RenderGlMesh>> meshes_;
 
-  struct DeformableGlMesh {
-    DeformableGlMesh(
-        int mesh_index_in,
-        geometry::internal::DeformableTriangleSurfaceMesh<double> mesh)
-        : mesh_index(mesh_index_in), deformable_mesh(std::move(mesh)) {}
-
-    // Index into geometries_ containing the instance for a RenderMesh.
-    int mesh_index{};
-    geometry::internal::DeformableTriangleSurfaceMesh<double> deformable_mesh;
-  };
-
-  // Mapping from GeometryIds of deformable geometries to their mesh
-  // representations that may potentially consists of more than one mesh.
-  std::unordered_map<GeometryId, std::vector<DeformableGlMesh>>
-      deformable_meshes_;
+  // Mapping from GeometryIds of deformable geometries to indices of
+  // OpenGlGeometry into `geometries_`. One deformable geometry (with a single
+  // GeometryId) may consist of one or more OpenGlGeometry.
+  std::unordered_map<GeometryId, std::vector<int>> deformable_meshes_;
 
   // These are caches of reusable RenderTargets. There is a unique render target
   // for each unique image size (BufferDim) and output image type. The

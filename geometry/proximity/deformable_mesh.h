@@ -44,10 +44,11 @@ class DeformableMesh {
   // Note: Neither MeshDeformer nor BvhUpdater have copy/move semantics. So,
   // we can't default those semantics on DeformableMesh. The deformer_
   // and bvh_updater_ are configured to *always* point to the instance's
-  // *members* mesh_ and bvh_. That never changes during the entire lifetime of
-  // a DeformableMesh instance. So, the assignment operators only have to
-  // worry about setting the member mesh and bvh to the assigned data; we don't
-  // have to (and can't) make any modifications to the deformer or bvh updater.
+  // *members* mesh_ and bvh_. That never changes during the entire lifetime
+  // of a DeformableMesh instance. So, the assignment operators only have to
+  // worry about setting the member mesh and bvh to the assigned data; we
+  // don't have to (and can't) make any modifications to the deformer or bvh
+  // updater.
 
   DeformableMesh(const DeformableMesh& other)
       : DeformableMesh(other.mesh_, other.bvh_) {}
@@ -78,8 +79,8 @@ class DeformableMesh {
   // TODO(SeanCurtis-TRI): We're currently returning an object defined in the
   //  internal namespace. Right now it's not bad because DeformableMesh is
   //  also defined in the internal namespace. But when *this* class moves into
-  //  the geometry namespace, we'll either have to bring Bvh along or make this
-  //  method private with friend access.
+  //  the geometry namespace, we'll either have to bring Bvh along or make
+  //  this method private with friend access.
   /* The dynamic bounding volume hierarchy for this mesh. */
   const internal::Bvh<Aabb, MeshType>& bvh() const { return bvh_; }
 
@@ -92,12 +93,12 @@ class DeformableMesh {
   void UpdateVertexPositions(const Eigen::Ref<const VectorX<T>>& q);
 
  private:
-  // The delegate constructor used by move and copy constructors. We can't have
-  // all three constructors delegate to this same constructor because the base
-  // constructor *creates* a bvh on the fly -- so, it is, in a sense, optional.
-  // I have not been able to create a constructor that supports both optional
-  // and maintains semantics. So, the mesh-only constructor defines its own
-  // initialization.
+  // The delegate constructor used by move and copy constructors. We can't
+  // have all three constructors delegate to this same constructor because the
+  // base constructor *creates* a bvh on the fly -- so, it is, in a sense,
+  // optional. I have not been able to create a constructor that supports both
+  // optional and maintains semantics. So, the mesh-only constructor defines
+  // its own initialization.
   DeformableMesh(MeshType mesh_M, Bvh<Aabb, MeshType> bvh_M)
       : mesh_(std::move(mesh_M)),
         deformer_(&mesh_),

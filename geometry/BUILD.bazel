@@ -273,10 +273,10 @@ drake_cc_library(
     srcs = ["mesh_deformation_interpolator.cc"],
     hdrs = ["mesh_deformation_interpolator.h"],
     deps = [
+        "//geometry/proximity:deformable_mesh",
         "//geometry/proximity:sorted_triplet",
         "//geometry/proximity:triangle_surface_mesh",
         "//geometry/proximity:volume_mesh",
-        "//geometry/render:render_mesh",
     ],
 )
 
