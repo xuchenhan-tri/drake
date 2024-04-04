@@ -3,7 +3,7 @@
 #include <gflags/gflags.h>
 
 #include "drake/common/find_resource.h"
-#include "drake/examples/multibody/deformable_torus/parallel_gripper_controller.h"
+#include "drake/examples/multibody/deformable/parallel_gripper_controller.h"
 #include "drake/geometry/drake_visualizer.h"
 #include "drake/geometry/proximity_properties.h"
 #include "drake/geometry/render_gl/factory.h"
@@ -112,7 +112,7 @@ int do_main() {
   /* Parse the gripper model (without the bubbles). */
   Parser parser(&plant, &scene_graph);
   ModelInstanceIndex gripper_instance = parser.AddModelsFromUrl(
-      "package://drake/examples/multibody/deformable_torus/models/"
+      "package://drake/examples/multibody/deformable/models/"
       "schunk_wsg_50_hydro_bubble.sdf")[0];
 
   /* Add in the bubbles. */
@@ -134,7 +134,7 @@ int do_main() {
   /* The mesh we render in the camera sim. */
   PerceptionProperties perception_properties;
   const std::string textured_bubble_obj = FindResourceOrThrow(
-      "drake/examples/multibody/deformable_torus/models/texture_bubble.obj");
+      "drake/examples/multibody/deformable/models/texture_bubble.obj");
   /* Assign the mesh to be rendered. If this property is not specified, the
    untextured surface mesh of the simulated volume mesh is rendered. */
   perception_properties.AddProperty("deformable", "embedded_mesh",
@@ -142,7 +142,7 @@ int do_main() {
 
   /* Add in the left bubble. */
   const std::string bubble_vtk = FindResourceOrThrow(
-      "drake/examples/multibody/deformable_torus/models/bubble.vtk");
+      "drake/examples/multibody/deformable/models/bubble.vtk");
   auto left_bubble_mesh = std::make_unique<Mesh>(bubble_vtk);
   /* Pose of the left bubble (at initialization) in the world frame. */
   const RigidTransformd X_WBl(RollPitchYawd(M_PI_2, M_PI, 0),
@@ -204,7 +204,7 @@ int do_main() {
   teddy_config.set_mass_density(1000);                   // [kg/m³]
   teddy_config.set_stiffness_damping_coefficient(0.05);  // [1/s]
   const std::string teddy_vtk = FindResourceOrThrow(
-      "drake/examples/multibody/deformable_torus/models/teddy.vtk");
+      "drake/examples/multibody/deformable/models/teddy.vtk");
   auto teddy_mesh = std::make_unique<Mesh>(teddy_vtk, /* scale */ 0.15);
   auto teddy_instance = std::make_unique<GeometryInstance>(
       RigidTransformd(math::RollPitchYawd(M_PI / 2.0, 0, -M_PI / 2.0),

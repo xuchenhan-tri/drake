@@ -1,6 +1,7 @@
 load(
     "//tools/skylark:drake_cc.bzl",
     "drake_cc_binary",
+    "drake_cc_binary_linux_only",
     "drake_cc_googletest",
     "drake_cc_library",
 )
@@ -86,11 +87,16 @@ drake_cc_binary(
     ],
 )
 
+# Currently, we only build this example on Linux because it depends on
+# RenderEngineGl which we only build on Linux.
 drake_cc_binary(
     name = "bubble_gripper",
-    srcs = [
-        "bubble_gripper.cc",
-    ],
+    srcs = select({
+        "@drake//tools/skylark:linux": [
+            "bubble_gripper.cc",
+        ],
+        "//conditions:default": [],
+    }),
     add_test_rule = 1,
     data = [
         ":models",
@@ -99,18 +105,21 @@ drake_cc_binary(
         "-simulation_time=0.1",
         "-realtime_rate=0.0",
     ],
-    deps = [
-        ":parallel_gripper_controller",
-        "//geometry",
-        "//geometry/proximity",
-        "//geometry/render_gl",
-        "//multibody/parsing",
-        "//multibody/plant",
-        "//systems/analysis:simulator",
-        "//systems/framework:diagram",
-        "//systems/sensors:camera_config_functions",
-        "@gflags",
-    ],
+    deps = select({
+        "@drake//tools/skylark:linux": [
+            ":parallel_gripper_controller",
+            "//geometry",
+            "//geometry/proximity",
+            "//geometry/render_gl",
+            "//multibody/parsing",
+            "//multibody/plant",
+            "//systems/analysis:simulator",
+            "//systems/framework:diagram",
+            "//systems/sensors:camera_config_functions",
+            "@gflags",
+        ],
+        "//conditions:default": [],
+    }),
 )
 
 drake_cc_googletest(
