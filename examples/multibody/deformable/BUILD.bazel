@@ -114,6 +114,24 @@ drake_cc_binary(
     ],
 )
 
+drake_cc_binary(
+    name = "soft_box",
+    srcs = [
+        "soft_box.cc",
+    ],
+    data = [
+        ":models",
+    ],
+    deps = [
+        "//geometry",
+        "//geometry/proximity",
+        "//multibody/plant",
+        "//systems/analysis:simulator",
+        "//systems/framework:diagram",
+        "@gflags",
+    ],
+)
+
 drake_cc_googletest(
     name = "point_source_force_field_test",
     deps = [
