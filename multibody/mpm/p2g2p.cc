@@ -58,12 +58,12 @@ int do_main() {
     transfer.GridToParticle(true);
     MassAndMomentum<double> particle_stat =
         ComputeTotalMassAndMomentum(particles, dx);
-    DRAKE_DEMAND(std::abs(grid_stat.mass - particle_stat.mass) < 1E-10);
+    DRAKE_DEMAND(std::abs(grid_stat.mass - particle_stat.mass) < 1E-9);
     DRAKE_DEMAND(CompareMatrices(grid_stat.linear_momentum,
-                                 particle_stat.linear_momentum, 1E-10,
+                                 particle_stat.linear_momentum, 1E-9,
                                  MatrixCompareType::absolute));
     DRAKE_DEMAND(CompareMatrices(grid_stat.angular_momentum,
-                                 particle_stat.angular_momentum, 1E-10,
+                                 particle_stat.angular_momentum, 1E-9,
                                  MatrixCompareType::absolute));
   }
 

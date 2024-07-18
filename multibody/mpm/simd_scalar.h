@@ -37,7 +37,7 @@ template <typename T>
 class SimdScalar {
  public:
   DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(SimdScalar);
-  static const hn::ScalableTag<T> d;
+  static constexpr hn::ScalableTag<T> d{};
   using ValueType = decltype(hn::Zero(d));
 
   SimdScalar() : value_(hn::Zero(d)) {}
@@ -74,12 +74,12 @@ class SimdScalar {
   const ValueType& value() const { return value_; }
   ValueType& value() { return value_; }
 
-  static size_t lanes() { return kN; }
+  static constexpr size_t lanes() { return kN; }
 
   T reduce_sum() const { return hn::ReduceSum(d, value_); }
 
  private:
-  static const size_t kN = Lanes(d);
+  static constexpr size_t kN = Lanes(d);
   ValueType value_;
 };
 

@@ -15,6 +15,104 @@ namespace mpm {
 namespace internal {
 
 template <typename T>
+struct P2gKernel {
+  P2gKernel(T dx_in, T dt_in)
+      : dx(dx_in), dt(dt_in), D_inverse(4.0 / dx / dx) {}
+
+  void AddParticle(const Particle<T>* particle_in) {
+    particle = particle_in;
+    LoadWeights(particle->x);
+    const Matrix3<T> tmp =
+        particle->m * particle->C - D_inverse * dt * particle->P;
+    for (size_t i = 0; i < kSize; ++i) {
+      mi[i] += w[i] * particle->m;
+      mvi[i].noalias() += mi[i] * particle->v + tmp * (xi[i] - particle->x) * w[i];
+    }
+  }
+
+  void AccumulateInto(NeighborArray<GridData<T>>* grid_data) {
+    T m[32];
+    T mvx[32];
+    T mvy[32];
+    T mvz[32];
+    for (size_t i = 0; i < kSize; ++i) {
+      mi[i].Write(m + i * kLanes);
+      mvi[i].x().Write(mvx + i * kLanes);
+      mvi[i].y().Write(mvy + i * kLanes);
+      mvi[i].z().Write(mvz + i * kLanes);
+    }
+    int index = 0;
+    for (int i = 0; i < 3; ++i) {
+      for (int j = 0; j < 3; ++j) {
+        for (int k = 0; k < 3; ++k) {
+          (*grid_data)[i][j][k].m += m[index];
+          (*grid_data)[i][j][k].v.x() += mvx[index];
+          (*grid_data)[i][j][k].v.y() += mvy[index];
+          (*grid_data)[i][j][k].v.z() += mvz[index];
+          ++index;
+        }
+      }
+    }
+  }
+
+  void ResetPad(const NeighborArray<Vector3<T>>& pos) {
+    T x[32];
+    T y[32];
+    T z[32];
+    int index = 0;
+    for (int i = 0; i < 3; ++i) {
+      for (int j = 0; j < 3; ++j) {
+        for (int k = 0; k < 3; ++k) {
+          x[index] = pos[i][j][k].x();
+          y[index] = pos[i][j][k].y();
+          z[index] = pos[i][j][k].z();
+          ++index;
+        }
+      }
+    }
+    for (size_t i = 0; i < kSize; ++i) {
+      xi[i].x() = SimdScalar<T>(x + i * kLanes);
+      xi[i].y() = SimdScalar<T>(y + i * kLanes);
+      xi[i].z() = SimdScalar<T>(z + i * kLanes);
+    }
+    // Clear existing data.
+    for (size_t i = 0; i < kSize; ++i) {
+      mi[i] = SimdScalar<T>(0.0);
+      mvi[i].setZero();
+    }
+  }
+
+  void LoadWeights(const Vector3<T>& x) {
+    const BSplineWeights<T> bspline(x, dx);
+    T weights[32];
+    int index = 0;
+    for (int i = 0; i < 3; ++i) {
+      for (int j = 0; j < 3; ++j) {
+        for (int k = 0; k < 3; ++k) {
+          weights[index++] = bspline.weight(i, j, k);
+        }
+      }
+    }
+    for (size_t i = 0; i < kSize; ++i) {
+      w[i] = SimdScalar<T>(weights + i * kLanes);
+    }
+  }
+
+  static constexpr size_t kLanes = SimdScalar<T>::lanes();
+  static constexpr size_t kSize = 27 / kLanes + 1;
+
+  const T dx{};
+  const T dt{};
+  const T D_inverse{};
+  const Particle<T>* particle{nullptr};
+
+  SimdScalar<T> w[kSize];
+  SimdScalar<T> mi[kSize];
+  Vector3<SimdScalar<T>> mvi[kSize];
+  Vector3<SimdScalar<T>> xi[kSize];
+};
+
+template <typename T>
 Transfer<T>::Transfer(T dt, SparseGrid<T>* sparse_grid,
                       ParticleData<T>* particles)
     : dt_(dt), sparse_grid_(sparse_grid), particles_(particles) {
@@ -240,6 +338,43 @@ void Transfer<T>::SerialSimdParticleToGrid() {
                                       grid_data);
       }
       p = next_p;
+    }
+  }
+}
+
+template <typename T>
+void Transfer<T>::SerialSimdParticleToGrid2() {
+  const std::vector<ParticleIndex>& particle_indices =
+      sparse_grid_->particle_indices();
+  const std::vector<int>& sentinel_particles =
+      sparse_grid_->sentinel_particles();
+  const int num_blocks = sparse_grid_->num_blocks();
+  for (int b = 0; b < num_blocks; ++b) {
+    NeighborArray<Vector3<T>> grid_x;
+    NeighborArray<GridData<T>> grid_data;
+    bool need_new_pad = true;
+    bool end_of_block = false;
+    const int particle_start = sentinel_particles[b];
+    const int particle_end = sentinel_particles[b + 1];
+    P2gKernel<T> kernel(sparse_grid_->dx(), dt_);
+    for (int p = particle_start; p < particle_end; ++p) {
+      const ParticleIndex& particle_index = particle_indices[p];
+      const Particle<T> particle = particles_->particle(particle_index.index);
+      if (need_new_pad) {
+        grid_x = sparse_grid_->GetNeighborNodes(particle.x);
+        grid_data =
+            sparse_grid_->GetNeighborData(particle_index.base_node_offset);
+        kernel.ResetPad(grid_x);
+      }
+      kernel.AddParticle(&particle);
+      end_of_block = p + 1 == particle_end;
+      need_new_pad = end_of_block || (particle_index.base_node_offset !=
+                                      particle_indices[p + 1].base_node_offset);
+      if (end_of_block || need_new_pad) {
+        kernel.AccumulateInto(&grid_data);
+        sparse_grid_->SetNeighborData(particle_index.base_node_offset,
+                                      grid_data);
+      }
     }
   }
 }
