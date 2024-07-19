@@ -19,7 +19,7 @@ using Eigen::Vector3f;
  @param[in] dx grid spacing (meter).
  @param[out] particles Sampled particle data. */
 void SetUp(int num_nodes_per_dim, int particles_per_cell, float dx,
-           ParticleData<float>* particles) {
+           Particles<float>* particles) {
   // Create the particles.
   for (int i = 0; i < num_nodes_per_dim; ++i) {
     for (int j = 0; j < num_nodes_per_dim; ++j) {
@@ -35,8 +35,7 @@ void SetUp(int num_nodes_per_dim, int particles_per_cell, float dx,
           auto F = Matrix3f::Identity();
           auto C = Matrix3f::Zero();
           auto P = Matrix3f::Zero();
-          BSplineWeights<float> bspline(x, dx);
-          particles->particles.emplace_back(Particle<float>(m, x, v, F, C, P, bspline)); 
+          particles->emplace_back(Particle<float>(m, x, v, F, C, P)); 
         }
       }
     }
@@ -49,7 +48,7 @@ int do_main() {
   int particles_per_cell = 8;
   const float dx = 0.01;
   const float dt = 0.002;
-  ParticleData<float> particles;
+  Particles<float> particles;
   SparseGrid<float> grid(dx);
 
   SetUp(num_nodes_per_dim, particles_per_cell, dx, &particles);

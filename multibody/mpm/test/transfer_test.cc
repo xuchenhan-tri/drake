@@ -67,24 +67,17 @@ void CheckMomentumConservation(const MassAndMomentum<double>& grid,
 /* Verify that G2P matches with analytical results with a single particle. */
 GTEST_TEST(TransferTest, GridToParticle) {
   SparseGrid<double> grid(0.01);
-  ParticleData<double> particles;
+  Particles<double> particles;
+  const double m = 0.42;
   const Vector3d x0 = Vector3d(0.001, 0.001, 0.001);
-
-  particles.x.push_back(x0);
   Matrix3d F0 =
       (Matrix3d() << 1.0, 0.1, 0.2, 0.3, 1.0, 0.4, 0.5, 0.6, 1.0).finished();
-  particles.F.push_back(F0);
-  BSplineWeights<double> bspline(x0, grid.dx());
-  particles.bspline.push_back(bspline);
-
   /* All other particle data are either unused or overwritten in G2P. */
   const double nan = std::numeric_limits<double>::quiet_NaN();
   const Vector3d nan_vector = Vector3d(nan, nan, nan);
   const Matrix3d nan_matrix = Matrix3d::Constant(nan);
-  particles.m.push_back(nan);
-  particles.v.push_back(nan_vector);
-  particles.C.push_back(nan_matrix);
-  particles.P.push_back(nan_matrix);
+
+  particles.emplace_back(m, x0, nan_vector, F0, nan_matrix, nan_matrix);
 
   grid.Allocate(&particles);
 
@@ -97,34 +90,29 @@ GTEST_TEST(TransferTest, GridToParticle) {
   grid.SetGridState(constant_velocity_field);
   transfer.GridToParticle();
 
-  EXPECT_TRUE(CompareMatrices(particles.v[0], vel, 1e-14));
-  EXPECT_TRUE(CompareMatrices(particles.x[0], x0 + vel * dt, 1e-14));
-  EXPECT_TRUE(CompareMatrices(particles.C[0], Matrix3d::Zero(), 1e-13));
-  EXPECT_TRUE(CompareMatrices(particles.F[0], F0, 1e-13));
+  EXPECT_TRUE(CompareMatrices(particles[0].v, vel, 1e-14));
+  EXPECT_TRUE(CompareMatrices(particles[0].x, x0 + vel * dt, 1e-14));
+  EXPECT_TRUE(CompareMatrices(particles[0].C, Matrix3d::Zero(), 1e-13));
+  EXPECT_TRUE(CompareMatrices(particles[0].F, F0, 1e-13));
 }
 
 GTEST_TEST(TransferTest, ParticleToGrid) {
   SparseGrid<double> grid(0.01);
-  ParticleData<double> particles;
+  Particles<double> particles;
 
   const double m0 = 0.42;
   const Vector3d x0 = Vector3d(0.001, 0.001, 0.001);
   const Vector3d v0 = Vector3d(0.1, 0.1, 0.1);
-  BSplineWeights<double> bspline(x0, grid.dx());
 
   const double nan = std::numeric_limits<double>::quiet_NaN();
   const Matrix3d nan_matrix = Matrix3d::Constant(nan);
-  particles.m.push_back(m0);
-  particles.x.push_back(x0);
-  particles.v.push_back(v0);
-  particles.F.push_back(nan_matrix);
-  particles.C.push_back(Matrix3d::Zero());
-  particles.P.push_back(Matrix3d::Zero());
-  particles.bspline.push_back(bspline);
+  const Matrix3d zero_matrix = Matrix3d::Zero();
+  particles.emplace_back(m0, x0, v0, nan_matrix, zero_matrix, zero_matrix);
 
   grid.Allocate(&particles);
   const double dt = 0.0123;
   Transfer<double> transfer(dt, &grid, &particles);
+  const BSplineWeights<double> bspline(x0, grid.dx());
   transfer.ParticleToGrid();
   grid.ExplicitVelocityUpdate(dt, /* gravity */ Vector3d::Zero());
 
@@ -158,41 +146,36 @@ GTEST_TEST(TransferTest, ParticleToGrid) {
  particle and more than one active block in the sparse grid. */
 GTEST_TEST(TransferTest, MomentumConservation) {
   SparseGrid<double> grid(0.01);
-  ParticleData<double> particles;
+  Particles<double> particles;
   /* Sample 3 particles with 2 in the same cell and the other in a separate
    page. */
   const Vector3d x0 = Vector3d(0.001, 0.002, 0.003);
   const Vector3d x1 = Vector3d(-0.001, 0.002, 0.003);
   const Vector3d x2 = Vector3d(1.001, 0.002, 1.003);
-  particles.x.push_back(x0);
-  particles.x.push_back(x1);
-  particles.x.push_back(x2);
-  particles.bspline.push_back(BSplineWeights<double>(x0, grid.dx()));
-  particles.bspline.push_back(BSplineWeights<double>(x1, grid.dx()));
-  particles.bspline.push_back(BSplineWeights<double>(x2, grid.dx()));
+  const Vector3d v0 = Vector3d(0.101, 0.002, 0.003);
+  const Vector3d v1 = Vector3d(-0.401, 0.202, 3.003);
+  const Vector3d v2 = Vector3d(1.031, 3.002, 1.003);
+  const std::vector<Vector3d> x = {x0, x1, x2};
+  const std::vector<Vector3d> v = {v0, v1, v2};
 
   Matrix3d nan_matrix =
       Matrix3d::Constant(std::numeric_limits<double>::quiet_NaN());
   for (int p = 0; p < 3; ++p) {
-    /* Set m, v, C, P to arbitrary values. */
-    particles.m.push_back(0.042 * p);
-    particles.v.push_back(Vector3d(0.1 * p, 0.2 * p, 0.3 * p));
     Matrix3d C;
+    Matrix3d P;
     for (int i = 0; i < 3; ++i) {
       for (int j = 0; j < 3; ++j) {
         C(i, j) = i * j * p;
       }
     }
-    particles.C.push_back(C);
-    Matrix3d P;
     for (int i = 0; i < 3; ++i) {
       for (int j = 0; j < 3; ++j) {
         P(i, j) = i + j + p;
       }
     }
-    particles.P.push_back(P);
+    const double mass = 0.42*p;
     /* F is unused in the transfer. */
-    particles.F.push_back(nan_matrix);
+    particles.emplace_back(mass, x[p], v[p], nan_matrix, Matrix3d::Zero(), Matrix3d::Zero());
   }
   const MassAndMomentum<double> expected =
       ComputeTotalMassAndMomentum(particles, grid.dx());

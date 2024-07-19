@@ -41,6 +41,7 @@ drake_cc_library(
         "particles.h",
     ],
     deps = [
+        ":math",
         "//common:essential",
     ],
 )
@@ -134,6 +135,18 @@ drake_cc_googletest(
     ],
     deps = [
         ":transfer",
+        "//common/test_utilities:eigen_matrix_compare",
+    ],
+)
+
+
+drake_cc_googletest(
+    name = "particles_test",
+    srcs = [
+        "test/particles_test.cc",
+    ],
+    deps = [
+        ":particles",
         "//common/test_utilities:eigen_matrix_compare",
     ],
 )

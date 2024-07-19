@@ -16,24 +16,22 @@ class Transfer {
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(Transfer);
 
   Transfer() = default;
-  Transfer(T dt, SparseGrid<T>* sparse_grid, ParticleData<T>* particles);
+  Transfer(T dt, SparseGrid<T>* sparse_grid, Particles<T>* particles);
 
   void ParticleToGrid(Parallelism parallelize = false) {
     if (parallelize.num_threads() == 1) {
       // SerialParticleToGrid();
-      // SerialSimdParticleToGrid();
-      SerialSimdParticleToGrid2();
+      SerialSimdParticleToGrid();
     } else {
       // ParallelParticleToGrid(parallelize);
-      // ParallelSimdParticleToGrid(parallelize);
-      ParallelSimdParticleToGrid2(parallelize);
+      ParallelSimdParticleToGrid(parallelize);
     }
   }
 
   void GridToParticle(Parallelism parallelize = false) {
     if (parallelize.num_threads() == 1) {
-      SerialGridToParticle();
-      // SerialSimdGridToParticle();
+      // SerialGridToParticle();
+      SerialSimdGridToParticle();
     } else {
       // ParallelGridToParticle(parallelize);
       ParallelSimdGridToParticle(parallelize);
@@ -43,10 +41,8 @@ class Transfer {
  private:
   void SerialParticleToGrid();
   void SerialSimdParticleToGrid();
-  void SerialSimdParticleToGrid2();
   void ParallelParticleToGrid(Parallelism parallelize);
   void ParallelSimdParticleToGrid(Parallelism parallelize);
-  void ParallelSimdParticleToGrid2(Parallelism parallelize);
 
   void SerialGridToParticle();
   void SerialSimdGridToParticle();
@@ -55,7 +51,7 @@ class Transfer {
 
   T dt_{0.0};
   SparseGrid<T>* sparse_grid_{};
-  ParticleData<T>* particles_{};
+  Particles<T>* particles_{};
   T D_inverse_{0.0};
 };
 

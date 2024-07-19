@@ -9,14 +9,19 @@ namespace internal {
 namespace {
 
 using Eigen::Vector3d;
+using Eigen::Matrix3d;
 
 GTEST_TEST(SparseGridTest, Allocate) {
   const double dx = 0.01; 
   SparseGrid<double> grid(dx);
-  ParticleData<double> particles;
+  Particles<double> particles;
   const Vector3d x = Vector3d(0.001, 0.001, 0.001);
-  particles.x.push_back(x);
-  particles.bspline.push_back(BSplineWeights<double>(x, dx));
+  const Vector3d v = Vector3d(0.0, 0.0, 0.0);
+  const double m = 1.0;
+  const Matrix3d F = Matrix3d::Identity();
+  const Matrix3d C = Matrix3d::Zero();
+  const Matrix3d P = Matrix3d::Zero();
+  particles.emplace_back(m,x,v,F,C,P);
 
   grid.Allocate(&particles);
 

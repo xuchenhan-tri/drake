@@ -205,6 +205,60 @@ void Store(const Matrix3<SimdScalar<T>>& m, std::vector<Matrix3<T>>* dest,
 }
 
 template <typename T>
+Vector3<SimdScalar<T>> Load(const Vector3<T>* source, size_t size) {
+  Vector3<SimdScalar<T>> result;
+  T data[size];
+  for (int d = 0; d < 3; ++d) {
+    for (size_t j = 0; j < size; ++j) {
+      data[j] = source[j][d];
+    }
+    result[d] = SimdScalar<T>(data, size);
+  }
+  return result;
+}
+
+template <typename T>
+Matrix3<SimdScalar<T>> Load(const Matrix3<T>* source, size_t size) {
+  Matrix3<SimdScalar<T>> result;
+  T data[size];
+  for (int i = 0; i < 3; ++i) {
+    for (int j = 0; j < 3; ++j) {
+      for (size_t k = 0; k < size; ++k) {
+        data[k] = source[k](i, j);
+      }
+      result(i, j) = SimdScalar<T>(data, size);
+    }
+  }
+  return result;
+}
+
+template <typename T>
+void Store(const Matrix3<SimdScalar<T>>& source, Matrix3<T>* dest,
+           size_t size) {
+  T data[size];
+  for (int i = 0; i < 3; ++i) {
+    for (int j = 0; j < 3; ++j) {
+      source(i, j).Write(data, size);
+      for (size_t k = 0; k < size; ++k) {
+        dest[k](i, j) = data[k];
+      }
+    }
+  }
+}
+
+template <typename T>
+void Store(const Vector3<SimdScalar<T>>& source, Vector3<T>* dest,
+           size_t size) {
+  T data[size];
+  for (int i = 0; i < 3; ++i) {
+    source(i).Write(data, size);
+    for (size_t k = 0; k < size; ++k) {
+      dest[k](i) = data[k];
+    }
+  }
+}
+
+template <typename T>
 inline T ReduceSum(SimdScalar<T> v) {
   return v.reduce_sum();
 }

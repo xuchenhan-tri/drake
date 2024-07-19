@@ -74,7 +74,7 @@ class SparseGrid {
 
   /* Allocates memory for the grid pages affected by particles and initialize
    all grid data to zero. */
-  void Allocate(ParticleData<T>* particles);
+  void Allocate(Particles<T>* particles);
 
   /* All but last entry store indices of particles marking the boundary of a new
    block. The last entry stores the number of particles. */
@@ -83,7 +83,7 @@ class SparseGrid {
   }
 
   const std::vector<ParticleIndex>& particle_indices() const {
-    return particles_;
+    return particle_indices_;
   }
 
   const T& dx() const { return dx_; }
@@ -213,7 +213,7 @@ class SparseGrid {
   /* Helper for `Allocate()` that sorts particles into bins based on their
    positions. In that process, builds `partilces_` and `sentinel_particles_`.
   */
-  void SortParticleIndices(ParticleData<T>* particles);
+  void SortParticleIndices(Particles<T>* particles);
   void Sort(std::vector<ParticleIndex>* particles);
 
   T dx_{};  // Grid spacing (in meters).
@@ -228,7 +228,7 @@ class SparseGrid {
   const uint64_t origin_offset_{Mask::Linear_Offset(
       kMaxGridSize / 2, kMaxGridSize / 2, kMaxGridSize / 2)};
 
-  std::vector<ParticleIndex> particles_;
+  std::vector<ParticleIndex> particle_indices_;
   std::vector<int> sentinel_particles_;
   /* Stores the difference in linear offset from a given grid node to the grid
    node exactly one block away. For example, let `a` be

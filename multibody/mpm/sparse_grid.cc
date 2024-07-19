@@ -48,14 +48,15 @@ SparseGrid<T>::SparseGrid(T dx)
 }
 
 template <typename T>
-void SparseGrid<T>::Allocate(ParticleData<T>* particles) {
+void SparseGrid<T>::Allocate(Particles<T>* particles) {
   SortParticleIndices(particles);
   blocks_->Clear();
   padded_blocks_->Clear();
 
   /* Touch all pages that contain particles. */
   for (int i = 0; i < ssize(sentinel_particles_) - 1; ++i) {
-    blocks_->Set_Page(particles_[sentinel_particles_[i]].base_node_offset);
+    blocks_->Set_Page(
+        particle_indices_[sentinel_particles_[i]].base_node_offset);
   }
   blocks_->Update_Block_Offsets();
   auto [block_offsets, num_blocks] = blocks_->Get_Blocks();
@@ -168,8 +169,9 @@ Vector3<int> SparseGrid<T>::OffsetToCoordinate(uint64_t offset) const {
 /* Sort particles by base node offsets so that particles that are close to
  each other in physical space are close to each other in memory. */
 template <typename T>
-void SparseGrid<T>::Sort(std::vector<ParticleIndex>* particles) {
-  // pss::parallel_stable_sort(particles->begin(), particles->end(),
+void SparseGrid<T>::Sort(std::vector<ParticleIndex>* particle_indices) {
+  // pss::parallel_stable_sort(particle_indices->begin(),
+  // particle_indices->end(),
   //                           [](const ParticleIndex& a, const ParticleIndex&
   //                           b) {
   //                             if (a.base_node_offset == b.base_node_offset) {
@@ -177,7 +179,7 @@ void SparseGrid<T>::Sort(std::vector<ParticleIndex>* particles) {
   //                             }
   //                             return a.base_node_offset < b.base_node_offset;
   //                           });
-  std::sort(particles->begin(), particles->end(),
+  std::sort(particle_indices->begin(), particle_indices->end(),
             [](const ParticleIndex& a, const ParticleIndex& b) {
               if (a.base_node_offset == b.base_node_offset) {
                 return a.index < b.index;
@@ -187,23 +189,20 @@ void SparseGrid<T>::Sort(std::vector<ParticleIndex>* particles) {
 }
 
 template <typename T>
-void SparseGrid<T>::SortParticleIndices(ParticleData<T>* data) {
-  const int num_particles = data->particles.size();
-  particles_.resize(num_particles);
+void SparseGrid<T>::SortParticleIndices(Particles<T>* data) {
+  const int num_particles = data->size();
+  particle_indices_.resize(num_particles);
 #if defined(_OPENMP)
 #pragma omp parallel for
 #endif
   for (int p = 0; p < num_particles; ++p) {
     const Vector3<int> base_node =
-        mpm::internal::base_node<T>(data->particle(p).x / dx_);
-    // TODO(xuchenhan-tri): We are computing base nodes twice. We should cut it
-    // down to once.
-    data->particle(p).bspline = BSplineWeights<T>(data->particle(p).x, dx_);
-    particles_[p].base_node_offset =
+        mpm::internal::base_node<T>((*data)[p].x / dx_);
+    particle_indices_[p].base_node_offset =
         CoordinateToOffset(base_node[0], base_node[1], base_node[2]);
-    particles_[p].index = p;
+    particle_indices_[p].index = p;
   }
-  Sort(&particles_);
+  Sort(&particle_indices_);
 
   /* We use sentinel_particles_ to indicate particles that belong to separate
    pages. */
@@ -220,7 +219,7 @@ void SparseGrid<T>::SortParticleIndices(ParticleData<T>* data) {
 
      block bits and data bits add up to kLog2Page bits.
      We right shift to get the page bits. */
-    const uint64_t page = particles_[p].base_node_offset >> kLog2Page;
+    const uint64_t page = particle_indices_[p].base_node_offset >> kLog2Page;
     if (p == 0 || last_page != page) {
       last_page = page;
       sentinel_particles_.push_back(p);
