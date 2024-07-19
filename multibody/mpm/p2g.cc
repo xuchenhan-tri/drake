@@ -26,17 +26,17 @@ void SetUp(int num_nodes_per_dim, int particles_per_cell, float dx,
       for (int k = 0; k < num_nodes_per_dim; ++k) {
         const Vector3f base_node(dx * i, dx * j, dx * k);
         for (int p = 0; p < particles_per_cell; ++p) {
-          particles->m.push_back(1.0);
           const Vector3f x =
               base_node + static_cast<float>(p) * dx /
                               (static_cast<float>(particles_per_cell) + 1.0) *
                               Vector3f::Ones();
-          particles->x.push_back(x);
-          particles->v.push_back(Vector3f(1.0, 1.0, 1.0));
-          particles->F.push_back(Matrix3f::Identity());
-          particles->C.push_back(Matrix3f::Zero());
-          particles->P.push_back(Matrix3f::Zero());
-          particles->bspline.push_back(BSplineWeights<float>(x, dx));
+          float m = 1.0;
+          auto v = Vector3f::Ones();
+          auto F = Matrix3f::Identity();
+          auto C = Matrix3f::Zero();
+          auto P = Matrix3f::Zero();
+          BSplineWeights<float> bspline(x, dx);
+          particles->particles.emplace_back(Particle<float>(m, x, v, F, C, P, bspline)); 
         }
       }
     }

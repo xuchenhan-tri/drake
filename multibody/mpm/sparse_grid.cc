@@ -188,18 +188,17 @@ void SparseGrid<T>::Sort(std::vector<ParticleIndex>* particles) {
 
 template <typename T>
 void SparseGrid<T>::SortParticleIndices(ParticleData<T>* data) {
-  const std::vector<Vector3<T>>& particle_positions = data->x;
-  const int num_particles = particle_positions.size();
+  const int num_particles = data->particles.size();
   particles_.resize(num_particles);
-#if defined (_OPENMP)
+#if defined(_OPENMP)
 #pragma omp parallel for
 #endif
   for (int p = 0; p < num_particles; ++p) {
     const Vector3<int> base_node =
-        mpm::internal::base_node<T>(particle_positions[p] / dx_);
+        mpm::internal::base_node<T>(data->particle(p).x / dx_);
     // TODO(xuchenhan-tri): We are computing base nodes twice. We should cut it
     // down to once.
-    data->bspline[p] = BSplineWeights<T>(particle_positions[p], dx_);
+    data->particle(p).bspline = BSplineWeights<T>(data->particle(p).x, dx_);
     particles_[p].base_node_offset =
         CoordinateToOffset(base_node[0], base_node[1], base_node[2]);
     particles_[p].index = p;
