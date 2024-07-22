@@ -31,7 +31,7 @@ void SetUp(int num_nodes_per_dim, int particles_per_cell, float dx,
                               (static_cast<float>(particles_per_cell) + 1.0) *
                               Vector3f::Ones();
           float m = 1.0;
-          auto v = Vector3f::Ones();
+          auto v = Vector3f(1 * i, 2 * j, 3 * k);
           auto F = Matrix3f::Identity();
           auto C = Matrix3f::Zero();
           auto P = Matrix3f::Zero();
@@ -47,20 +47,19 @@ int do_main() {
   int num_nodes_per_dim = 32;
   int particles_per_cell = 8;
   const float dx = 0.01;
-  const float dt = 0.002;
+  const float dt = 0.01;
   Particles<float> particles;
   SparseGrid<float> grid(dx);
 
   SetUp(num_nodes_per_dim, particles_per_cell, dx, &particles);
-  Transfer<float> transfer(dt, &grid, &particles);
-
-  auto start = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double> duration;
   for (int i = 0; i < 300; ++i) {
-    transfer.ParticleToGrid(Parallelism(12));
+    Transfer<float> transfer(dt, &grid, &particles);
+    auto start = std::chrono::high_resolution_clock::now();
+    transfer.ParallelSimdParticleToGrid(Parallelism(32));
+    auto end = std::chrono::high_resolution_clock::now();
+    duration += end - start;
   }
-
-  auto end = std::chrono::high_resolution_clock::now();
-  std::chrono::duration<double> duration = end - start;
   std::cout << "Each time step takes: " << duration.count() / 300.0 * 1000.0
             << " milliseconds" << std::endl;
   return 0;
