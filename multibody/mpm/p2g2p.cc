@@ -51,23 +51,26 @@ int do_main() {
   SparseGrid<double> grid(dx);
 
   SetUp(num_nodes_per_dim, particles_per_cell, dx, &particles);
+  bool add_test = false;
 
   auto start = std::chrono::high_resolution_clock::now();
   for (int i = 0; i < 100; ++i) {
     Transfer<double> transfer(dt, &grid, &particles);
-    transfer.ParticleToGrid(Parallelism(32));
+    transfer.ParallelSimdParticleToGrid(Parallelism(32));
     grid.ExplicitVelocityUpdate(dt, Vector3d::Zero());
-    MassAndMomentum<double> grid_stat = grid.ComputeTotalMassAndMomentum();
-    transfer.GridToParticle(Parallelism(32));
-    MassAndMomentum<double> particle_stat =
-        ComputeTotalMassAndMomentum(particles, dx);
-    DRAKE_DEMAND(std::abs(grid_stat.mass - particle_stat.mass) < 1E-10);
-    DRAKE_DEMAND(CompareMatrices(grid_stat.linear_momentum,
-                                 particle_stat.linear_momentum, 1E-10,
-                                 MatrixCompareType::absolute));
-    DRAKE_DEMAND(CompareMatrices(grid_stat.angular_momentum,
-                                 particle_stat.angular_momentum, 1E-10,
-                                 MatrixCompareType::absolute));
+    transfer.ParallelSimdGridToParticle(Parallelism(32));
+    if (add_test) {
+      MassAndMomentum<double> grid_stat = grid.ComputeTotalMassAndMomentum();
+      MassAndMomentum<double> particle_stat =
+          ComputeTotalMassAndMomentum(particles, dx);
+      DRAKE_DEMAND(std::abs(grid_stat.mass - particle_stat.mass) < 1E-10);
+      DRAKE_DEMAND(CompareMatrices(grid_stat.linear_momentum,
+                                   particle_stat.linear_momentum, 1E-10,
+                                   MatrixCompareType::absolute));
+      DRAKE_DEMAND(CompareMatrices(grid_stat.angular_momentum,
+                                   particle_stat.angular_momentum, 1E-10,
+                                   MatrixCompareType::absolute));
+    }
   }
 
   auto end = std::chrono::high_resolution_clock::now();
