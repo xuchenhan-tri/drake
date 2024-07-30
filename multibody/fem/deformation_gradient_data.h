@@ -42,7 +42,8 @@ class DeformationGradientData<DerivedDeformationGradientData<T>> {
 
   /* Updates the data with the given deformation gradients. The deformation
    gradient dependent quantities are also updated with the given
-   deformation gradients evaluated at the current and previous time steps. */
+   deformation gradients evaluated at the current time step and the previous
+   time step. */
   void UpdateData(const Matrix3<T>& deformation_gradient,
                   const Matrix3<T>& previous_step_deformation_gradient) {
     deformation_gradient_ = deformation_gradient;
