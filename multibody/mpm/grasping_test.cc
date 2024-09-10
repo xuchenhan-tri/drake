@@ -67,7 +67,7 @@ ModelInstanceIndex AddParallelGripper(
 int do_main() {
   systems::DiagramBuilder<double> builder;
   MultibodyPlantConfig plant_config;
-  plant_config.time_step = 0.0001;
+  plant_config.time_step = 0.001;
   plant_config.discrete_contact_approximation = "sap";
   auto [plant, scene_graph] = AddMultibodyPlant(plant_config, &builder);
 
@@ -121,7 +121,7 @@ int do_main() {
   auto* mpm = builder.AddSystem<MpmSystem<double>>(plant, dx, num_substeps,
                                                   Parallelism(4));
 
-  math::RigidTransform<double> X_WB1(Vector3d(0, 0, 0.5 * side_length));
+  math::RigidTransform<double> X_WB1(Vector3d(0, 0.2, 0.5 * side_length));
   Box mpm_box_shape(side_length * 0.9, side_length * 0.9, side_length * 0.9);
   auto mpm_box1 = std::make_unique<geometry::GeometryInstance>(
       X_WB1, mpm_box_shape, "mpm_box1");
@@ -176,11 +176,11 @@ int do_main() {
   systems::Simulator<double> simulator(*diagram, std::move(diagram_context));
   simulator.Initialize();
   std::cout << "Simulation Initialized." << std::endl;
-  sleep(8.0);
+  sleep(5);
   std::cout << "Simulation started." << std::endl;
-  simulator.AdvanceTo(5.0);
-
+  simulator.AdvanceTo(5);
   std::cout << "Finished simulation." << std::endl;
+  sleep(100);
   return 0;
 }
 
