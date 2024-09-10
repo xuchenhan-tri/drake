@@ -268,6 +268,10 @@ class SparseGrid {
   @pre q_WPs->size() < 2^31. */
   void SortParticles(std::vector<Vector3<double>>* q_WPs) const;
 
+  /* Helper for `Allocate()` that sorts particles based on their positions. In
+   that process, builds `data_indices_` and `sentinel_particles_`. */
+  void SortParticleIndices(const std::vector<Vector3<T>>& q_WPs);
+
  private:
   static constexpr int kLog2Page = 12;  // 4KB page size.
   /* The maximum grid size along a single dimension. That is even
@@ -302,10 +306,6 @@ class SparseGrid {
   static constexpr int kNumNodesInBlockX = 1 << Mask::block_xbits;
   static constexpr int kNumNodesInBlockY = 1 << Mask::block_ybits;
   static constexpr int kNumNodesInBlockZ = 1 << Mask::block_zbits;
-
-  /* Helper for `Allocate()` that sorts particles based on their positions. In
-   that process, builds `data_indices_` and `sentinel_particles_`. */
-  void SortParticleIndices(const std::vector<Vector3<T>>& q_WPs);
 
   /* Grid spacing (in meters). */
   T dx_{};

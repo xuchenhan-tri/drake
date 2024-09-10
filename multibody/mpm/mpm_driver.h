@@ -55,6 +55,13 @@ class MpmDriver {
       const std::unordered_map<geometry::GeometryId, multibody::BodyIndex>&
           geometry_id_to_body_index);
 
+  void SolveContact(
+      const geometry::QueryObject<double>& query_object,
+      const std::vector<multibody::SpatialVelocity<double>>& spatial_velocities,
+      const std::vector<math::RigidTransform<double>>& poses,
+      const std::unordered_map<geometry::GeometryId, multibody::BodyIndex>&
+          geometry_id_to_body_index);
+
   const ParticleData<T>& particles() const { return particles_; }
 
   const std::vector<multibody::ExternallyAppliedSpatialForce<double>>&
