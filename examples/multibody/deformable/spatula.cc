@@ -25,6 +25,9 @@ DEFINE_double(discrete_time_step, 1e-2,
               "Discrete time step for the system [s].");
 DEFINE_bool(render_bubble, false,
             "Renders the dot pattern inside the bubble gripper if true.");
+DEFINE_bool(
+    deformable, false,
+    "Uses deformable bubbles if true, otherwise uses hydroelastic bubbles.");
 
 using drake::examples::deformable::ExternalForceSource;
 using drake::examples::deformable::ParallelGripperController;
@@ -116,88 +119,124 @@ int do_main() {
 
   /* Parse the gripper model (without the bubbles). */
   Parser parser(&plant, &scene_graph);
-  ModelInstanceIndex gripper_instance = parser.AddModelsFromUrl(
-      "package://drake_models/wsg_50_description/sdf/"
-      "schunk_wsg_50_deformable_bubble.sdf")[0];
+  ModelInstanceIndex gripper_instance =
+      FLAGS_deformable ? parser.AddModelsFromUrl(
+                             "package://drake_models/wsg_50_description/sdf/"
+                             "schunk_wsg_50_deformable_bubble.sdf")[0]
+                       : parser.AddModelsFromUrl(
+                             "package://drake_models/wsg_50_description/sdf/"
+                             "schunk_wsg_50_hydro_bubble.sdf")[0];
 
-  /* Add in the bubbles. */
-  DeformableBodyConfig<double> bubble_config;
-  bubble_config.set_youngs_modulus(2e4);                  // [Pa]
-  bubble_config.set_poissons_ratio(0.45);                 // unitless
-  bubble_config.set_mass_density(10);                     // [kg/m³]
-  bubble_config.set_stiffness_damping_coefficient(0.1);  // [1/s]
+  if (FLAGS_deformable) {
+    /* Add in the bubbles. */
+    DeformableBodyConfig<double> bubble_config;
+    bubble_config.set_youngs_modulus(2e4);                 // [Pa]
+    bubble_config.set_poissons_ratio(0.45);                // unitless
+    bubble_config.set_mass_density(10);                    // [kg/m³]
+    bubble_config.set_stiffness_damping_coefficient(0.1);  // [1/s]
 
-  /* Minimally required proximity properties for deformable bodies: A valid
-   Coulomb friction coefficient. */
-  ProximityProperties deformable_proximity_props;
-  AddContactMaterial({}, {}, surface_friction, &deformable_proximity_props);
+    /* Minimally required proximity properties for deformable bodies: A valid
+     Coulomb friction coefficient. */
+    ProximityProperties deformable_proximity_props;
+    AddContactMaterial({}, {}, surface_friction, &deformable_proximity_props);
 
-  /* The mesh we render in the camera sim. */
-  PerceptionProperties perception_properties;
-  const std::string textured_bubble_obj = PackageMap{}.ResolveUrl(
-      "package://drake_models/wsg_50_description/meshes/textured_bubble.obj");
-  /* Assign the mesh to be rendered. If this property is not specified, the
-   untextured surface mesh of the simulated volume mesh is rendered. */
-  perception_properties.AddProperty("deformable", "embedded_mesh",
-                                    textured_bubble_obj);
+    /* The mesh we render in the camera sim. */
+    PerceptionProperties perception_properties;
+    const std::string textured_bubble_obj = PackageMap{}.ResolveUrl(
+        "package://drake_models/wsg_50_description/meshes/textured_bubble.obj");
+    /* Assign the mesh to be rendered. If this property is not specified, the
+     untextured surface mesh of the simulated volume mesh is rendered. */
+    perception_properties.AddProperty("deformable", "embedded_mesh",
+                                      textured_bubble_obj);
 
-  /* Add in the left bubble. */
-  const std::string bubble_vtk = PackageMap{}.ResolveUrl(
-      "package://drake_models/wsg_50_description/meshes/bubble.vtk");
-  auto left_bubble_mesh = std::make_unique<Mesh>(bubble_vtk);
-  /* Pose of the left bubble (at initialization) in the world frame. */
-  const RigidTransformd X_WBl(RollPitchYawd(M_PI_2, M_PI, 0),
-                              Vector3d(-0.185, -0.09, 0.06));
-  auto left_bubble_instance = std::make_unique<GeometryInstance>(
-      X_WBl, std::move(left_bubble_mesh), "left bubble");
-  left_bubble_instance->set_proximity_properties(deformable_proximity_props);
-  left_bubble_instance->set_perception_properties(perception_properties);
-  /* Since the deformable geometry is specified through Shape::Mesh, the
-   resolution hint is unused. */
-  const double unused_resolution_hint = 1.0;
-  DeformableModel<double>& deformable_model = plant.mutable_deformable_model();
-  const DeformableBodyId left_bubble_id =
-      deformable_model.RegisterDeformableBody(std::move(left_bubble_instance),
-                                              bubble_config,
-                                              unused_resolution_hint);
+    /* Add in the left bubble. */
+    const std::string bubble_vtk = PackageMap{}.ResolveUrl(
+        "package://drake_models/wsg_50_description/meshes/bubble.vtk");
+    auto left_bubble_mesh = std::make_unique<Mesh>(bubble_vtk);
+    /* Pose of the left bubble (at initialization) in the world frame. */
+    const RigidTransformd X_WBl(RollPitchYawd(M_PI_2, M_PI, 0),
+                                Vector3d(-0.185, -0.09, 0.06));
+    auto left_bubble_instance = std::make_unique<GeometryInstance>(
+        X_WBl, std::move(left_bubble_mesh), "left bubble");
+    left_bubble_instance->set_proximity_properties(deformable_proximity_props);
+    left_bubble_instance->set_perception_properties(perception_properties);
+    /* Since the deformable geometry is specified through Shape::Mesh, the
+     resolution hint is unused. */
+    const double unused_resolution_hint = 1.0;
+    DeformableModel<double>& deformable_model =
+        plant.mutable_deformable_model();
+    const DeformableBodyId left_bubble_id =
+        deformable_model.RegisterDeformableBody(std::move(left_bubble_instance),
+                                                bubble_config,
+                                                unused_resolution_hint);
 
-  /* Now we attach the bubble to the WSG finger using a fixed constraint. To do
-   that, we specify a box geometry and put all vertices of the bubble geometry
-   under fixed constraint with the rigid finger if they fall inside the box.
-   Refer to DeformableModel::AddFixedConstraint for details. */
-  const Body<double>& left_finger = plant.GetBodyByName("left_finger");
-  /* Pose of the bubble in the left finger body frame. */
-  const RigidTransformd X_FlBl = RigidTransformd(
-      math::RollPitchYawd(M_PI_2, M_PI_2, 0), Vector3d(0.0, -0.03, -0.1125));
-  /* All vertices of the deformable bubble mesh inside this box will be subject
-   to fixed constraints. */
-  const Box box(0.1, 0.004, 0.15);
-  deformable_model.AddFixedConstraint(
-      left_bubble_id, left_finger, X_FlBl, box,
-      /* The pose of the box in the left finger's frame. */
-      RigidTransformd(Vector3d(0.0, -0.03, -0.1)));
+    /* Now we attach the bubble to the WSG finger using a fixed constraint. To
+     do that, we specify a box geometry and put all vertices of the bubble
+     geometry under fixed constraint with the rigid finger if they fall inside
+     the box. Refer to DeformableModel::AddFixedConstraint for details. */
+    const Body<double>& left_finger = plant.GetBodyByName("left_finger");
+    /* Pose of the bubble in the left finger body frame. */
+    const RigidTransformd X_FlBl = RigidTransformd(
+        math::RollPitchYawd(M_PI_2, M_PI_2, 0), Vector3d(0.0, -0.03, -0.1125));
+    /* All vertices of the deformable bubble mesh inside this box will be
+     subject to fixed constraints. */
+    const Box box(0.1, 0.004, 0.15);
+    deformable_model.AddFixedConstraint(
+        left_bubble_id, left_finger, X_FlBl, box,
+        /* The pose of the box in the left finger's frame. */
+        RigidTransformd(Vector3d(0.0, -0.03, -0.1)));
 
-  /* Add in the right bubble and attach it to the right finger. */
-  auto right_bubble_mesh = std::make_unique<Mesh>(bubble_vtk);
-  /* Pose of the right bubble (at initialization) in the world frame. */
-  const RigidTransformd X_WBr(RollPitchYawd(-M_PI_2, M_PI, 0),
-                              Vector3d(-0.185, 0.09, 0.06));
-  auto right_bubble_instance = std::make_unique<GeometryInstance>(
-      X_WBr, std::move(right_bubble_mesh), "right bubble");
-  right_bubble_instance->set_proximity_properties(deformable_proximity_props);
-  right_bubble_instance->set_perception_properties(perception_properties);
-  const DeformableBodyId right_bubble_id =
-      deformable_model.RegisterDeformableBody(std::move(right_bubble_instance),
-                                              bubble_config,
-                                              unused_resolution_hint);
-  const Body<double>& right_finger = plant.GetBodyByName("right_finger");
-  /* Pose of the right finger body (at initialization) in the world frame. */
-  const RigidTransformd X_FrBr = RigidTransformd(
-      math::RollPitchYawd(-M_PI_2, M_PI_2, 0), Vector3d(0.0, 0.03, -0.1125));
-  deformable_model.AddFixedConstraint(
-      right_bubble_id, right_finger, X_FrBr, box,
-      /* The pose of the box in the right finger's frame. */
-      RigidTransformd(Vector3d(0.0, 0.03, -0.1)));
+    /* Add in the right bubble and attach it to the right finger. */
+    auto right_bubble_mesh = std::make_unique<Mesh>(bubble_vtk);
+    /* Pose of the right bubble (at initialization) in the world frame. */
+    const RigidTransformd X_WBr(RollPitchYawd(-M_PI_2, M_PI, 0),
+                                Vector3d(-0.185, 0.09, 0.06));
+    auto right_bubble_instance = std::make_unique<GeometryInstance>(
+        X_WBr, std::move(right_bubble_mesh), "right bubble");
+    right_bubble_instance->set_proximity_properties(deformable_proximity_props);
+    right_bubble_instance->set_perception_properties(perception_properties);
+    const DeformableBodyId right_bubble_id =
+        deformable_model.RegisterDeformableBody(
+            std::move(right_bubble_instance), bubble_config,
+            unused_resolution_hint);
+    const Body<double>& right_finger = plant.GetBodyByName("right_finger");
+    /* Pose of the right finger body (at initialization) in the world frame. */
+    const RigidTransformd X_FrBr = RigidTransformd(
+        math::RollPitchYawd(-M_PI_2, M_PI_2, 0), Vector3d(0.0, 0.03, -0.1125));
+    deformable_model.AddFixedConstraint(
+        right_bubble_id, right_finger, X_FrBr, box,
+        /* The pose of the box in the right finger's frame. */
+        RigidTransformd(Vector3d(0.0, 0.03, -0.1)));
+  } else {
+    /* Add a prismatic joint between the world frame and the base of the
+     gripper. */
+    const math::RigidTransform<double> X_WF0 = math::RigidTransform<double>(
+        math::RollPitchYaw(0.0, -1.57, 0.0), Eigen::Vector3d(0.06, 0.0, 0));
+    const auto& translate_joint = plant.AddJoint<PrismaticJoint>(
+        "world_to_base", plant.world_body(), RigidTransformd::Identity(),
+        plant.GetBodyByName("gripper"), X_WF0, Vector3d::UnitZ());
+    const auto& translate_joint_actuator =
+        plant.AddJointActuator("world_to_base_actuator", translate_joint);
+    plant.get_mutable_joint_actuator(translate_joint_actuator.index())
+        .set_controller_gains({1e6, 1.0});
+
+    const auto& left_finger_actuator =
+        plant.GetJointActuatorByName("left_finger_sliding_joint");
+    plant.get_mutable_joint_actuator(left_finger_actuator.index())
+        .set_controller_gains({1e6, 1.0});
+
+    const auto& right_finger_actuator =
+        plant.GetJointActuatorByName("right_finger_sliding_joint");
+    plant.get_mutable_joint_actuator(right_finger_actuator.index())
+        .set_controller_gains({1e6, 1.0});
+    plant.RemoveJointActuator(right_finger_actuator);
+
+    const auto& left_finger_joint =
+        plant.GetJointByName("left_finger_sliding_joint");
+    const auto& right_finger_joint =
+        plant.GetJointByName("right_finger_sliding_joint");
+    plant.AddCouplerConstraint(left_finger_joint, right_finger_joint, -1.0);
+  }
 
   /* Finally, we add a rigid spatula as the manipuland. */
   parser.AddModelsFromUrl(
@@ -232,7 +271,7 @@ int do_main() {
   const double start_time = 10.0;
   const double end_time = 13.0;
   const BodyIndex body_index = plant.GetBodyByName("spatula").index();
-  const double torque = 0.35;
+  const double torque = FLAGS_deformable ? 0.35 : 0.77;
 
   const auto& external_force_source = *builder.AddSystem<ExternalForceSource>(
       body_index, p_BoBq_B, torque, start_time, end_time);
@@ -244,15 +283,6 @@ int do_main() {
   params.role = geometry::Role::kIllustration;
   geometry::DrakeVisualizerd::AddToBuilder(&builder, scene_graph, nullptr,
                                            params);
-  /* We want to look in the -Py direction so we line up Bz with -Py.*/
-  const Vector3d Bz_P = -Vector3d::UnitY();
-  const Vector3d Bx_P = Vector3d::UnitZ();
-  const Vector3d By_P = Bz_P.cross(Bx_P);  // Already a unit vector.
-  const Vector3d p_PB(0, 0.06, -0.11);
-  const RotationMatrixd R_PB =
-      RotationMatrixd::MakeFromOrthonormalColumns(Bx_P, By_P, Bz_P);
-  Transform schema_X_PB(RigidTransformd(R_PB, p_PB));
-  schema_X_PB.base_frame = "right_finger";
 
   auto diagram = builder.Build();
   std::unique_ptr<Context<double>> diagram_context =
