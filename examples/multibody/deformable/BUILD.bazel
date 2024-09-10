@@ -116,6 +116,34 @@ drake_cc_binary(
     ],
 )
 
+drake_cc_binary(
+    name = "spatula",
+    srcs = [
+        "spatula.cc",
+    ],
+    add_test_rule = 1,
+    data = [
+        ":models",
+    ],
+    test_rule_args = [
+        "-simulation_time=0.1",
+        "-realtime_rate=0.0",
+        "-render_bubble=false",
+    ],
+    deps = [
+        ":parallel_gripper_controller",
+        "//geometry",
+        "//geometry/proximity",
+        "//geometry/render_gl",
+        "//multibody/parsing",
+        "//multibody/plant",
+        "//systems/analysis:simulator",
+        "//systems/framework:diagram",
+        "//systems/sensors:camera_config_functions",
+        "@gflags",
+    ],
+)
+
 drake_cc_googletest(
     name = "point_source_force_field_test",
     deps = [

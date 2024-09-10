@@ -57,7 +57,7 @@
           <drake:compliant_hydroelastic/>
           <drake:hydroelastic_modulus>1e8</drake:hydroelastic_modulus>
           <drake:hunt_crossley_dissipation>5</drake:hunt_crossley_dissipation>
-          <drake:mu_dynamic>3.0</drake:mu_dynamic>
+          <drake:mu_dynamic>1.0</drake:mu_dynamic>
         </drake:proximity_properties>
       </collision>
     </link>

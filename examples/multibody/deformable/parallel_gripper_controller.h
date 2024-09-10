@@ -1,5 +1,6 @@
 #pragma once
 
+#include "drake/multibody/plant/externally_applied_spatial_force.h"
 #include "drake/systems/framework/leaf_system.h"
 
 namespace drake {
@@ -49,6 +50,54 @@ class ParallelGripperController : public systems::LeafSystem<double> {
   Eigen::Vector2d closed_configuration_;
   Eigen::Vector2d lifted_configuration_;
   Eigen::Vector2d open_configuration_;
+};
+
+class ExternalForceSource : public systems::LeafSystem<double> {
+ public:
+  DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(ExternalForceSource);
+
+  /* Constructs a ParallelGripperController system with the given parameters.
+   @param[in] open_width   The width between fingers in the open state. (meters)
+   @param[in] closed_width The width between fingers in the closed state.
+                           (meters)
+   @param[in] height       The height of the gripper in the lifted state.
+                           (meters) */
+  ExternalForceSource(multibody::BodyIndex body_index,
+                      const Vector3<double>& p_BoBq_B, double torque,
+                      double start_time, double end_time)
+      : body_index_(body_index),
+        p_BoBq_B_(p_BoBq_B),
+        torque_(torque),
+        start_time_(start_time),
+        end_time_(end_time) {
+    this->DeclareAbstractOutputPort(
+        "desired state",
+        std::vector<multibody::ExternallyAppliedSpatialForce<double>>{},
+        &ExternalForceSource::CalcOutput);
+  }
+
+ private:
+  /* Computes the output desired state of the parallel gripper. */
+  void CalcOutput(const systems::Context<double>& context,
+                  std::vector<multibody::ExternallyAppliedSpatialForce<double>>*
+                      output) const {
+    output->clear();
+    const double t = context.get_time();
+    if (t >= start_time_ && t <= end_time_) {
+      multibody::ExternallyAppliedSpatialForce<double> force;
+      force.body_index = body_index_;
+      force.p_BoBq_B = p_BoBq_B_;
+      force.F_Bq_W = multibody::SpatialForce<double>(
+          Vector3<double>(0, -torque_, 0), Vector3<double>::Zero());
+      output->push_back(force);
+    }
+  }
+
+  multibody::BodyIndex body_index_;
+  Vector3<double> p_BoBq_B_{};
+  double torque_{};
+  double start_time_{};
+  double end_time_{};
 };
 
 }  // namespace deformable

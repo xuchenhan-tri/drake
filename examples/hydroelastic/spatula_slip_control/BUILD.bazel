@@ -17,6 +17,7 @@ filegroup(
     visibility = [
         "//:__pkg__",
         "//bindings/pydrake/visualization:__pkg__",
+        "//examples/multibody/deformable:__pkg__",
     ],
 )
 
