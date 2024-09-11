@@ -172,6 +172,22 @@ class SparseGrid {
     return result;
   }
 
+  void Backup() {
+    sentinel_particles_backup_ = sentinel_particles_;
+    colored_blocks_backup_ = colored_blocks_;
+    data_indices_backup_ = data_indices_;
+    base_node_offsets_backup_ = base_node_offsets_;
+    particle_sorters_backup_ = particle_sorters_;
+  }
+
+  void Restore() {
+    sentinel_particles_ = sentinel_particles_backup_;
+    colored_blocks_ = colored_blocks_backup_;
+    data_indices_ = data_indices_backup_;
+    base_node_offsets_ = base_node_offsets_backup_;
+    particle_sorters_ = particle_sorters_backup_;
+  }
+
   /* Allocates memory for the grid pages affected by particles and initialize
    all grid data to zero.
 
@@ -351,6 +367,12 @@ class SparseGrid {
 
   std::array<std::vector<int>, kNumColors> colored_blocks_;
   Parallelism parallelism_;
+
+  std::vector<int> sentinel_particles_backup_;
+  std::vector<int> data_indices_backup_;
+  std::vector<uint64_t> base_node_offsets_backup_;
+  std::array<std::vector<int>, kNumColors> colored_blocks_backup_;
+  std::vector<uint64_t> particle_sorters_backup_;
 };
 
 }  // namespace internal
