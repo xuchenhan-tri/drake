@@ -78,7 +78,8 @@ class MpmDriver {
   int num_subteps_{0};
   T substep_dt_{0.0};
   T dx_{0.0};
-  Vector3<T> gravity_{0, 0, -9.81};
+  // Vector3<T> gravity_{0, 0, -9.81};
+  Vector3<T> gravity_{1, 0, -5};
   copyable_unique_ptr<SparseGrid<T>> grid_;
   ParticleData<T> particles_;
   Parallelism parallelism_;

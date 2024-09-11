@@ -204,11 +204,11 @@ void MpmDriver<T>::AdvanceOneTimeStep(
     UpdateParticleStress();
     /* Update particle's contact (and friction) momentum and accumulate the
      opposite momentum in rigid_forces_. */
-    // UpdateContactForces(query_object, spatial_velocities, poses,
-    //                     geometry_id_to_body_index);
     for (auto& v : particles_.v) {
       v += gravity_.template cast<T>() * substep_dt_;
     }
+    // UpdateContactForces(query_object, spatial_velocities, poses,
+    //                     geometry_id_to_body_index);
     // Particle to grid transfer.
     Transfer<T> transfer(substep_dt_, grid_.get_mutable(), &particles_);
     transfer.ParallelSimdParticleToGrid(parallelism_);
@@ -234,7 +234,7 @@ void MpmDriver<T>::SolveContact(
     const std::vector<math::RigidTransform<double>>& poses,
     const std::unordered_map<geometry::GeometryId, multibody::BodyIndex>&
         geometry_id_to_body_index) {
-  const double kStiffness = 1e6;
+  const double kStiffness = 1e8;
   const double kDamping = 1.0;
   const double substep_dt = dt_ / double(num_subteps_);
   ContactForceSolver<double> solver(substep_dt, kStiffness, kDamping);
@@ -297,23 +297,20 @@ void MpmDriver<T>::SolveContact(
     }
   }
 
+  grid_->Backup();
   Transfer<T> transfer(substep_dt, grid_.get_mutable(), &contact_particles);
 
   double impulse_error = 1e10;
-  const double kTol = 1e-3;
+  const double kTol = 1e-7;
   int count = 0;
   while (impulse_error > kTol && count < 1) {
-    std::cout << "====================================" << std::endl;
-    std::cout << "itration: " << count++ << std::endl;
-    std::cout << "====================================" << std::endl;
+    count++;
     impulse_error = 0;
     // Compute the impulse.
     for (int p = 0; p < ssize(contact_particles.m); ++p) {
-      std::cout << "particle: " << p << std::endl;
       const double& mp = contact_particles.m[p];
       const Vector3<double>& vp =
           contact_particles.v[p].template cast<double>();
-      std::cout << "vp: " << vp[0] << " " << vp[1] << " " << vp[2] << std::endl;
       const double& volume = contact_particles.volume[p];
       const auto& vrs = contact_particles.vr[p];
       const auto& phis = contact_particles.phi[p];
@@ -339,29 +336,28 @@ void MpmDriver<T>::SolveContact(
           }
           /* kf is the slope of the regulated friction in stiction. Larger kf
            resolves static friction better, but is less numerically stable. */
-          const double kf = 1.0;
+          const double kf = 10.0;
           dv -= std::min(dvn * mus[c], kf * vt_norm) * vt_hat;
           const Vector3<double> new_impulse = mp * dv;
           const Vector3<double> df = new_impulse - fs[c].template cast<double>();
           impulse_error += df.squaredNorm();
-          fs[c] = df.template cast<T>();
+          fs[c] = new_impulse.template cast<T>();
         } else {
           // DRAKE_DEMAND(false);
           impulse_error += fs[c].squaredNorm();
           const Vector3<double> new_impulse = Vector3<double>::Zero();
           const Vector3<double> df = new_impulse - fs[c].template cast<double>();
           impulse_error += df.squaredNorm();
-          fs[c] = df.template cast<T>();
+          fs[c] = new_impulse.template cast<T>();
         }
-        std::cout << "impulse: " << fs[c][0] << " " << fs[c][1] << " "
-                  << fs[c][2] << std::endl;
       }
     }
     impulse_error = std::sqrt(impulse_error);
-    std::cout << "impulse_error: " << impulse_error << std::endl;
     // Transfer the impulse to grid.
     transfer.ContactP2G2P();
   }
+  std::cout << "Iteration count :" <<  count << ", impulse_error: " << impulse_error << std::endl;
+  grid_->Restore();
 }
 
 template <typename T>
@@ -374,9 +370,9 @@ void MpmDriver<T>::UpdateContactForces(
   const double kStiffness = 1e8;
   const double kDamping = 1.0;
   const double substep_dt = dt_ / double(num_subteps_);
-  for (auto& v : particles_.v) {
-    v += gravity_.template cast<T>() * substep_dt;
-  }
+  // for (auto& v : particles_.v) {
+  //   v += gravity_.template cast<T>() * substep_dt;
+  // }
   ContactForceSolver<double> solver(substep_dt, kStiffness, kDamping);
 
   // TODO(xuchenhan-tri): Run this in parallel. Be careful about the race
@@ -422,7 +418,7 @@ void MpmDriver<T>::UpdateContactForces(
         }
         /* kf is the slope of the regulated friction in stiction. Larger kf
          resolves static friction better, but is less numerically stable. */
-        const double kf = 1.0;
+        const double kf = 10.0;
         dv -= std::min(dvn * mu, kf * vt_norm) * vt_hat;
 
         particles_.v[p] += dv.template cast<T>();

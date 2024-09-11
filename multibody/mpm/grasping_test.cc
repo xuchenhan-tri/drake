@@ -67,14 +67,14 @@ ModelInstanceIndex AddParallelGripper(
 int do_main() {
   systems::DiagramBuilder<double> builder;
   MultibodyPlantConfig plant_config;
-  plant_config.time_step = 0.001;
+  plant_config.time_step = 0.01;
   plant_config.discrete_contact_approximation = "sap";
   auto [plant, scene_graph] = AddMultibodyPlant(plant_config, &builder);
 
   ProximityProperties rigid_proximity_props;
   ProximityProperties ground_proximity_props;
   /* Set the friction coefficient close to that of rubber against rubber. */
-  const CoulombFriction<double> surface_friction(100, 100);
+  const CoulombFriction<double> surface_friction(0.21, 0.21);
   AddContactMaterial({}, {}, surface_friction, &rigid_proximity_props);
   AddContactMaterial({}, {}, surface_friction, &ground_proximity_props);
   AddCompliantHydroelasticProperties(1.0, 1e6, &rigid_proximity_props);
@@ -117,7 +117,7 @@ int do_main() {
   plant.Finalize();
 
   const double dx = 0.02;
-  const int num_substeps = 1;
+  const int num_substeps = 10;
   auto* mpm = builder.AddSystem<MpmSystem<double>>(plant, dx, num_substeps,
                                                   Parallelism(4));
 
@@ -176,11 +176,10 @@ int do_main() {
   systems::Simulator<double> simulator(*diagram, std::move(diagram_context));
   simulator.Initialize();
   std::cout << "Simulation Initialized." << std::endl;
-  sleep(5);
+  sleep(8);
   std::cout << "Simulation started." << std::endl;
   simulator.AdvanceTo(5);
   std::cout << "Finished simulation." << std::endl;
-  sleep(100);
   return 0;
 }
 
