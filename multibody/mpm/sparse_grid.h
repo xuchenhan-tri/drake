@@ -323,6 +323,16 @@ class SparseGrid {
   static constexpr int kNumNodesInBlockY = 1 << Mask::block_ybits;
   static constexpr int kNumNodesInBlockZ = 1 << Mask::block_zbits;
 
+  // TODO(xuchenhan-tri): Allow moving the maximumly allowed grid around the
+  // center of the objects so that the grid can be accommodated to the objects
+  // that are translating.
+  /* 3D coordinates in SPGrid starts at (i, j, k) = (0, 0, 0) with i, j, k
+   always non-negative. We want the grid to center around (0, 0, 0) in world
+   space so we shift the origin by
+   (kMaxGridSize/2, kMaxGridSize/2, kMaxGridSize/2)*/
+  const uint64_t origin_offset_{Mask::Linear_Offset(
+      kMaxGridSize / 2, kMaxGridSize / 2, kMaxGridSize / 2)};
+
   /* Grid spacing (in meters). */
   T dx_{};
   /* SPGrid allocator. */
@@ -333,16 +343,6 @@ class SparseGrid {
   /* Blocks containing all active grid nodes. These are the blocks that are
    actually allocated. */
   std::unique_ptr<PageMap> padded_blocks_;
-
-  // TODO(xuchenhan-tri): Allow moving the maximumly allowed grid around the
-  // center of the objects so that the grid can be accommodated to the objects
-  // that are translating.
-  /* 3D coordinates in SPGrid starts at (i, j, k) = (0, 0, 0) with i, j, k
-   always non-negative. We want the grid to center around (0, 0, 0) in world
-   space so we shift the origin by
-   (kMaxGridSize/2, kMaxGridSize/2, kMaxGridSize/2)*/
-  const uint64_t origin_offset_{Mask::Linear_Offset(
-      kMaxGridSize / 2, kMaxGridSize / 2, kMaxGridSize / 2)};
 
   /* See accessors. */
   std::vector<int> sentinel_particles_;

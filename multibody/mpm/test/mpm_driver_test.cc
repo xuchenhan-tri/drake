@@ -16,7 +16,7 @@ GTEST_TEST(MpmDriverTest, Smoke) {
   const double dt = 0.01;
   const int num_substeps = 10;
   const double dx = 0.01;
-  MpmDriver<double> driver(dt, num_substeps, dx);
+  MpmDriver<double> driver(dt, dx, num_substeps);
 
   const RigidTransformd X_WB = RigidTransformd::Identity();
   auto sphere_instance = std::make_unique<geometry::GeometryInstance>(

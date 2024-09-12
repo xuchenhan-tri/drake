@@ -41,14 +41,9 @@ class MpmDriver {
       std::unique_ptr<geometry::GeometryInstance> geometry_instance,
       int particles_per_cell, const fem::DeformableBodyConfig<T>& config);
 
-  void AdvanceOneTimeStep(
-      const geometry::QueryObject<double>& query_object,
-      const std::vector<multibody::SpatialVelocity<double>>& spatial_velocities,
-      const std::vector<math::RigidTransform<double>>& poses,
-      const std::unordered_map<geometry::GeometryId, multibody::BodyIndex>&
-          geometry_id_to_body_index);
+  void AdvanceOneTimeStep();
 
-  void UpdateContactForces(
+  void AdvanceOneTimeStep(
       const geometry::QueryObject<double>& query_object,
       const std::vector<multibody::SpatialVelocity<double>>& spatial_velocities,
       const std::vector<math::RigidTransform<double>>& poses,
