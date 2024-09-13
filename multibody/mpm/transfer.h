@@ -32,7 +32,8 @@ class Transfer {
    The constructor prepares the grid for transfer by sorting particle indices
    and allocating memory for grid data.
    @pre sparse_grid and particles are not null. */
-  Transfer(T dt, SparseGrid<T>* sparse_grid, ParticleData<T>* particles);
+  Transfer(T dt, SparseGrid<T>* sparse_grid, ParticleData<T>* particles,
+           bool reset_grid = true);
   Transfer(T dt, SparseGrid<T>* sparse_grid, ContactParticleData<T>* particles);
 
   /* The transfer functions below each come in four flavors as the cross product
@@ -62,7 +63,7 @@ class Transfer {
   void ParallelGridToParticle(Parallelism parallelize);
   void ParallelSimdGridToParticle(Parallelism parallelize);
 
-  void ContactP2G2P(); 
+  void ContactP2G2P();
 
  private:
   T dt_{0.0};
@@ -73,7 +74,7 @@ class Transfer {
    course notes referenced in the class documentation. */
   T D_inverse_{0.0};
   T D_inverse_dt_{0.0};
-  T kApicRatio{1.0};
+  T kApicRatio{0.0};
 };
 
 }  // namespace internal

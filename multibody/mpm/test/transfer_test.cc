@@ -106,7 +106,7 @@ GTEST_TEST(TransferTest, GridToParticle) {
   particles.C.push_back(nan_matrix);
   particles.tau_v0.push_back(nan_matrix);
 
-  grid.Allocate(particles.x);
+  grid.Allocate(&particles);
 
   const double dt = 0.0123;
   Transfer<double> transfer(dt, &grid, &particles);
@@ -141,7 +141,7 @@ GTEST_TEST(TransferTest, ParticleToGrid) {
   particles.C.push_back(Matrix3d::Zero());
   particles.tau_v0.push_back(Matrix3d::Zero());
 
-  grid.Allocate(particles.x);
+  grid.Allocate(&particles);
   const double dt = 0.0123;
   Transfer<double> transfer(dt, &grid, &particles);
   transfer.SerialParticleToGrid();
@@ -262,10 +262,10 @@ GTEST_TEST(TransferTest, Parity) {
   SparseGrid<double> grid_parallel(dx);
   SparseGrid<double> grid_parallel_simd(dx);
 
-  grid.Allocate(particles.x);
-  grid_simd.Allocate(particles.x);
-  grid_parallel.Allocate(particles.x);
-  grid_parallel_simd.Allocate(particles.x);
+  grid.Allocate(&particles);
+  grid_simd.Allocate(&particles);
+  grid_parallel.Allocate(&particles);
+  grid_parallel_simd.Allocate(&particles);
 
   const double dt = 0.00123;
   Transfer<double> transfer(dt, &grid, &particles);

@@ -49,21 +49,20 @@ SparseGrid<T>::SparseGrid(T dx, Parallelism parallelism)
       }
     }
   }
-
-  /* Maintain the invariance that the last entry in sentinel_particles_ is the
-   number of particles. */
-  sentinel_particles_.push_back(0);
 }
 
 template <typename T>
-void SparseGrid<T>::Allocate(const std::vector<Vector3<T>>& q_WPs) {
-  SortParticleIndices(q_WPs);
+void SparseGrid<T>::Allocate(ParticleData<T>* particles) {
+  DRAKE_DEMAND(particles != nullptr);
+  SortParticles(particles);
   blocks_->Clear();
   padded_blocks_->Clear();
 
+  const auto& sentinel_particles = particles->sentinel_particles;
+  const auto& base_node_offsets = particles->base_node_offsets; 
   /* Touch all blocks that contain particles. */
-  for (int i = 0; i < ssize(sentinel_particles_) - 1; ++i) {
-    blocks_->Set_Page(base_node_offsets_[sentinel_particles_[i]]);
+  for (int i = 0; i < ssize(sentinel_particles) - 1; ++i) {
+    blocks_->Set_Page(base_node_offsets[sentinel_particles[i]]);
   }
   blocks_->Update_Block_Offsets();
   auto [block_offsets, num_blocks] = blocks_->Get_Blocks();
@@ -235,11 +234,17 @@ MassAndMomentum<T> SparseGrid<T>::ComputeTotalMassAndMomentum() const {
 }
 
 template <typename T>
-void SparseGrid<T>::SortParticleIndices(const std::vector<Vector3<T>>& q_WPs) {
-  const int num_particles = q_WPs.size();
-  data_indices_.resize(num_particles);
-  base_node_offsets_.resize(num_particles);
-  particle_sorters_.resize(num_particles);
+void SparseGrid<T>::SortParticles(ParticleData<T>* particles) {
+  const int num_particles = particles->x.size();
+  particles->data_indices.resize(num_particles);
+  particles->base_node_offsets.resize(num_particles);
+  particles->particle_sorters.resize(num_particles);
+
+  auto& data_indices = particles->data_indices;
+  auto& base_node_offsets = particles->base_node_offsets;
+  auto& particle_sorters = particles->particle_sorters;
+  auto& sentinel_particles = particles->sentinel_particles;
+  auto& colored_blocks = particles->colored_blocks;
 
   /* We sort particles first based on their base node offsets, and if those
    are the same, we sort by their data indices. To do that, we notice that the
@@ -265,42 +270,42 @@ void SparseGrid<T>::SortParticleIndices(const std::vector<Vector3<T>>& q_WPs) {
 #pragma omp parallel for num_threads(num_threads)
 #endif
   for (int p = 0; p < num_particles; ++p) {
-    const Vector3<int> base_node = ComputeBaseNode<T>(q_WPs[p] / dx_);
-    base_node_offsets_[p] =
+    const Vector3<int> base_node = ComputeBaseNode<T>(particles->x[p] / dx_);
+    base_node_offsets[p] =
         CoordinateToOffset(base_node[0], base_node[1], base_node[2]);
-    data_indices_[p] = p;
+    data_indices[p] = p;
     /* Confirm the data bits of the base node offset are all zero. */
-    DRAKE_ASSERT((base_node_offsets_[p] & ((uint64_t(1) << kDataBits) - 1)) ==
+    DRAKE_ASSERT((base_node_offsets[p] & ((uint64_t(1) << kDataBits) - 1)) ==
                  0);
     /* Confirm the left most bits in the page bits are unused. */
-    DRAKE_ASSERT((base_node_offsets_[p] &
+    DRAKE_ASSERT((base_node_offsets[p] &
                   ~((uint64_t(1) << (64 - kZeroPageBits)) - 1)) == 0);
-    particle_sorters_[p] =
-        (base_node_offsets_[p] << kZeroPageBits) + data_indices_[p];
+    particle_sorters[p] =
+        (base_node_offsets[p] << kZeroPageBits) + data_indices[p];
   }
 
 #if defined(_OPENMP)
-  ips2ra::parallel::sort(particle_sorters_.begin(), particle_sorters_.end(),
+  ips2ra::parallel::sort(particle_sorters.begin(), particle_sorters.end(),
                          ips2ra::Config<>::identity{}, num_threads);
 #else
-  ips2ra::sort(particle_sorters_.begin(), particle_sorters_.end());
+  ips2ra::sort(particle_sorters.begin(), particle_sorters.end());
 #endif
 
   /* Peel off the data indices and the base node offsets from
-   particle_sorters_. Meanwhile, reorder the data indices and the base node
+   particle_sorters. Meanwhile, reorder the data indices and the base node
    offsets based on the sorting results. */
 #if defined(_OPENMP)
 #pragma omp parallel for num_threads(num_threads)
 #endif
-  for (int p = 0; p < ssize(particle_sorters_); ++p) {
-    data_indices_[p] = particle_sorters_[p] & ((uint64_t(1) << kIndexBits) - 1);
-    base_node_offsets_[p] = (particle_sorters_[p] >> kIndexBits) << kDataBits;
+  for (int p = 0; p < ssize(particle_sorters); ++p) {
+    data_indices[p] = particle_sorters[p] & ((uint64_t(1) << kIndexBits) - 1);
+    base_node_offsets[p] = (particle_sorters[p] >> kIndexBits) << kDataBits;
   }
 
   /* Record the sentinel particles and the coloring of the blocks. */
-  sentinel_particles_.clear();
+  sentinel_particles.clear();
   for (int b = 0; b < 8; ++b) {
-    colored_blocks_[b].clear();
+    colored_blocks[b].clear();
   }
   uint64_t previous_page{};
   int block = 0;
@@ -311,19 +316,20 @@ void SparseGrid<T>::SortParticleIndices(const std::vector<Vector3<T>>& q_WPs) {
 
      block bits and data bits add up to kLog2Page bits.
      We right shift to get the page bits. */
-    const uint64_t page = base_node_offsets_[p] >> kLog2Page;
+    const uint64_t page = base_node_offsets[p] >> kLog2Page;
     if (p == 0 || previous_page != page) {
       previous_page = page;
-      sentinel_particles_.push_back(p);
+      sentinel_particles.push_back(p);
       const int color = get_color(page);
-      colored_blocks_[color].push_back(block++);
+      colored_blocks[color].push_back(block++);
     }
   }
-  sentinel_particles_.push_back(num_particles);
+  sentinel_particles.push_back(num_particles);
 }
 
 template <typename T>
-void SparseGrid<T>::SortParticles(std::vector<Vector3<double>>* q_WPs) const {
+void SparseGrid<T>::SortParticlePositions(
+    std::vector<Vector3<double>>* q_WPs) const {
   DRAKE_DEMAND(q_WPs != nullptr);
   const int num_particles = q_WPs->size();
   std::vector<uint64_t> particle_sorters(num_particles);

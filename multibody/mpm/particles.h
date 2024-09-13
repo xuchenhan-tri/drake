@@ -70,6 +70,27 @@ struct ParticleData {
   std::vector<std::pair<int, int>>
       materials;  // Suppose materials[k] = (i, j), then particles with indices
                   // in [i, j) have the same material: constitutive_models[k].
+  std::vector<Vector3<T>> f;  // contact impulse.
+
+  // TODO(xuchenhan-tri): Consider decoupling the following data from the
+  // particle data structure.
+
+  /* Data used to iterate over all particles in the grid. */
+  /* All but last entry store indices of particles marking the boundary of a new
+   block. The last entry stores the number of particles. */
+  std::vector<int> sentinel_particles;
+  /* The order in which the particle data should be accessed when used in tandem
+   with a grid. That is, particle_data[particle_indices()[p]] gives the particle
+   data for the p-th particle. */
+  std::vector<int> data_indices;
+  /* Returns the base node offset of the associated grid for each particle. */
+  std::vector<uint64_t> base_node_offsets;
+  /* Helper data to sort the particles according to their base nodes. */
+  std::vector<uint64_t> particle_sorters;
+  /* We color SPGrid blocks so that writing to different blocks with the same
+  color is guaranteed to be free of write hazards. This function returns the
+  block indices for each color associated with this particle data. */
+  std::array<std::vector<int>, 8> colored_blocks;
 };
 
 template <typename T>

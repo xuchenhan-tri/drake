@@ -17,60 +17,6 @@ namespace drake {
 namespace multibody {
 namespace mpm {
 namespace internal {
-namespace {
-/* Solves the contact problem for a single particle against a rigid body
- assuming the rigid body has infinite mass and inertia.
-
- Let phi be the penetration distance (positive when penetration occurs) and vn
- be the relative velocity of the particle with respect to the rigid body in the
-normal direction (vn>0 when separting). Then we have phi_dot = -vn.
-
-In the normal direction, the contact force is modeled as a linear elastic system
-with Hunt-Crossley dissipation.
-
-  f = k * phi_+ * (1 + d * phi_dot)_+
-
-  where phi_+ = max(0, phi)
-
-The momentum balance in the normal direction becomes
-
-m(vn_next - vn) = k * dt * (phi0 - dt * vn_next)_+ * (1 - d * vn_next)_+
-
-where we used the fact that phi = phi0 - dt * vn_next. This is a quadratic
-equation in vn_next, and we solve it to get the next velocity vn_next.
-
-The quadratic equation is ax^2 + bx + c = 0, where
-
-a = k * d * dt^2
-b = -m - (k * dt * (dt + d * phi0))
-c = k * dt * phi0 + m * vn
-
-After solving for vn_next, we check if the friction force lies in the friction
-cone, if not, we project the velocity back into the friction cone. */
-template <typename T>
-class ContactForceSolver {
- public:
-  ContactForceSolver(T dt, T k, T d) : dt_(dt), k_(k), d_(d) {}
-  // TODO(xuchenhan-tri): Take in the entire velocity vector and return the
-  // next velocity (vector) after treating friction.
-  T Solve(T m, T v0, T phi0, T volume) {
-    T v_hat = std::min(phi0 / dt_, 1 / d_);
-    if (v0 > v_hat) return v0;
-    T effective_k = k_ * volume;
-    T a = effective_k * d_ * dt_ * dt_;
-    T b = -m - (effective_k * dt_ * (dt_ + d_ * phi0));
-    T c = effective_k * dt_ * phi0 + m * v0;
-    T discriminant = b * b - 4.0 * a * c;
-    T v_next = (-b - std::sqrt(discriminant)) / (2.0 * a);
-    return v_next;
-  }
-
- private:
-  T dt_;
-  T k_;
-  T d_;
-};
-}  // namespace
 
 using drake::geometry::SignedDistanceToPoint;
 using Eigen::Vector3d;
@@ -155,7 +101,7 @@ void MpmDriver<T>::SampleParticles(
   /* Reject points that fall outside of the shape. */
   std::vector<Vector3<double>> q_GPs =
       FilterPoints(q_GP_candidates, geometry_instance->shape());
-  grid_->SortParticles(&q_GPs);
+  grid_->SortParticlePositions(&q_GPs);
   const int num_particles = ssize(q_GPs);
   const T mass_density = config.mass_density();
   const double total_volume = geometry::CalcVolume(geometry_instance->shape());
@@ -221,11 +167,12 @@ void MpmDriver<T>::AdvanceOneTimeStep(
     for (auto& v : particles_.v) {
       v += gravity_.template cast<T>() * substep_dt_;
     }
+    const std::vector<ContactPair> contact_pairs = CalcContactPairs(
+        query_object, spatial_velocities, poses, geometry_id_to_body_index);
     // Particle to grid transfer.
     Transfer<T> transfer(substep_dt_, grid_.get_mutable(), &particles_);
     transfer.ParallelSimdParticleToGrid(parallelism_);
-    SolveContact(query_object, spatial_velocities, poses,
-                 geometry_id_to_body_index);
+    SolveContact(contact_pairs);
     // Grid velocity update.
     grid_->ExplicitVelocityUpdate(Vector3<T>::Zero());
     // Grid to particle transfer.
@@ -240,216 +187,173 @@ void MpmDriver<T>::AdvanceOneTimeStep(
 }
 
 template <typename T>
-void MpmDriver<T>::SolveContact(
+std::vector<ContactPair> MpmDriver<T>::CalcContactPairs(
     const geometry::QueryObject<double>& query_object,
     const std::vector<multibody::SpatialVelocity<double>>& spatial_velocities,
     const std::vector<math::RigidTransform<double>>& poses,
     const std::unordered_map<geometry::GeometryId, multibody::BodyIndex>&
-        geometry_id_to_body_index) {
-  const double kStiffness = 1e8;
-  const double kDamping = 1.0;
-  const double substep_dt = dt_ / double(num_subteps_);
-  ContactForceSolver<double> solver(substep_dt, kStiffness, kDamping);
-
-  ContactParticleData<T> contact_particles;
+        geometry_id_to_body_index) const {
+  std::vector<ContactPair> contact_pairs;
+  int contact_particle_index = 0;
+  int constraint_index = 0;
   for (int p = 0; p < ssize(particles_.m); ++p) {
     const Vector3<double>& p_WP = particles_.x[p].template cast<double>();
     // TODO(xuchenhan-tri): Consider building a constraint for particles that
     // are within a margin of the rigid body.
     const std::vector<SignedDistanceToPoint<double>>& signed_distances =
         query_object.ComputeSignedDistanceToPoint(p_WP, 0);
-    if (!signed_distances.empty()) {
-      contact_particles.m.push_back(particles_.m[p]);
-      contact_particles.x.push_back(particles_.x[p]);
-      contact_particles.v.push_back(particles_.v[p]);
-      contact_particles.volume.push_back(particles_.volume[p]);
-      contact_particles.f.push_back({});
-      contact_particles.vr.push_back({});
-      contact_particles.pr.push_back({});
-      contact_particles.nhat_W.push_back({});
-      contact_particles.phi.push_back({});
-      contact_particles.body_indices.push_back({});
-      contact_particles.mu.push_back({});
+    if (signed_distances.empty()) {
+      continue;
     }
     for (const SignedDistanceToPoint<double>& sd : signed_distances) {
-      auto& impulses = contact_particles.f.back();
-      auto& vrs = contact_particles.vr.back();
-      auto& prs = contact_particles.pr.back();
-      auto& nhat_Ws = contact_particles.nhat_W.back();
-      auto& phis = contact_particles.phi.back();
-      auto& body_indices = contact_particles.body_indices.back();
-      auto& mus = contact_particles.mu.back();
-
       const double& phi = -sd.distance;
       DRAKE_THROW_UNLESS(phi >= 0.0);
-      phis.push_back(phi);
 
       const int body_index = geometry_id_to_body_index.at(sd.id_G);
-      body_indices.push_back(body_index);
 
       const CoulombFriction<double>& coulomb_friction =
           multibody::internal::GetCoulombFriction(sd.id_G,
                                                   query_object.inspector());
-      double mu = coulomb_friction.dynamic_friction();
-      mus.push_back(mu);
+      const double mu = coulomb_friction.dynamic_friction();
 
       const Vector3<double> nhat_W = sd.grad_W.normalized();
-      nhat_Ws.push_back(nhat_W);
 
       /* World frame position of the origin of the rigid body. */
       const Vector3<double>& p_WR = poses[body_index].translation();
-      const Vector3<double> p_RP = p_WP - p_WR;
+      /* Position of the contact point in the rigid body frame, expressed in the
+       world frame. */
+      const Vector3<double> p_RP_W = p_WP - p_WR;
       /* World frame velocity of a point affixed to the rigid body that
        coincide with the particle. */
       const Vector3<double> v_WRp =
-          spatial_velocities[body_index].Shift(p_RP).translational();
-      vrs.push_back(v_WRp);
-      prs.push_back(p_RP);
-      impulses.emplace_back(0, 0, 0);
-    }
-  }
+          spatial_velocities[body_index].Shift(p_RP_W).translational();
 
-  grid_->Backup();
-  Transfer<T> transfer(substep_dt, grid_.get_mutable(), &contact_particles);
-
-  double impulse_error = 1e10;
-  const double kTol = 1e-7;
-  int count = 0;
-  while (impulse_error > kTol && count < 1) {
-    count++;
-    impulse_error = 0;
-    // Compute the impulse.
-    for (int p = 0; p < ssize(contact_particles.m); ++p) {
-      const double& mp = contact_particles.m[p];
-      const Vector3<double>& vp =
-          contact_particles.v[p].template cast<double>();
-      const double& volume = contact_particles.volume[p];
-      const auto& vrs = contact_particles.vr[p];
-      const auto& phis = contact_particles.phi[p];
-      const auto& nhat_Ws = contact_particles.nhat_W[p];
-      auto& fs = contact_particles.f[p];
-      const auto& mus = contact_particles.mu[p];
-      for (int c = 0; c < ssize(vrs); ++c) {
-        const Vector3<double> vc = vp - vrs[c];
-        const Vector3<double>& nhat_W = nhat_Ws[c];
-        const double vn = vc.dot(nhat_W);
-        const double phi = phis[c];
-        const double vn_next = solver.Solve(mp, vn, phi, volume);
-        if (vn_next != vn) {
-          const Vector3<double> vt = vc - vn * nhat_W;
-          double dvn = vn_next - vn;
-          /* The velocity change at the particle. */
-          Vector3<double> dv = dvn * nhat_W;
-          const double vt_norm = vt.norm();
-          /* Safely normalize the tangent vector. */
-          Vector3<double> vt_hat = Vector3<double>::Zero();
-          if (vt_norm > 1e-10) {
-            vt_hat = vt / vt_norm;
-          }
-          /* kf is the slope of the regulated friction in stiction. Larger kf
-           resolves static friction better, but is less numerically stable. */
-          const double kf = 10.0;
-          dv -= std::min(dvn * mus[c], kf * vt_norm) * vt_hat;
-          const Vector3<double> new_impulse = mp * dv;
-          const Vector3<double> df = new_impulse - fs[c].template cast<double>();
-          impulse_error += df.squaredNorm();
-          fs[c] = new_impulse.template cast<T>();
-        } else {
-          // DRAKE_DEMAND(false);
-          impulse_error += fs[c].squaredNorm();
-          const Vector3<double> new_impulse = Vector3<double>::Zero();
-          const Vector3<double> df = new_impulse - fs[c].template cast<double>();
-          impulse_error += df.squaredNorm();
-          fs[c] = new_impulse.template cast<T>();
-        }
-      }
+      contact_pairs.emplace_back(
+          ContactPair{.particle_index = p,
+                      .contact_particle_index = contact_particle_index,
+                      .constraint_index = constraint_index++,
+                      .rigid_body_index = body_index,
+                      .friction_coeffcient = mu,
+                      .nhat_W = nhat_W,
+                      .penetration_depth = phi,
+                      .rigid_velocity = v_WRp,
+                      .rigid_position = p_RP_W});
     }
-    impulse_error = std::sqrt(impulse_error);
-    // Transfer the impulse to grid.
-    transfer.ContactP2G2P();
+    ++contact_particle_index;
   }
-  std::cout << "Iteration count :" <<  count << ", impulse_error: " << impulse_error << std::endl;
-  grid_->Restore();
+  return contact_pairs;
 }
 
-// template <typename T>
-// void MpmDriver<T>::UpdateContactForces(
-//     const geometry::QueryObject<double>& query_object,
-//     const std::vector<multibody::SpatialVelocity<double>>& spatial_velocities,
-//     const std::vector<math::RigidTransform<double>>& poses,
-//     const std::unordered_map<geometry::GeometryId, multibody::BodyIndex>&
-//         geometry_id_to_body_index) {
-//   const double kStiffness = 1e8;
-//   const double kDamping = 1.0;
-//   const double substep_dt = dt_ / double(num_subteps_);
-//   // for (auto& v : particles_.v) {
-//   //   v += gravity_.template cast<T>() * substep_dt;
-//   // }
-//   ContactForceSolver<double> solver(substep_dt, kStiffness, kDamping);
+template <typename T>
+double MpmDriver<T>::ApplyImpulse(
+    const std::vector<ContactPair>& contact_pairs,
+    const ContactForceSolver<double>& solver, ParticleData<T>* particles,
+    std::vector<Vector3<double>>* impulses) const {
+  DRAKE_DEMAND(particles != nullptr);
+  DRAKE_DEMAND(impulses != nullptr);
+  DRAKE_DEMAND(contact_pairs.size() == impulses->size());
+  for (Vector3<T>& f : particles->f) {
+    f.setZero();
+  }
+  double impulse_error = 0.0;
+  for (const ContactPair& pair : contact_pairs) {
+    const int p = pair.contact_particle_index;
+    const int c = pair.constraint_index;
+    const Vector3<double>& vp = particles->v[p].template cast<double>();
+    const double volume = particles->volume[p];
+    const double mp = particles->m[p];
+    const Vector3<double> vc = vp - pair.rigid_velocity;
+    const Vector3<double>& nhat_W = pair.nhat_W;
+    const double vn = vc.dot(nhat_W);
+    const double vn_next = solver.Solve(mp, vn, pair.penetration_depth, volume);
+    Vector3<double> new_impulse;
+    if (vn_next != vn) {
+      const Vector3<double> vt = vc - vn * nhat_W;
+      double dvn = vn_next - vn;
+      /* The velocity change at the particle. */
+      Vector3<double> dv = dvn * nhat_W;
+      const double vt_norm = vt.norm();
+      Vector3<double> vt_hat = vt.normalized();
+      /* kf is the slope of the regulated friction in stiction. Larger kf
+       resolves static friction better, but is less numerically stable.
+       We'd like this to be as large as possible, but in reality, kf = 4.0 is
+       already too large for Jacobi to converge. */
+      const double kf = 1.0;
+      dv -= std::min(dvn * pair.friction_coeffcient, kf * vt_norm) * vt_hat;
+      new_impulse = mp * dv;
+    } else {
+      new_impulse = Vector3<double>::Zero();
+    }
+    const Vector3<double> df = new_impulse - (*impulses)[c];
+    impulse_error += df.squaredNorm();
+    (*impulses)[c] = new_impulse;
+    particles->f[p] += df.template cast<T>();
+  }
+  return std::sqrt(impulse_error);
+}
 
-//   // TODO(xuchenhan-tri): Run this in parallel. Be careful about the race
-//   // condition.
-//   for (int p = 0; p < ssize(particles_.m); ++p) {
-//     const Vector3<double>& p_WP = particles_.x[p].template cast<double>();
-//     const std::vector<SignedDistanceToPoint<double>>& signed_distances =
-//         query_object.ComputeSignedDistanceToPoint(p_WP, 0);
-//     // TODO(xuchenhan-tri): Consider building a constraint for particles that
-//     // are within a margin of the rigid body.
-//     for (const SignedDistanceToPoint<double>& sd : signed_distances) {
-//       const double& phi = -sd.distance;
-//       DRAKE_THROW_UNLESS(phi >= 0.0);
-//       const double volume = particles_.volume[p];
-//       const int body_index = geometry_id_to_body_index.at(sd.id_G);
-//       const CoulombFriction<double>& coulomb_friction =
-//           multibody::internal::GetCoulombFriction(sd.id_G,
-//                                                   query_object.inspector());
-//       double mu = coulomb_friction.dynamic_friction();
-//       const Vector3<double> nhat_W = sd.grad_W.normalized();
-//       /* World frame position of the origin of the rigid body. */
-//       const Vector3<double>& p_WR = poses[body_index].translation();
-//       const Vector3<double> p_RP = p_WP - p_WR;
-//       /* World frame velocity of a point affixed to the rigid body that
-//        coincide with the particle. */
-//       const Vector3<double> v_WRp =
-//           spatial_velocities[body_index].Shift(p_RP).translational();
-//       const Vector3<double> vc =
-//           particles_.v[p].template cast<double>() - v_WRp;  // relative velocity
-//       const double vn = vc.dot(nhat_W);
-//       const double mp = particles_.m[p];
-//       const double vn_next = solver.Solve(mp, vn, phi, volume);
-//       if (vn_next != vn) {
-//         const Vector3<double> vt = vc - vn * nhat_W;
-//         double dvn = vn_next - vn;
-//         /* The velocity change at the particle. */
-//         Vector3<double> dv = dvn * nhat_W;
-//         const double vt_norm = vt.norm();
-//         /* Safely normalize the tangent vector. */
-//         Vector3<double> vt_hat = Vector3<double>::Zero();
-//         if (vt_norm > 1e-10) {
-//           vt_hat = vt / vt_norm;
-//         }
-//         /* kf is the slope of the regulated friction in stiction. Larger kf
-//          resolves static friction better, but is less numerically stable. */
-//         const double kf = 10.0;
-//         dv -= std::min(dvn * mu, kf * vt_norm) * vt_hat;
+template <typename T>
+ParticleData<T> MpmDriver<T>::MakeContactParticles(
+    const ParticleData<T>& all_particles,
+    const std::vector<ContactPair>& contact_pairs) const {
+  ParticleData<T> contact_particles;
+  contact_particles.m.resize(contact_pairs.size());
+  contact_particles.x.resize(contact_pairs.size());
+  contact_particles.v.resize(contact_pairs.size());
+  contact_particles.volume.resize(contact_pairs.size());
+  contact_particles.f.resize(contact_pairs.size());
+  for (const ContactPair& pair : contact_pairs) {
+    const int p = pair.particle_index;
+    const int c = pair.contact_particle_index;
+    contact_particles.m[c] = all_particles.m[p];
+    contact_particles.x[c] = all_particles.x[p];
+    contact_particles.v[c] = all_particles.v[p];
+    contact_particles.volume[c] = all_particles.volume[p];
+  }
+  return contact_particles;
+}
 
-//         particles_.v[p] += dv.template cast<T>();
-//         /* We negate the sign of the particles momentum change to get
-//          the impulse applied to the rigid body at the grid node. */
-//         const Vector3d l_WR_W = -mp * dv;
-//         const Vector3d& p_WR = rigid_forces_.at(body_index).p_BoBq_B;
-//         const Vector3d p_RP_W = p_WP - p_WR;
-//         /* The angular impulse applied to the rigid body at the grid
-//          node. */
-//         const Vector3d h_WPRo_W = p_RP_W.cross(l_WR_W);
-//         /* Use `F_Bq_W` to store the spatial impulse applied to the body
-//          at its origin, expressed in the world frame. */
-//         rigid_forces_.at(body_index).F_Bq_W +=
-//             SpatialForce<double>(h_WPRo_W, l_WR_W);
-//       }
-//     }
-//   }
-// }
+template <typename T>
+void MpmDriver<T>::SolveContact(const std::vector<ContactPair>& contact_pairs) {
+  const double kStiffness = 1e9;
+  const double kDamping = 1.0;
+  const double substep_dt = dt_ / double(num_subteps_);
+  ContactForceSolver<double> solver(substep_dt, kStiffness, kDamping);
+
+  ParticleData<T> contact_particles =
+      MakeContactParticles(particles_, contact_pairs);
+  std::vector<Vector3<double>> impulses(ssize(contact_pairs),
+                                        Vector3<double>::Zero());
+
+  Transfer<T> transfer(substep_dt, grid_.get_mutable(), &contact_particles,
+                       false);
+
+  double impulse_error = 1e10;
+  const double kTol = 1e-6;
+  int count = 0;
+  int max_iterations = 100;
+  while (impulse_error > kTol && count < max_iterations) {
+    ++count;
+    impulse_error =
+        ApplyImpulse(contact_pairs, solver, &contact_particles, &impulses);
+    transfer.ContactP2G2P();
+  }
+  if (count == max_iterations) {
+    std::cout << "Contact solver did not converge." << std::endl;
+  }
+
+  /* Accumulate the contact impulses on the rigid bodies. */
+  for (int i = 0; i < ssize(contact_pairs); ++i) {
+    const ContactPair& pair = contact_pairs[i];
+    const Vector3<double>& impulse = impulses[i];
+    const Vector3<double>& p_RP_W = pair.rigid_position;
+    /* The impulse on the rigid is the opposite of that on the particle. */
+    const Vector3<double> l_WR_W = -impulse;
+    const Vector3<double> h_WPRo_W = p_RP_W.cross(l_WR_W);
+    rigid_forces_[pair.rigid_body_index].F_Bq_W +=
+        SpatialForce<double>(h_WPRo_W, l_WR_W);
+  }
+}
 
 template <typename T>
 void MpmDriver<T>::UpdateParticleStress() {

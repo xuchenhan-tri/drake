@@ -32,6 +32,7 @@ cc_library(
     linkopts = ["-fopenmp"],
     deps = [
         ":math",
+        ":particles",
         "//common:essential",
         "//common:parallelism",
         "//geometry:scene_graph",

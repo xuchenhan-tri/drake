@@ -121,7 +121,7 @@ int do_main() {
   auto* mpm = builder.AddSystem<MpmSystem<double>>(plant, dx, num_substeps,
                                                   Parallelism(4));
 
-  math::RigidTransform<double> X_WB1(Vector3d(0, 0.2, 0.5 * side_length));
+  math::RigidTransform<double> X_WB1(Vector3d(0.0, 0.2, 0.5 * side_length));
   Box mpm_box_shape(side_length * 0.9, side_length * 0.9, side_length * 0.9);
   auto mpm_box1 = std::make_unique<geometry::GeometryInstance>(
       X_WB1, mpm_box_shape, "mpm_box1");

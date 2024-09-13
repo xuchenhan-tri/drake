@@ -13,6 +13,71 @@ namespace multibody {
 namespace mpm {
 namespace internal {
 
+/* Solves the contact problem for a single particle against a rigid body
+ assuming the rigid body has infinite mass and inertia.
+
+ Let phi be the penetration distance (positive when penetration occurs) and vn
+ be the relative velocity of the particle with respect to the rigid body in the
+normal direction (vn>0 when separting). Then we have phi_dot = -vn.
+
+In the normal direction, the contact force is modeled as a linear elastic system
+with Hunt-Crossley dissipation.
+
+  f = k * phi_+ * (1 + d * phi_dot)_+
+
+  where phi_+ = max(0, phi)
+
+The momentum balance in the normal direction becomes
+
+m(vn_next - vn) = k * dt * (phi0 - dt * vn_next)_+ * (1 - d * vn_next)_+
+
+where we used the fact that phi = phi0 - dt * vn_next. This is a quadratic
+equation in vn_next, and we solve it to get the next velocity vn_next.
+
+The quadratic equation is ax^2 + bx + c = 0, where
+
+a = k * d * dt^2
+b = -m - (k * dt * (dt + d * phi0))
+c = k * dt * phi0 + m * vn
+
+After solving for vn_next, we check if the friction force lies in the friction
+cone, if not, we project the velocity back into the friction cone. */
+template <typename T>
+class ContactForceSolver {
+ public:
+  ContactForceSolver(T dt, T k, T d) : dt_(dt), k_(k), d_(d) {}
+  // TODO(xuchenhan-tri): Take in the entire velocity vector and return the
+  // next velocity (vector) after treating friction.
+  T Solve(T m, T v0, T phi0, T volume) const {
+    T v_hat = std::min(phi0 / dt_, 1 / d_);
+    if (v0 > v_hat) return v0;
+    T effective_k = k_ * volume;
+    T a = effective_k * d_ * dt_ * dt_;
+    T b = -m - (effective_k * dt_ * (dt_ + d_ * phi0));
+    T c = effective_k * dt_ * phi0 + m * v0;
+    T discriminant = b * b - 4.0 * a * c;
+    T v_next = (-b - std::sqrt(discriminant)) / (2.0 * a);
+    return v_next;
+  }
+
+ private:
+  T dt_;
+  T k_;
+  T d_;
+};
+
+struct ContactPair {
+  int particle_index{};
+  int contact_particle_index{};
+  int constraint_index{};
+  int rigid_body_index{};
+  double friction_coeffcient{};
+  Vector3<double> nhat_W;
+  double penetration_depth{};
+  Vector3<double> rigid_velocity;
+  Vector3<double> rigid_position;
+};
+
 template <typename T>
 class MpmDriver {
  public:
@@ -50,12 +115,24 @@ class MpmDriver {
       const std::unordered_map<geometry::GeometryId, multibody::BodyIndex>&
           geometry_id_to_body_index);
 
-  void SolveContact(
+  // TODO(xuchenhan-tri): Move these geometry operations to SceneGraph.
+  std::vector<ContactPair> CalcContactPairs(
       const geometry::QueryObject<double>& query_object,
       const std::vector<multibody::SpatialVelocity<double>>& spatial_velocities,
       const std::vector<math::RigidTransform<double>>& poses,
       const std::unordered_map<geometry::GeometryId, multibody::BodyIndex>&
-          geometry_id_to_body_index);
+          geometry_id_to_body_index) const;
+
+  ParticleData<T> MakeContactParticles(
+      const ParticleData<T>& all_particles,
+      const std::vector<ContactPair>& contact_pairs) const;
+
+  double ApplyImpulse(const std::vector<ContactPair>& contact_pairs,
+                      const ContactForceSolver<double>& solver,
+                      ParticleData<T>* particles,
+                      std::vector<Vector3<double>>* impulses) const;
+
+  void SolveContact(const std::vector<ContactPair>& contact_pairs);
 
   const ParticleData<T>& particles() const { return particles_; }
 
@@ -73,8 +150,8 @@ class MpmDriver {
   int num_subteps_{0};
   T substep_dt_{0.0};
   T dx_{0.0};
-  // Vector3<T> gravity_{0, 0, -9.81};
-  Vector3<T> gravity_{1, 0, -5};
+  Vector3<T> gravity_{0, 0, -9.81};
+  // Vector3<T> gravity_{2, 0, -5};
   copyable_unique_ptr<SparseGrid<T>> grid_;
   ParticleData<T> particles_;
   Parallelism parallelism_;

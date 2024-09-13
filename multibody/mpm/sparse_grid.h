@@ -21,6 +21,7 @@
 #include "drake/math/rigid_transform.h"
 #include "drake/multibody/math/spatial_algebra.h"
 #include "drake/multibody/mpm/math.h"
+#include "drake/multibody/mpm/particles.h"
 #include "drake/multibody/plant/externally_applied_spatial_force.h"
 #include "drake/multibody/tree/multibody_tree_indexes.h"
 
@@ -129,14 +130,8 @@ class SparseGrid {
 
   std::unique_ptr<SparseGrid<T>> Clone() const {
     auto result = std::make_unique<SparseGrid<T>>(dx_, parallelism_);
-    /* We can copy over everything except for the SPGrid data. */
-    result->sentinel_particles_ = sentinel_particles_;
-    result->colored_blocks_ = colored_blocks_;
-    result->data_indices_ = data_indices_;
-    result->base_node_offsets_ = base_node_offsets_;
-    result->particle_sorters_ = particle_sorters_;
 
-    /* Now we copy over the page maps. */
+    /* Copy over the page maps. */
     result->blocks_->Clear();
     auto [block_offsets, num_blocks] = blocks_->Get_Blocks();
     for (int b = 0; b < static_cast<int>(num_blocks); ++b) {
@@ -172,45 +167,13 @@ class SparseGrid {
     return result;
   }
 
-  void Backup() {
-    sentinel_particles_backup_ = sentinel_particles_;
-    colored_blocks_backup_ = colored_blocks_;
-    data_indices_backup_ = data_indices_;
-    base_node_offsets_backup_ = base_node_offsets_;
-    particle_sorters_backup_ = particle_sorters_;
-  }
-
-  void Restore() {
-    sentinel_particles_ = sentinel_particles_backup_;
-    colored_blocks_ = colored_blocks_backup_;
-    data_indices_ = data_indices_backup_;
-    base_node_offsets_ = base_node_offsets_backup_;
-    particle_sorters_ = particle_sorters_backup_;
-  }
-
   /* Allocates memory for the grid pages affected by particles and initialize
    all grid data to zero.
 
    As a side effect, this function also orders the particles based on the
    "offset" of their base nodes. In the process, it builds `sentinel_particles`
-   and `particle_indices` (see corresponding accessors below). */
-  void Allocate(const std::vector<Vector3<T>>& q_WPs);
-
-  /* All but last entry store indices of particles marking the boundary of a new
-   block. The last entry stores the number of particles. This always has size
-   num_blocks() + 1. */
-  const std::vector<int>& sentinel_particles() const {
-    return sentinel_particles_;
-  }
-
-  /* Index into ParticleData: particle_data[particle_indices()[p]] gives the
-   particle data for particle p. */
-  const std::vector<int>& data_indices() const { return data_indices_; }
-
-  /* Returns the base node offset of each particle. */
-  const std::vector<uint64_t>& base_node_offsets() const {
-    return base_node_offsets_;
-  }
+   and `data_indices`. */
+  void Allocate(ParticleData<T>* particles);
 
   /* Grid spacing in meters. */
   const T& dx() const { return dx_; }
@@ -271,22 +234,14 @@ class SparseGrid {
    @note Testing only. */
   MassAndMomentum<T> ComputeTotalMassAndMomentum() const;
 
-  /* We color that blocks so that writing to different blocks with the same
-  color is guaranteed to be free of write hazards. This function returns the
-  block indices for each color. */
-  const std::array<std::vector<int>, kNumColors>& colored_blocks() const {
-    return colored_blocks_;
-  }
-
   /* Sort the given particle positions in place first according to their base
    node offsets and then according to their indices in `q_WPs`.
   @pre q_WPs != nullptr.
   @pre q_WPs->size() < 2^31. */
-  void SortParticles(std::vector<Vector3<double>>* q_WPs) const;
+  void SortParticlePositions(std::vector<Vector3<double>>* q_WPs) const;
 
-  /* Helper for `Allocate()` that sorts particles based on their positions. In
-   that process, builds `data_indices_` and `sentinel_particles_`. */
-  void SortParticleIndices(const std::vector<Vector3<T>>& q_WPs);
+  /* Helper for `Allocate()` that sorts particles based on their positions. */
+  void SortParticles(ParticleData<T>* particles);
 
  private:
   static constexpr int kLog2Page = 12;  // 4KB page size.
@@ -344,14 +299,6 @@ class SparseGrid {
    actually allocated. */
   std::unique_ptr<PageMap> padded_blocks_;
 
-  /* See accessors. */
-  std::vector<int> sentinel_particles_;
-  std::vector<int> data_indices_;
-  std::vector<uint64_t> base_node_offsets_;
-
-  /* Helper data to sort the particles according to their base nodes. */
-  std::vector<uint64_t> particle_sorters_;
-
   /* Stores the difference in linear offset from a given grid node to the grid
    node exactly one block away. For example, let `a` be
    `block_offset_strides_[0][1][2]` and `b` be the linear offset of a grid
@@ -365,14 +312,7 @@ class SparseGrid {
    immediate grid neighbors). */
   std::array<std::array<std::array<uint64_t, 3>, 3>, 3> cell_offset_strides_;
 
-  std::array<std::vector<int>, kNumColors> colored_blocks_;
   Parallelism parallelism_;
-
-  std::vector<int> sentinel_particles_backup_;
-  std::vector<int> data_indices_backup_;
-  std::vector<uint64_t> base_node_offsets_backup_;
-  std::array<std::vector<int>, kNumColors> colored_blocks_backup_;
-  std::vector<uint64_t> particle_sorters_backup_;
 };
 
 }  // namespace internal
