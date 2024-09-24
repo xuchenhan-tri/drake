@@ -252,6 +252,18 @@ GTEST_TEST(MultibodyTree, VerifyModelBasics) {
   VerifyModelBasics(*model);
 }
 
+GTEST_TEST(MultibodyTree, ClonePrefinalize) {
+  std::unique_ptr<MultibodyTree<double>> model =
+      MakeKukaIiwaModel<double>(false /* non-finalized model. */);
+
+  // Verify the model was not finalized.
+  EXPECT_FALSE(model->topology_is_valid());
+  auto clone = model->Clone();
+
+  DRAKE_EXPECT_NO_THROW(clone->Finalize());
+  VerifyModelBasics(*clone);
+}
+
 // Confirms that the error messages produced by GetElementByName are reasonable
 // even for an empty model.
 GTEST_TEST(MultibodyTree, EmptyGetElementByName) {

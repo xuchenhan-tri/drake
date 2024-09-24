@@ -573,12 +573,13 @@ class Joint : public MultibodyElement<T> {
       internal::MultibodyTree<ToScalar>* tree_clone) const {
     std::unique_ptr<Joint<ToScalar>> joint_clone = DoCloneToScalar(*tree_clone);
 
-    std::unique_ptr<typename Joint<ToScalar>::JointImplementation>
-        implementation_clone =
-            this->get_implementation().template CloneToScalar<ToScalar>(
-                tree_clone);
-    joint_clone->OwnImplementation(std::move(implementation_clone));
-
+    if (has_implementation()) {
+      std::unique_ptr<typename Joint<ToScalar>::JointImplementation>
+          implementation_clone =
+              this->get_implementation().template CloneToScalar<ToScalar>(
+                  tree_clone);
+      joint_clone->OwnImplementation(std::move(implementation_clone));
+    }
     return joint_clone;
   }
 

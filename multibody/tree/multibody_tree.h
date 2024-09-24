@@ -2202,12 +2202,6 @@ class MultibodyTree {
   // @pre Finalize() must have already been called on this %MultibodyTree.
   template <typename ToScalar>
   std::unique_ptr<MultibodyTree<ToScalar>> CloneToScalar() const {
-    if (!topology_is_valid()) {
-      throw std::logic_error(
-          "Attempting to clone a MultibodyTree with an invalid topology. "
-          "MultibodyTree::Finalize() must be called before attempting to clone"
-          " a MultibodyTree.");
-    }
     auto tree_clone = std::make_unique<MultibodyTree<ToScalar>>();
 
     // The graph and its forest model are scalar type-independent.
@@ -2241,6 +2235,11 @@ class MultibodyTree {
       }
     }
 
+    // `mobilizers_` should be empty pre-finalize. So, we can blindly copy them
+    // over without worrying about whether the model is finalized.
+    if (!topology_.is_valid()) {
+      DRAKE_DEMAND(mobilizers_.empty());
+    }
     for (const auto& mobilizer : mobilizers_) {
       // This call assumes that tree_clone already contains all the cloned
       // frames.
@@ -2282,15 +2281,17 @@ class MultibodyTree {
       tree_clone->CloneActuatorAndAdd(*actuator);
     }
 
+    tree_clone->topology_ = this->topology_;
     // We can safely make a deep copy here since the original multibody tree is
     // required to be finalized.
-    tree_clone->topology_ = this->topology_;
-    tree_clone->joint_to_mobilizer_ = this->joint_to_mobilizer_;
-    tree_clone->discrete_state_index_ = this->discrete_state_index_;
+    if (topology_.is_valid()) {
+      tree_clone->joint_to_mobilizer_ = this->joint_to_mobilizer_;
+      tree_clone->discrete_state_index_ = this->discrete_state_index_;
 
-    // All other internals templated on T are created with the following call to
-    // FinalizeInternals().
-    tree_clone->FinalizeInternals();
+      // All other internals templated on T are created with the following call
+      // to FinalizeInternals().
+      tree_clone->FinalizeInternals();
+    }
     return tree_clone;
   }
 
