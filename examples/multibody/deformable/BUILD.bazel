@@ -62,6 +62,25 @@ drake_cc_library(
 )
 
 drake_cc_binary(
+    name = "ft_sensor",
+    srcs = [
+        "ft_sensor.cc",
+    ],
+    data = [
+        ":models",
+    ],
+    deps = [
+        "//geometry:drake_visualizer",
+        "//geometry:scene_graph",
+        "//multibody/parsing",
+        "//multibody/plant",
+        "//systems/analysis:simulator",
+        "//systems/framework:diagram",
+        "@gflags",
+    ],
+)
+
+drake_cc_binary(
     name = "deformable_torus",
     srcs = [
         "deformable_torus.cc",
