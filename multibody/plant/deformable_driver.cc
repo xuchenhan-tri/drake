@@ -477,7 +477,7 @@ void DeformableDriver<T>::AppendDiscreteContactPairs(
        We choose a large C = 1e8 Pa/m so that for ρ = 1000 kg/m³ and
        g = 10 m/s², we get ϕ = 1e-4 * L, or 0.01 mm for a 10 cm cube with
        density of water, a reasonably small penetration. */
-      const T kA = surface.contact_mesh_W().area(i) * 1e8;
+      const T kA = surface.contact_mesh_W().area(i) * 1e9;
       const T default_rigid_k = std::numeric_limits<T>::infinity();
       const T kB =
           surface.is_B_deformable()
