@@ -278,7 +278,7 @@ double MpmDriver<T>::ApplyImpulse(
        resolves static friction better, but is less numerically stable.
        We'd like this to be as large as possible, but in reality, kf = 4.0 is
        already too large for Jacobi to converge. */
-      const double kf = 1.0;
+      const double kf = 2.0;
       dv -= std::min(dvn * pair.friction_coeffcient, kf * vt_norm) * vt_hat;
       new_impulse = mp * dv;
     } else {
@@ -296,12 +296,17 @@ template <typename T>
 ParticleData<T> MpmDriver<T>::MakeContactParticles(
     const ParticleData<T>& all_particles,
     const std::vector<ContactPair>& contact_pairs) const {
+  int num_contact_particles = 0;
+  for (const ContactPair& pair : contact_pairs) {
+    const int c = pair.contact_particle_index;
+    num_contact_particles = std::max(num_contact_particles, c + 1);
+  }
   ParticleData<T> contact_particles;
-  contact_particles.m.resize(contact_pairs.size());
-  contact_particles.x.resize(contact_pairs.size());
-  contact_particles.v.resize(contact_pairs.size());
-  contact_particles.volume.resize(contact_pairs.size());
-  contact_particles.f.resize(contact_pairs.size());
+  contact_particles.m.resize(num_contact_particles);
+  contact_particles.x.resize(num_contact_particles);
+  contact_particles.v.resize(num_contact_particles);
+  contact_particles.volume.resize(num_contact_particles);
+  contact_particles.f.resize(num_contact_particles);
   for (const ContactPair& pair : contact_pairs) {
     const int p = pair.particle_index;
     const int c = pair.contact_particle_index;
