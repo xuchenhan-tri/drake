@@ -266,30 +266,27 @@ double MpmDriver<T>::ApplyImpulse(
     const Vector3<double>& nhat_W = pair.nhat_W;
     const double vn = vc.dot(nhat_W);
     const double vn_next = solver.Solve(mp, vn, pair.penetration_depth, volume);
+    const Vector3<double>& old_impulse = (*impulses)[c];
     Vector3<double> new_impulse;
     if (vn_next != vn) {
       const Vector3<double> vt = vc - vn * nhat_W;
       double dvn = vn_next - vn;
-      /* The velocity change at the particle. */
-      Vector3<double> dv = dvn * nhat_W;
-      const double vt_norm = vt.norm();
-      Vector3<double> vt_hat = vt.normalized();
-      /* kf is the slope of the regulated friction in stiction. Larger kf
-       resolves static friction better, but is less numerically stable.
-       We'd like this to be as large as possible, but in reality, kf = 4.0 is
-       already too large for Jacobi to converge. */
-      const double kf = 2.0;
-      dv -= std::min(dvn * pair.friction_coeffcient, kf * vt_norm) * vt_hat;
-      new_impulse = mp * dv;
+      double fn = dvn * mp;
+      Vector3<double> ft = -vt * mp;
+      if (ft.norm() > fn * pair.friction_coeffcient) {
+        ft.normalize();
+        ft *= fn * pair.friction_coeffcient;
+      }
+      new_impulse = old_impulse + fn * nhat_W + ft;
     } else {
-      new_impulse = Vector3<double>::Zero();
+      new_impulse = old_impulse;  //  Vector3<double>::Zero();
     }
-    const Vector3<double> df = new_impulse - (*impulses)[c];
-    impulse_error += df.squaredNorm();
+    const Vector3<double> df = new_impulse - old_impulse;
+    impulse_error += df.norm() / (old_impulse.norm() + 1e-9);
     (*impulses)[c] = new_impulse;
     particles->f[p] += df.template cast<T>();
   }
-  return std::sqrt(impulse_error);
+  return (impulse_error / contact_pairs.size());
 }
 
 template <typename T>
@@ -320,7 +317,7 @@ ParticleData<T> MpmDriver<T>::MakeContactParticles(
 
 template <typename T>
 void MpmDriver<T>::SolveContact(const std::vector<ContactPair>& contact_pairs) {
-  const double kStiffness = 1e9;
+  const double kStiffness = 1e7;
   const double kDamping = 1.0;
   const double substep_dt = dt_ / double(num_subteps_);
   ContactForceSolver<double> solver(substep_dt, kStiffness, kDamping);
@@ -334,9 +331,9 @@ void MpmDriver<T>::SolveContact(const std::vector<ContactPair>& contact_pairs) {
                        false);
 
   double impulse_error = 1e10;
-  const double kTol = 1e-6;
+  const double kTol = 1e-3;
   int count = 0;
-  int max_iterations = 100;
+  int max_iterations = 1000;
   while (impulse_error > kTol && count < max_iterations) {
     ++count;
     impulse_error =
@@ -345,6 +342,9 @@ void MpmDriver<T>::SolveContact(const std::vector<ContactPair>& contact_pairs) {
   }
   if (count == max_iterations) {
     std::cout << "Contact solver did not converge." << std::endl;
+  } else {
+    std::cout << "Contact solver converged in " << count << " iterations."
+              << std::endl;
   }
 
   /* Accumulate the contact impulses on the rigid bodies. */

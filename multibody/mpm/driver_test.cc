@@ -48,7 +48,8 @@ int do_main() {
   ProximityProperties rigid_proximity_props;
   ProximityProperties ground_proximity_props;
   /* Set the friction coefficient close to that of rubber against rubber. */
-  const CoulombFriction<double> surface_friction(1.0, 1.0);
+  const double mu = 1.5;
+  const CoulombFriction<double> surface_friction(mu, mu);
   AddContactMaterial({}, {}, surface_friction, &rigid_proximity_props);
   AddContactMaterial({}, {}, surface_friction, &ground_proximity_props);
   AddCompliantHydroelasticProperties(1.0, 1e6, &rigid_proximity_props);
