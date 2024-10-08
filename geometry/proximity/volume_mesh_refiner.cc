@@ -13,6 +13,19 @@ namespace internal {
 
 using Eigen::Vector3d;
 
+namespace {
+bool SkipSplits(const std::vector<int>& indices,
+                const std::vector<Vector3d>& vertices) {
+  const double x_threshold = 0.002;
+  for (int i = 0; i < ssize(indices); ++i) {
+    if (vertices[indices[i]].x() > x_threshold) {
+      return true;
+    }
+  }
+  return false;
+}
+}
+
 VolumeMesh<double> VolumeMeshRefiner::Refine() {
   tetrahedra_ = input_mesh_.tetrahedra();
   vertices_ = input_mesh_.vertices();
@@ -47,6 +60,7 @@ VolumeMesh<double> VolumeMeshRefiner::Refine() {
             std::vector<Vector3d>(vertices_)})) {
     RefineEdge(edge);
   }
+
   for (const SortedTriplet<int>& triangle :
        DetectInteriorTriangleWithAllBoundaryVertices(
            {std::vector<VolumeElement>(tetrahedra_),
@@ -68,6 +82,9 @@ void VolumeMeshRefiner::RefineTetrahedron(int tetrahedron) {
   const int v1 = tetrahedra_.at(tetrahedron).vertex(1);
   const int v2 = tetrahedra_.at(tetrahedron).vertex(2);
   const int v3 = tetrahedra_.at(tetrahedron).vertex(3);
+  if (SkipSplits({v0, v1, v2, v3}, vertices_)) {
+    return;
+  }
 
   vertices_.emplace_back((vertices_.at(v0) + vertices_.at(v1) +
                           vertices_.at(v2) + vertices_.at(v3)) /
@@ -81,6 +98,9 @@ void VolumeMeshRefiner::RefineTriangle(const SortedTriplet<int>& triangle) {
   const int v0 = triangle.first();
   const int v1 = triangle.second();
   const int v2 = triangle.third();
+  if (SkipSplits({v0, v1, v2}, vertices_)) {
+    return;
+  }
 
   vertices_.emplace_back(
       (vertices_.at(v0) + vertices_.at(v1) + vertices_.at(v2)) / 3);
@@ -95,6 +115,9 @@ void VolumeMeshRefiner::RefineTriangle(const SortedTriplet<int>& triangle) {
 void VolumeMeshRefiner::RefineEdge(const SortedPair<int>& edge) {
   const int v0 = edge.first();
   const int v1 = edge.second();
+  if (SkipSplits({v0, v1}, vertices_)) {
+    return;
+  }
 
   vertices_.emplace_back((vertices_.at(v0) + vertices_.at(v1)) / 2);
   const int new_vertex = vertices_.size() - 1;
