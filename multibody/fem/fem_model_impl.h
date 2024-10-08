@@ -14,6 +14,9 @@
 #include "drake/multibody/fem/fem_element.h"
 #include "drake/multibody/fem/fem_indexes.h"
 #include "drake/multibody/fem/fem_model.h"
+#if defined(_OPENMP)
+#include <omp.h>
+#endif
 
 namespace drake {
 namespace multibody {
@@ -210,6 +213,9 @@ class FemModelImpl : public FemModel<typename Element::T> {
     DRAKE_DEMAND(data != nullptr);
     data->resize(num_elements());
     const FemState<T> fem_state(&(this->fem_state_system()), &context);
+#if defined(_OPENMP)
+#pragma omp parallel for
+#endif
     for (int i = 0; i < num_elements(); ++i) {
       (*data)[i] = elements_[i].ComputeData(fem_state);
     }
