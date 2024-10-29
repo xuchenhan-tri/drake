@@ -1,5 +1,8 @@
 #include "drake/multibody/fem/stvk_hencky_von_mises_model_data.h"
 
+#include <algorithm>
+#include <limits>
+
 #include "drake/common/autodiff.h"
 #include "drake/multibody/fem/matrix_utilities.h"
 
@@ -27,9 +30,9 @@ void StvkHenckyVonMisesModelData<T>::UpdateFromDeformationGradient() {
   V_ = svd.matrixV();
   sigma_ = svd.singularValues();
   const T kEps = 16.0 * std::numeric_limits<T>::epsilon();
-  one_over_sigma_ =
-      Vector3<T>(1.0 / std::max(sigma_(0), kEps), 1.0 / std::max(sigma_(1), kEps),
-                 1.0 / std::max(sigma_(2), kEps));
+  one_over_sigma_ = Vector3<T>(1.0 / std::max(sigma_(0), kEps),
+                               1.0 / std::max(sigma_(1), kEps),
+                               1.0 / std::max(sigma_(2), kEps));
   log_sigma_ = sigma_.array().log();
   log_sigma_trace_ = log_sigma_.sum();
 }

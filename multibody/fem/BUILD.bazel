@@ -99,10 +99,6 @@ drake_cc_library(
     hdrs = [
         "constitutive_model.h",
     ],
-    copts = select({
-        ":build_avx2_fma": ["-march=broadwell"],
-        "//conditions:default": [],
-    }),
     deps = [
         "//common:essential",
         "//common:nice_type_name",
@@ -118,10 +114,6 @@ drake_cc_library(
     hdrs = [
         "corotated_model.h",
     ],
-    copts = select({
-        ":build_avx2_fma": ["-march=broadwell"],
-        "//conditions:default": [],
-    }),
     deps = [
         ":calc_lame_parameters",
         ":constitutive_model",
@@ -352,10 +344,6 @@ drake_cc_library(
     hdrs = [
         "linear_constitutive_model.h",
     ],
-    copts = select({
-        ":build_avx2_fma": ["-march=broadwell"],
-        "//conditions:default": [],
-    }),
     deps = [
         ":calc_lame_parameters",
         ":constitutive_model",
@@ -388,7 +376,6 @@ drake_cc_library(
     hdrs = [
         "linear_corotated_model.h",
     ],
-    copts = ["-march=native",],
     deps = [
         ":calc_lame_parameters",
         ":constitutive_model",
@@ -492,15 +479,11 @@ drake_cc_library(
     hdrs = [
         "stvk_hencky_von_mises_model.h",
     ],
-    copts = select({
-        ":build_avx2_fma": ["-march=broadwell"],
-        "//conditions:default": [],
-    }),
     deps = [
         ":calc_lame_parameters",
         ":constitutive_model",
-        ":stvk_hencky_von_mises_model_data",
         ":matrix_utilities",
+        ":stvk_hencky_von_mises_model_data",
         "//common:autodiff",
         "//common:essential",
     ],

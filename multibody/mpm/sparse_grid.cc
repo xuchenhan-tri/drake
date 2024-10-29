@@ -1,7 +1,6 @@
 #include "sparse_grid.h"
 
 #include <bitset>
-#include <iostream>
 #include <utility>
 
 #include "ips2ra/ips2ra.hpp"
@@ -59,7 +58,7 @@ void SparseGrid<T>::Allocate(ParticleData<T>* particles) {
   padded_blocks_->Clear();
 
   const auto& sentinel_particles = particles->sentinel_particles;
-  const auto& base_node_offsets = particles->base_node_offsets; 
+  const auto& base_node_offsets = particles->base_node_offsets;
   /* Touch all blocks that contain particles. */
   for (int i = 0; i < ssize(sentinel_particles) - 1; ++i) {
     blocks_->Set_Page(base_node_offsets[sentinel_particles[i]]);
@@ -349,6 +348,34 @@ void SparseGrid<T>::SortParticlePositions(
     result[p] = q_WPs->at(data_indices);
   }
   *q_WPs = result;
+}
+
+template <typename T>
+void SparseGrid<T>::SetNodeIndices() {
+  const uint64_t data_size = 1 << kDataBits;
+  auto [block_offsets, num_blocks] = padded_blocks_->Get_Blocks();
+  Array grid_data = allocator_->Get_Array();
+  int node_index = 0;
+  for (int b = 0; b < static_cast<int>(num_blocks); ++b) {
+    const uint64_t block_offset = block_offsets[b];
+    uint64_t node_offset = block_offset;
+    /* The coordinate of the origin of this block. */
+    for (int i = 0; i < kNumNodesInBlockX; ++i) {
+      for (int j = 0; j < kNumNodesInBlockY; ++j) {
+        for (int k = 0; k < kNumNodesInBlockZ; ++k) {
+          GridData<T>& node_data = grid_data(node_offset);
+          const T& m = node_data.m;
+          node_offset += data_size;
+          if (m > 0.0) {
+            node_data.index = node_index++;
+          } else {
+            node_data.index = -1;
+          }
+        }
+      }
+    }
+  }
+  num_active_nodes_ = node_index;
 }
 
 }  // namespace internal

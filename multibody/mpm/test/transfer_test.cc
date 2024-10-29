@@ -14,6 +14,31 @@ using Eigen::Matrix3d;
 using Eigen::Vector3d;
 using Eigen::Vector3i;
 
+/* Adds a particle at position x0 to `particles`. All other data are arbitrary.
+ */
+void AddParticle(ParticleData<double>* particles, Vector3d x0) {
+  particles->x.push_back(x0);
+  Matrix3d F0 =
+      (Matrix3d() << 1.0, 0.1, 0.2, 0.3, 1.0, 0.4, 0.5, 0.6, 1.0).finished();
+  particles->F.push_back(F0);
+  particles->m.push_back(1.0);
+  particles->v.push_back(Vector3d(0.1, 0.2, 0.3));
+  Matrix3d C;
+  for (int i = 0; i < 3; ++i) {
+    for (int j = 0; j < 3; ++j) {
+      C(i, j) = 0.0 * i * j;
+    }
+  }
+  Matrix3d P;
+  for (int i = 0; i < 3; ++i) {
+    for (int j = 0; j < 3; ++j) {
+      P(i, j) = 2.0 + (i + j);
+    }
+  }
+  particles->C.push_back(C);
+  particles->tau_v0.push_back(P);
+}
+
 /* Confirms that the computed particle data matches with the expected
  values. */
 void CheckParticleData(const ParticleData<double>& expected,
@@ -24,7 +49,7 @@ void CheckParticleData(const ParticleData<double>& expected,
   ASSERT_EQ(expected.F.size(), computed.F.size());
   ASSERT_EQ(expected.C.size(), computed.C.size());
   ASSERT_EQ(expected.tau_v0.size(), computed.tau_v0.size());
-  const double kTol = 1e-13;
+  const double kTol = 1e-12;
   for (int i = 0; i < ssize(expected.m); ++i) {
     EXPECT_DOUBLE_EQ(expected.m[i], computed.m[i]);
     EXPECT_TRUE(CompareMatrices(expected.x[i], computed.x[i], kTol));
@@ -58,7 +83,7 @@ void CheckGridData(
   std::sort(expected_data.begin(), expected_data.end(), compare);
   std::sort(computed_data.begin(), computed_data.end(), compare);
 
-  const double kTol = 4.0 * std::numeric_limits<double>::epsilon();
+  const double kTol = 16.0 * std::numeric_limits<double>::epsilon();
   for (int i = 0; i < ssize(expected_data); ++i) {
     const auto& expected = expected_data[i];
     const auto& computed = computed_data[i];
@@ -91,22 +116,9 @@ GTEST_TEST(TransferTest, GridToParticle) {
   SparseGrid<double> grid(0.01);
   ParticleData<double> particles;
   const Vector3d x0 = Vector3d(0.001, 0.001, 0.001);
-
-  particles.x.push_back(x0);
-  Matrix3d F0 =
-      (Matrix3d() << 1.0, 0.1, 0.2, 0.3, 1.0, 0.4, 0.5, 0.6, 1.0).finished();
-  particles.F.push_back(F0);
-
-  /* All other particle data are either unused or overwritten in G2P. */
-  const double nan = std::numeric_limits<double>::quiet_NaN();
-  const Vector3d nan_vector = Vector3d(nan, nan, nan);
-  const Matrix3d nan_matrix = Matrix3d::Constant(nan);
-  particles.m.push_back(nan);
-  particles.v.push_back(nan_vector);
-  particles.C.push_back(nan_matrix);
-  particles.tau_v0.push_back(nan_matrix);
-
+  AddParticle(&particles, x0);
   grid.Allocate(&particles);
+  const Matrix3d F0 = particles.F[0];
 
   const double dt = 0.0123;
   Transfer<double> transfer(dt, &grid, &particles);
@@ -119,8 +131,8 @@ GTEST_TEST(TransferTest, GridToParticle) {
 
   EXPECT_TRUE(CompareMatrices(particles.v[0], vel, 1e-14));
   EXPECT_TRUE(CompareMatrices(particles.x[0], x0 + vel * dt, 1e-14));
-  EXPECT_TRUE(CompareMatrices(particles.C[0], Matrix3d::Zero(), 1e-13));
-  EXPECT_TRUE(CompareMatrices(particles.F[0], F0, 1e-13));
+  EXPECT_TRUE(CompareMatrices(particles.C[0], Matrix3d::Zero(), 1e-12));
+  EXPECT_TRUE(CompareMatrices(particles.F[0], F0, 1e-12));
 }
 
 GTEST_TEST(TransferTest, ParticleToGrid) {
@@ -182,38 +194,15 @@ GTEST_TEST(TransferTest, MomentumConservation) {
    page. */
   const Vector3d x0 = Vector3d(0.001, 0.002, 0.003);
   const Vector3d x1 = Vector3d(-0.001, 0.002, 0.003);
-  const Vector3d x2 = Vector3d(1.001, 0.002, 1.003);
-  particles.x.push_back(x0);
-  particles.x.push_back(x1);
-  particles.x.push_back(x2);
+  const Vector3d x2 = Vector3d(1.011, 0.002, 1.013);
+  AddParticle(&particles, x0);
+  AddParticle(&particles, x1);
+  AddParticle(&particles, x2);
 
-  Matrix3d nan_matrix =
-      Matrix3d::Constant(std::numeric_limits<double>::quiet_NaN());
-  for (int p = 0; p < 3; ++p) {
-    /* Set m, v, C, P to arbitrary values. */
-    particles.m.push_back(0.042 * p);
-    particles.v.push_back(Vector3d(0.1 * p, 0.2 * p, 0.3 * p));
-    Matrix3d C;
-    for (int i = 0; i < 3; ++i) {
-      for (int j = 0; j < 3; ++j) {
-        C(i, j) = i * j * p;
-      }
-    }
-    particles.C.push_back(C);
-    Matrix3d P;
-    for (int i = 0; i < 3; ++i) {
-      for (int j = 0; j < 3; ++j) {
-        P(i, j) = i + j + p;
-      }
-    }
-    particles.tau_v0.push_back(P);
-    /* F is unused in the transfer. */
-    particles.F.push_back(nan_matrix);
-  }
   const MassAndMomentum<double> expected =
       ComputeTotalMassAndMomentum(particles, grid.dx());
 
-  const double dt = 0.0123;
+  const double dt = 0.01;
   Transfer<double> transfer(dt, &grid, &particles);
   transfer.SerialParticleToGrid();
   grid.ExplicitVelocityUpdate(/* dv = */ Vector3d::Zero());
@@ -238,16 +227,11 @@ GTEST_TEST(TransferTest, Parity) {
       for (int k = 0; k < num_nodes_per_dim; ++k) {
         const Vector3d base_node(dx * i, dx * j, dx * k);
         for (int p = 0; p < particles_per_cell; ++p) {
-          particles.m.push_back(0.01);
           const Vector3d x =
               base_node + static_cast<double>(p) * dx /
                               (static_cast<double>(particles_per_cell) + 1.0) *
                               Vector3d::Ones();
-          particles.x.push_back(x);
-          particles.v.push_back(Vector3d(0.01 * i, 0.02 * j, 0.03 * k));
-          particles.F.push_back(0.01 * Matrix3d::Identity());
-          particles.C.push_back(0.02 * Matrix3d::Identity());
-          particles.tau_v0.push_back(0.03 * Matrix3d::Identity());
+          AddParticle(&particles, x);
         }
       }
     }

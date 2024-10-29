@@ -123,6 +123,7 @@ drake_cc_library(
     deps = [
         ":constraint_specs",
         ":contact_jacobians",
+        ":contact_properties",
         ":contact_results",
         ":coulomb_friction",
         ":deformable_ids",
@@ -149,7 +150,6 @@ drake_cc_library(
         "//systems/framework:leaf_system",
     ],
     implementation_deps = [
-        ":contact_properties",
         ":hydroelastic_traction_calculator",
     ],
 )
@@ -463,8 +463,6 @@ drake_cc_library(
     hdrs = [
         "contact_properties.h",
     ],
-    internal = True,
-    visibility = ["//visibility:private"],
     deps = [
         "//common:default_scalars",
         "//geometry:scene_graph_inspector",

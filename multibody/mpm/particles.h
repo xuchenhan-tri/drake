@@ -4,6 +4,8 @@
 #include <vector>
 
 #include "drake/common/eigen_types.h"
+#include "drake/common/parallelism.h"
+#include "drake/common/unused.h"
 #include "drake/multibody/fem/corotated_model.h"
 #include "drake/multibody/fem/linear_constitutive_model.h"
 #include "drake/multibody/fem/linear_corotated_model.h"
@@ -52,6 +54,68 @@ template <typename T>
 struct ParticleData {
   Particle<T> particle(int i) {
     return Particle<T>(&m[i], &x[i], &v[i], &F[i], &C[i], &tau_v0[i]);
+  }
+
+  /* Use the deformation gradient data to compute the volume-scaled Kirchhoff
+   stress for each particle. */
+  void UpdateStress(const std::vector<Matrix3<T>>& deformation_gradient,
+                    std::vector<Matrix3<T>>* volume_scaled_stress,
+                    Parallelism parallelism) {
+    for (int i = 0; i < ssize(materials); ++i) {
+      const auto& constitutive_model = constitutive_models[i];
+      [[maybe_unused]] const int num_threads = parallelism.num_threads();
+#ifdef _OPENMP
+#pragma omp parallel for num_threads(num_threads)
+#endif
+      for (int p = materials[i].first; p < materials[i].second; ++p) {
+        std::visit(
+            [&, this](auto& model) {
+              const Matrix3<T>& F_p = deformation_gradient[p];
+              using StrainDataType =
+                  typename std::decay_t<decltype(model)>::Data;
+              StrainDataType& strain_data_p =
+                  std::get<StrainDataType>(strain_data[p]);
+              // TODO(xuchenhan-tri): The the actual F0.
+              strain_data_p.UpdateData(F_p, F_p);
+              auto& tau_v0_p = (*volume_scaled_stress)[p];
+              model.CalcFirstPiolaStress(strain_data_p, &tau_v0_p);
+              tau_v0_p *= volume[p] * F_p.transpose();
+            },
+            constitutive_model);
+      }
+    }
+  }
+
+  void UpdateStressDerivatives(
+      const std::vector<Matrix3<T>>& deformation_gradient,
+      std::vector<Eigen::Matrix<T, 9, 9>>* volume_scaled_stress_derivatives,
+      Parallelism parallelism) {
+    for (int i = 0; i < ssize(materials); ++i) {
+      const auto& constitutive_model = constitutive_models[i];
+      [[maybe_unused]] const int num_threads = parallelism.num_threads();
+#ifdef _OPENMP
+#pragma omp parallel for num_threads(num_threads)
+#endif
+      for (int p = materials[i].first; p < materials[i].second; ++p) {
+        std::visit(
+            [&, this](auto& model) {
+              const Matrix3<T>& F_p = deformation_gradient[p];
+              using StrainDataType =
+                  typename std::decay_t<decltype(model)>::Data;
+              StrainDataType& strain_data_p =
+                  std::get<StrainDataType>(strain_data[p]);
+              // TODO(xuchenhan-tri): The the actual F0.
+              strain_data_p.UpdateData(F_p, F_p);
+              Eigen::Matrix<T, 9, 9> dPdF;
+              model.CalcFirstPiolaStressDerivative(strain_data_p, &dPdF);
+              /* A = v0 * F : dP/dF : F. */
+              auto& A = (*volume_scaled_stress_derivatives)[p];
+              unused(A);
+              // TODO(xuchenhan-tri): Implement this.
+            },
+            constitutive_model);
+      }
+    }
   }
 
   std::vector<T> m;           // mass
@@ -121,8 +185,8 @@ MassAndMomentum<T> ComputeTotalMassAndMomentum(const ParticleData<T>& particles,
     result.linear_momentum += particles.m[i] * particles.v[i];
     const Matrix3<T> B = particles.C[i] * D;  // C = B * D^{-1}
     result.angular_momentum +=
-        particles.m[i] *
-        (particles.x[i].cross(particles.v[i]) + ContractWithLeviCivita(B));
+        particles.m[i] * (particles.x[i].cross(particles.v[i]) +
+                          ContractWithLeviCivita<T>(B.transpose()));
   }
   return result;
 }

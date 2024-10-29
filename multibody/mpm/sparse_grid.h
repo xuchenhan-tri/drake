@@ -5,7 +5,6 @@
 #include <array>
 #include <cmath>
 #include <cstring>
-#include <iostream>
 #include <memory>
 #include <unordered_map>
 #include <vector>
@@ -30,8 +29,6 @@ namespace multibody {
 namespace mpm {
 namespace internal {
 
-// TODO(xuchenhan-tri): The size of GridData has changed. Update the
-// documentation.
 /* GridData stores data at a single a grid node of SparseGrid.
 
  The Vector3<T> entry contains the velocity of the node (sometimes used
@@ -39,8 +36,8 @@ namespace internal {
  the node.
 
  The size of GridData is required to be a power of 2 to work with SPGrid.
- With T = float, GridData is 4 * 4 = 16 byte.
- With T = double, GridData is 8 * 4 = 32 byte.
+ With T = float, GridData is 4 * 8 = 32 byte.
+ With T = double, GridData is 8 * 8 = 64 byte.
 
  @tparam T double or float. */
 template <typename T>
@@ -48,12 +45,16 @@ struct GridData {
   void set_zero() {
     v.setZero();
     m = 0.0;
+    index = -1;
   }
 
   bool operator==(const GridData<T>& other) const = default;
 
   Vector3<T> v{Vector3<T>::Zero()};
   T m{0.0};
+  typename std::conditional<std::is_same<T, float>::value, int32_t,
+                            int64_t>::type index{-1};
+  Vector3<T> scratch{Vector3<T>::Zero()};
 };
 
 /* A Pad is a 3x3x3 subgrid around a particle.
@@ -243,6 +244,14 @@ class SparseGrid {
   /* Helper for `Allocate()` that sorts particles based on their positions. */
   void SortParticles(ParticleData<T>* particles);
 
+  /* Assigning consecutive indices to all active nodes [0, num_active_nodes()).
+   All non-active grid nodes (those with zero mass) gets index -1. */
+  void SetNodeIndices();
+
+  /* Returns the number of active grid nodes as computed by last call to
+   SetNodeIndices(). */
+  int num_active_nodes() const { return num_active_nodes_; }
+
  private:
   static constexpr int kLog2Page = 12;  // 4KB page size.
   /* The maximum grid size along a single dimension. That is even
@@ -268,10 +277,10 @@ class SparseGrid {
    */
   using PageMap = SPGrid::SPGrid_Page_Map<kLog2Page>;
   /* Mask helps convert from offset (1D index) to 3D index and vice versa. */
-  using Mask = typename Allocator::Array_mask<GridData<T>>;
+  using Mask = typename Allocator::template Array_mask<GridData<T>>;
   /* Array type for GridData. */
-  using Array = typename Allocator::Array_type<GridData<T>>;
-  using ConstArray = typename Allocator::Array_type<const GridData<T>>;
+  using Array = typename Allocator::template Array_type<GridData<T>>;
+  using ConstArray = typename Allocator::template Array_type<const GridData<T>>;
   static constexpr int kDataBits = Mask::data_bits;
 
   static constexpr int kNumNodesInBlockX = 1 << Mask::block_xbits;
@@ -313,6 +322,7 @@ class SparseGrid {
   std::array<std::array<std::array<uint64_t, 3>, 3>, 3> cell_offset_strides_;
 
   Parallelism parallelism_;
+  int num_active_nodes_{0};
 };
 
 }  // namespace internal

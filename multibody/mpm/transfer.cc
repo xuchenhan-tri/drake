@@ -1,7 +1,6 @@
 #include "transfer.h"
 
 #include <array>
-#include <iostream>
 #include <vector>
 
 #include "simd_scalar.h"
@@ -358,7 +357,7 @@ void Transfer<T>::SerialGridToParticle() {
       */
       const T c1 = (1 + kApicRatio) * 0.5;
       const T c2 = (kApicRatio - 1) * 0.5;
-      particle.C = c1 * particle.C + c2 * particle.C.transpose();
+      particle.C = (c1 * particle.C + c2 * particle.C.transpose()).eval();
 
       need_new_pad = (p + 1 == particle_end) ||
                      (base_node_offsets[p] != base_node_offsets[p + 1]);
@@ -535,7 +534,7 @@ void Transfer<T>::ParallelSimdGridToParticle(const Parallelism parallelize) {
       F += C * dt_ * F;
       const T c1 = (1 + kApicRatio) * 0.5;
       const T c2 = (kApicRatio - 1) * 0.5;
-      C = c1 * C + c2 * C.transpose();
+      C = (c1 * C + c2 * C.transpose()).eval();
       Store(v, &particles_->v, indices);
       Store(x, &particles_->x, indices);
       Store(C, &particles_->C, indices);

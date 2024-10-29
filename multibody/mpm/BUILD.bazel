@@ -53,6 +53,7 @@ drake_cc_library(
     deps = [
         ":math",
         "//common:essential",
+        "//common:parallelism",
         "//multibody/fem",
     ],
 )
@@ -76,9 +77,9 @@ cc_library(
     hdrs = [
         "transfer.h",
     ],
-    # TODO(xuchenhan-tri): Remove the hard-coded flag when we build this as a drake_cc_library.
-    copts = ["-fopenmp", "-march=native"],
-    linkopts = ["-fopenmp"],
+    # TODO(xuchenhan-tri): Figure out how to turn on SIMD and threading for this library.
+    # copts = ["-fopenmp", "-march=native"],
+    # linkopts = ["-fopenmp"],
     deps = [
         ":particles",
         ":sparse_grid",
@@ -96,12 +97,12 @@ drake_cc_library(
     hdrs = [
         "poisson_disk.h",
     ],
-    interface_deps = [
+    deps = [
         "//common:essential",
         "//geometry",
         "//math:geometric_transform",
     ],
-    deps = [
+    implementation_deps = [
         "@poisson_disk_sampling_internal//:poisson_disk_sampling",
     ],
 )
@@ -145,6 +146,26 @@ cc_library(
         "//common:parallelism",
         "//geometry",
         "//math:geometric_transform",
+        "//multibody/plant:contact_properties",
+    ],
+)
+
+cc_library(
+    name = "mpm_state",
+    srcs = [
+        "mpm_state.cc",
+    ],
+    hdrs = [
+        "mpm_state.h",
+    ],
+    deps = [
+        ":particles",
+        ":simd_scalar",
+        ":sparse_grid",
+        ":transfer",
+        "//common:essential",
+        "//common:parallelism",
+        "//multibody/contact_solvers",
     ],
 )
 
@@ -208,6 +229,16 @@ drake_cc_googletest(
     ],
     deps = [
         ":mpm_driver",
+    ],
+)
+
+drake_cc_googletest(
+    name = "mpm_state_test",
+    srcs = [
+        "test/mpm_state_test.cc",
+    ],
+    deps = [
+        ":mpm_state",
     ],
 )
 

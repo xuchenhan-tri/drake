@@ -1,6 +1,8 @@
 #include "drake/multibody/fem/stvk_hencky_von_mises_model.h"
 
+#include <algorithm>
 #include <array>
+#include <limits>
 #include <utility>
 
 #include "drake/common/autodiff.h"

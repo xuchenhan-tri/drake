@@ -36,6 +36,26 @@ class Transfer {
            bool reset_grid = true);
   Transfer(T dt, SparseGrid<T>* sparse_grid, ContactParticleData<T>* particles);
 
+  const SparseGrid<T>& grid() const {
+    DRAKE_DEMAND(sparse_grid_ != nullptr);
+    return *sparse_grid_;
+  }
+
+  const ParticleData<T>& particles() const {
+    DRAKE_DEMAND(particles_ != nullptr);
+    return *particles_;
+  }
+
+  SparseGrid<T>& mutable_grid() {
+    DRAKE_DEMAND(sparse_grid_ != nullptr);
+    return *sparse_grid_;
+  }
+
+  ParticleData<T>& mutable_particles() {
+    DRAKE_DEMAND(particles_ != nullptr);
+    return *particles_;
+  }
+
   /* The transfer functions below each come in four flavors as the cross product
    of two options:
    1. Serial or Parallel: Serial functions are single-threaded, while Parallel
@@ -74,7 +94,7 @@ class Transfer {
    course notes referenced in the class documentation. */
   T D_inverse_{0.0};
   T D_inverse_dt_{0.0};
-  T kApicRatio{0.0};
+  T kApicRatio{1.0};
 };
 
 }  // namespace internal

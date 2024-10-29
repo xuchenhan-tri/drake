@@ -10,6 +10,8 @@
 #include "drake/math/rigid_transform.h"
 #include "drake/multibody/fem/corotated_model.h"
 #include "drake/multibody/mpm/poisson_disk.h"
+// TODO(xuchenhan-tri): contact_properties is internal to the plant. Computing
+// contact points should be done in the contact manager.
 #include "drake/multibody/plant/contact_properties.h"
 #include "drake/multibody/plant/coulomb_friction.h"
 
@@ -379,35 +381,6 @@ void MpmDriver<T>::UpdateParticleStress() {
             model.ProjectStrain(&F, &strain_data);
             model.CalcFirstPiolaStress(strain_data, &particles_.tau_v0[i]);
             particles_.tau_v0[i] *= particles_.volume[i] * F.transpose();
-          },
-          constitutive_model);
-    }
-  }
-}
-
-template <typename T>
-void MpmDriver<T>::SimdUpdateParticleStress() {
-  for (int m = 0; m < ssize(particles_.materials); ++m) {
-    const auto& constitutive_model = particles_.constitutive_models[m];
-    [[maybe_unused]] const int num_threads = parallelism_.num_threads();
-    const int lanes = SimdScalar<T>::lanes();
-    std::vector<int> indices(lanes);
-#ifdef _OPENMP
-#pragma omp parallel for num_threads(num_threads)
-#endif
-    for (int i = particles_.materials[m].first;
-         i < particles_.materials[m].second; i += lanes) {
-      const int end = std::min(i + lanes, particles_.materials[m].second);
-      indices.resize(end - i);
-      std::iota(indices.begin(), indices.end(), i);
-      const Matrix3<SimdScalar<T>> F = Load(particles_.F, indices);
-      const SimdScalar<T> volume = Load(particles_.volume, indices);
-      std::visit(
-          [&, this](auto& model) {
-            const Matrix3<SimdScalar<T>> P = model.CalcFirstPiolaStress(F);
-            const Matrix3<SimdScalar<T>> tau_v0 = volume * P * F.transpose();
-            particles_.tau_v0[0].setZero();
-            Store(tau_v0, &particles_.tau_v0, indices);
           },
           constitutive_model);
     }

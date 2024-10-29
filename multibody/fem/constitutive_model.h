@@ -6,7 +6,6 @@
 
 #include "drake/common/eigen_types.h"
 #include "drake/common/nice_type_name.h"
-#include "drake/multibody/mpm/simd_scalar.h"
 
 namespace drake {
 namespace multibody {
@@ -68,12 +67,6 @@ class ConstitutiveModel {
   void CalcFirstPiolaStress(const Data& data, Matrix3<T>* P) const {
     DRAKE_ASSERT(P != nullptr);
     derived().CalcFirstPiolaStressImpl(data, P);
-  }
-
-  Matrix3<mpm::internal::SimdScalar<T>> CalcFirstPiolaStress(
-      const Matrix3<mpm::internal::SimdScalar<T>>& F) const {
-    // TODO(xuchenhan-tri): implement this.
-    return Matrix3<mpm::internal::SimdScalar<T>>::Zero();
   }
 
   /* Calculates the derivative of first Piola stress with respect to the

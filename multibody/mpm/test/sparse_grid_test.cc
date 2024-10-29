@@ -357,8 +357,8 @@ GTEST_TEST(SparseGridTest, ComputeTotalMassAndMomentum) {
 }
 
 /* We place 8 particles in the grid to activate one block for each color.
- For floats, each block is of size 4x8x8 grid nodes. We place particles at
- (5*i*dx, 10*j*dx, 10*k*dx) for i, j, k = 0 or 1 to activate the 8 blocks
+ For floats, each block is of size 4x4x8 grid nodes. We place particles at
+ (5*i*dx, 5*j*dx, 10*k*dx) for i, j, k = 0 or 1 to activate the 8 blocks
  starting at the block containing the origin. */
 GTEST_TEST(SparseGridTest, ColoredBlocks) {
   const float dx = 0.01;
@@ -367,7 +367,7 @@ GTEST_TEST(SparseGridTest, ColoredBlocks) {
   for (int i = 0; i < 2; ++i) {
     for (int j = 0; j < 2; ++j) {
       for (int k = 0; k < 2; ++k) {
-        q_WPs.emplace_back(Vector3f(5 * i * dx, 10 * j * dx, 10 * k * dx));
+        q_WPs.emplace_back(Vector3f(5 * i * dx, 5 * j * dx, 10 * k * dx));
       }
     }
   }
