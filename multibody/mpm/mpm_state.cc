@@ -38,8 +38,46 @@ template <typename T>
 void MpmState<T>::CalcResidual(VectorX<T>* b) {
   DRAKE_DEMAND(b != nullptr);
   b->resizeLike(dv_);
-  b->setZero();
-  // TODO(xuchenhan-tri): Implement this function.
+  constexpr int kDim = 3;
+  /* Overwrite old values with M*dv term. */
+  grid_->IterateGrid([&](const GridData<T>& node) {
+    const int index = node.index;
+    DRAKE_ASSERT(index >= 0 && index < b_->size());
+    b->template segment<kDim>(index * kDim) =
+        node.m * dv_.template segment<kDim>(index * kDim);
+    node.scratch.setZero();
+  });
+  /* Splat forces to the grid cache and collect them into b. */
+  particles_->IterateParticles([&](const ParticleData<T>& particles,
+                                   int particle_data_index,
+                                   const BsplineWeights<T>& weights,
+                                   const Pad<Vector3>& grid_x,
+                                   Pad<GridData<T>>* grid_data) {
+    const int p = particle_data_index;
+    for (int i = 0; i < 3; ++i) {
+      for (int j = 0; j < 3; ++j) {
+        for (int k = 0; k < 3; ++k) {
+          const T& w = bspline.weight(i, j, k);
+          const Vector3<T>& xi = grid_x[i][j][k];
+          /* For the elastic force from particles, we compute -∂E/∂xᵢ and
+           get
+
+             fᵢ = -∑ₚ Vₚ * Pₚ * Fₚⁿᵀ * D⁻¹ * (xᵢ − xₚ) * wᵢₚ
+
+           with Pₚ = ∂Ψ/∂Fₚ. Noting that Pₚ * Fₚⁿᵀ is the Kirchhoff stress,
+           we group Vₚ * Pₚ * Fₚⁿᵀ into a single term `tau_v0`. Rearranging
+           terms reveals that - fᵢdt is given by the equation in the code
+           below. */
+          const auto& tau_v0 =
+              data_.tau_v0[p];  // Note that we take the stress from the scratch
+                                // data here instead directly from the particle
+                                // because we are in the Newton loop.
+          grid_data[i][j][k].scratch +=
+              tau_v0 * (xi - particles.x[p]) * D_inverse * dt;
+        }
+      }
+    }
+  });
 }
 
 // TODO(xuchenhan-tri): We should be able to make a single pass in this function

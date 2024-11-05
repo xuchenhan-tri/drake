@@ -31,7 +31,8 @@ class MpmState {
   /* Sets dv = dv + ddv. */
   void IncrementDv(const VectorX<T>& ddv);
 
-  /* Computes the residual vector b = M * dv - f(x(v+dv), v+dv) * dt. */
+  /* Computes the residual vector b = M * dv - f(x(v+dv), v+dv) * dt where M is
+   the lumped mass matrix. */
   void CalcResidual(VectorX<T>* b);
 
   /* Makes a Block3x3SparseSymmetricMatrix that has the sparsity pattern of
