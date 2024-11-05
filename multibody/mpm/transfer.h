@@ -1,7 +1,7 @@
 #pragma once
 
-#include "particles.h"
 #include "sparse_grid.h"
+#include "particles.h"
 
 #include "drake/common/parallelism.h"
 
@@ -21,37 +21,39 @@ namespace internal {
 
  [Jiang et al. 2016] Jiang, C., Schroeder, C., Teran, J., Stomakhin, A., &
  Selle, A. (2016). The material point method for simulating continuum materials.
- In ACM SIGGRAPH 2016 courses. */
-template <typename T>
+ In ACM SIGGRAPH 2016 courses.
+ @tparam <T, U> = <double, double> or <float, float> or <double, AutoDiffXd>
+ @tparam Grid is either SparseGrid or MockSparseGrid (for testing). */
+template <typename T, typename U = T, template <typename> class Grid = SparseGrid>
 class Transfer {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(Transfer);
 
   /* Constructs a Transfer object for particle-to-grid and grid-to-particle
-   transfer between `sparse_grid` and `particles`.
+   transfer between `grid` and `particles`.
    The constructor prepares the grid for transfer by sorting particle indices
    and allocating memory for grid data.
-   @pre sparse_grid and particles are not null. */
-  Transfer(T dt, SparseGrid<T>* sparse_grid, ParticleData<T>* particles,
+   @pre grid and particles are not null. */
+  Transfer(T dt, Grid<U>* grid, ParticleData<U>* particles,
            bool reset_grid = true);
-  Transfer(T dt, SparseGrid<T>* sparse_grid, ContactParticleData<T>* particles);
+  Transfer(T dt, Grid<U>* grid, ContactParticleData<U>* particles);
 
-  const SparseGrid<T>& grid() const {
-    DRAKE_DEMAND(sparse_grid_ != nullptr);
-    return *sparse_grid_;
+  const Grid<U>& grid() const {
+    DRAKE_DEMAND(grid_ != nullptr);
+    return *grid_;
   }
 
-  const ParticleData<T>& particles() const {
+  const ParticleData<U>& particles() const {
     DRAKE_DEMAND(particles_ != nullptr);
     return *particles_;
   }
 
-  SparseGrid<T>& mutable_grid() {
-    DRAKE_DEMAND(sparse_grid_ != nullptr);
-    return *sparse_grid_;
+  Grid<U>& mutable_grid() {
+    DRAKE_DEMAND(grid_ != nullptr);
+    return *grid_;
   }
 
-  ParticleData<T>& mutable_particles() {
+  ParticleData<U>& mutable_particles() {
     DRAKE_DEMAND(particles_ != nullptr);
     return *particles_;
   }
@@ -87,9 +89,9 @@ class Transfer {
 
  private:
   T dt_{0.0};
-  SparseGrid<T>* sparse_grid_{};
-  ParticleData<T>* particles_{};
-  ContactParticleData<T>* contact_particles_{};
+  Grid<U>* grid_{};
+  ParticleData<U>* particles_{};
+  ContactParticleData<U>* contact_particles_{};
   /* The D inverse matrix in computing the affine matrix. See page 42 in the MPM
    course notes referenced in the class documentation. */
   T D_inverse_{0.0};

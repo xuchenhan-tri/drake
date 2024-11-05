@@ -3,6 +3,7 @@
 #include <array>
 #include <vector>
 
+#include "mock_sparse_grid.h"
 #include "simd_scalar.h"
 #if defined(_OPENMP)
 #include <omp.h>
@@ -15,48 +16,55 @@ namespace multibody {
 namespace mpm {
 namespace internal {
 
-template <typename T>
-Transfer<T>::Transfer(T dt, SparseGrid<T>* sparse_grid,
-                      ParticleData<T>* particles, bool reset_grid)
-    : dt_(dt), sparse_grid_(sparse_grid), particles_(particles) {
+template <typename T, typename U, template <typename> class Grid>
+Transfer<T, U, Grid>::Transfer(T dt, Grid<U>* grid, ParticleData<U>* particles,
+                               bool reset_grid)
+    : dt_(dt), grid_(grid), particles_(particles) {
   DRAKE_DEMAND(dt > 0);
-  DRAKE_DEMAND(sparse_grid != nullptr);
+  DRAKE_DEMAND(grid != nullptr);
   DRAKE_DEMAND(particles != nullptr);
   if (reset_grid) {
-    sparse_grid_->Allocate(particles);
+    grid_->Allocate(particles);
   } else {
-    sparse_grid_->SortParticles(particles);
+    grid_->SortParticles(particles);
   }
-  D_inverse_ = 4.0 / (sparse_grid_->dx() * sparse_grid_->dx());
+  D_inverse_ = 4.0 / (grid_->dx() * grid_->dx());
   D_inverse_dt_ = D_inverse_ * dt_;
 }
 
-template <typename T>
-void Transfer<T>::SerialParticleToGrid() {
+template <typename T, typename U, template <typename> class Grid>
+void Transfer<T, U, Grid>::SerialParticleToGrid() {
   const std::vector<uint64_t>& base_node_offsets =
       particles_->base_node_offsets;
   const std::vector<int>& data_indices = particles_->data_indices;
   const std::vector<int>& sentinel_particles = particles_->sentinel_particles;
-  const int num_blocks = sparse_grid_->num_blocks();
+  const int num_blocks = grid_->num_blocks();
 
   Pad<Vector3<T>> grid_x;
-  Pad<GridData<T>> grid_data;
+  Pad<GridData<U>> grid_data;
   bool need_new_pad = true;
 
   for (int b = 0; b < num_blocks; ++b) {
     const int particle_start = sentinel_particles[b];
     const int particle_end = sentinel_particles[b + 1];
     for (int p = particle_start; p < particle_end; ++p) {
-      const Particle<T> particle = particles_->particle(data_indices[p]);
-      const T& m = particle.m;
-      const Vector3<T>& x = particle.x;
-      const Vector3<T>& v = particle.v;
-      const Matrix3<T>& C = particle.C;
-      const Matrix3<T>& tau_v0 = particle.tau_v0;
-      BsplineWeights<T> bspline(x, sparse_grid_->dx());
+      const Particle<U> particle = particles_->particle(data_indices[p]);
+      const U& m = particle.m;
+      const Vector3<U>& x = particle.x;
+      const Vector3<U>& v = particle.v;
+      const Matrix3<U>& C = particle.C;
+      const Matrix3<U>& tau_v0 = particle.tau_v0;
+      const auto& x_T = [&]() -> Vector3<T> {
+        if constexpr (std::is_same_v<T, U>) {
+          return x;
+        } else {
+          return math::DiscardZeroGradient(x);
+        }
+      }();
+      BsplineWeights<T> bspline(x_T, grid_->dx());
       if (need_new_pad) {
-        grid_x = sparse_grid_->GetPadNodes(x);
-        grid_data = sparse_grid_->GetPadData(base_node_offsets[p]);
+        grid_x = grid_->GetPadNodes(x_T);
+        grid_data = grid_->GetPadData(base_node_offsets[p]);
       }
       for (int i = 0; i < 3; ++i) {
         for (int j = 0; j < 3; ++j) {
@@ -94,7 +102,7 @@ void Transfer<T>::SerialParticleToGrid() {
              we group Vₚ * Pₚ * Fₚⁿᵀ into a single term `tau_v0`. Rearranging
              terms reveals that mvᵢⁿ + fᵢdt is given by the equation in the code
              below. */
-            const T mi = m * w;
+            const U mi = m * w;
             grid_data[i][j][k].v +=
                 mi * v + (m * C - D_inverse_dt_ * tau_v0) * (xi - x) * w;
             grid_data[i][j][k].m += mi;
@@ -104,19 +112,24 @@ void Transfer<T>::SerialParticleToGrid() {
       need_new_pad = (p + 1 == particle_end) ||
                      (base_node_offsets[p] != base_node_offsets[p + 1]);
       if (need_new_pad) {
-        sparse_grid_->SetPadData(base_node_offsets[p], grid_data);
+        grid_->SetPadData(base_node_offsets[p], grid_data);
       }
     }
   }
 }
 
-template <typename T>
-void Transfer<T>::SerialSimdParticleToGrid() {
+template <>
+void Transfer<double, AutoDiffXd, MockSparseGrid>::SerialSimdParticleToGrid() {
+  throw std::runtime_error("Not implemented.");
+}
+
+template <typename T, typename U, template <typename> class Grid>
+void Transfer<T, U, Grid>::SerialSimdParticleToGrid() {
   const std::vector<uint64_t>& base_node_offsets =
       particles_->base_node_offsets;
   const std::vector<int>& data_indices = particles_->data_indices;
   const std::vector<int>& sentinel_particles = particles_->sentinel_particles;
-  const int num_blocks = sparse_grid_->num_blocks();
+  const int num_blocks = grid_->num_blocks();
   Pad<Vector3<T>> grid_x;
   Pad<GridData<T>> grid_data;
   /* Particle indices for processing in a single SIMD instruction. */
@@ -131,8 +144,8 @@ void Transfer<T>::SerialSimdParticleToGrid() {
     bool need_new_pad = true;
     while (p < particle_end) {
       if (need_new_pad) {
-        grid_data = sparse_grid_->GetPadData(base_node_offsets[p]);
-        grid_x = sparse_grid_->GetPadNodes(particles_->x[data_indices[p]]);
+        grid_data = grid_->GetPadData(base_node_offsets[p]);
+        grid_x = grid_->GetPadNodes(particles_->x[data_indices[p]]);
       }
       /* We pack as many particles as we can into a single SIMD computation
        until either
@@ -155,7 +168,7 @@ void Transfer<T>::SerialSimdParticleToGrid() {
       const Matrix3<SimdScalar<T>> C = Load(particles_->C, indices);
       const Matrix3<SimdScalar<T>> tau_v0 = Load(particles_->tau_v0, indices);
       const BsplineWeights<SimdScalar<T>> bspline =
-          BsplineWeights<SimdScalar<T>>(x, sparse_grid_->dx());
+          BsplineWeights<SimdScalar<T>>(x, grid_->dx());
       for (int i = 0; i < 3; ++i) {
         for (int j = 0; j < 3; ++j) {
           for (int k = 0; k < 3; ++k) {
@@ -172,15 +185,22 @@ void Transfer<T>::SerialSimdParticleToGrid() {
       need_new_pad = (next_p == particle_end) ||
                      (base_node_offsets[p] != base_node_offsets[next_p]);
       if (need_new_pad) {
-        sparse_grid_->SetPadData(base_node_offsets[p], grid_data);
+        grid_->SetPadData(base_node_offsets[p], grid_data);
       }
       p = next_p;
     }
   }
 }
 
-template <typename T>
-void Transfer<T>::ParallelParticleToGrid(const Parallelism parallelize) {
+template <>
+void Transfer<double, AutoDiffXd, MockSparseGrid>::ParallelParticleToGrid(
+    const Parallelism parallelize) {
+  throw std::runtime_error("Not implemented");
+}
+
+template <typename T, typename U, template <typename> class Grid>
+void Transfer<T, U, Grid>::ParallelParticleToGrid(
+    const Parallelism parallelize) {
   const std::vector<int>& sentinel_particles = particles_->sentinel_particles;
   const std::vector<int>& data_indices = particles_->data_indices;
   const std::vector<uint64_t>& base_node_offsets =
@@ -209,10 +229,10 @@ void Transfer<T>::ParallelParticleToGrid(const Parallelism parallelize) {
         const Vector3<T>& v = particle.v;
         const Matrix3<T>& C = particle.C;
         const Matrix3<T>& tau_v0 = particle.tau_v0;
-        const BsplineWeights<T> bspline(x, sparse_grid_->dx());
+        const BsplineWeights<T> bspline(x, grid_->dx());
         if (need_new_pad) {
-          grid_x = sparse_grid_->GetPadNodes(x);
-          grid_data = sparse_grid_->GetPadData(base_node_offsets[p]);
+          grid_x = grid_->GetPadNodes(x);
+          grid_data = grid_->GetPadData(base_node_offsets[p]);
         }
         for (int i = 0; i < 3; ++i) {
           for (int j = 0; j < 3; ++j) {
@@ -229,15 +249,22 @@ void Transfer<T>::ParallelParticleToGrid(const Parallelism parallelize) {
         need_new_pad = (p + 1 == particle_end) ||
                        (base_node_offsets[p] != base_node_offsets[p + 1]);
         if (need_new_pad) {
-          sparse_grid_->SetPadData(base_node_offsets[p], grid_data);
+          grid_->SetPadData(base_node_offsets[p], grid_data);
         }
       }
     }
   }
 }
 
-template <typename T>
-void Transfer<T>::ParallelSimdParticleToGrid(const Parallelism parallelize) {
+template <>
+void Transfer<double, AutoDiffXd, MockSparseGrid>::ParallelSimdParticleToGrid(
+    const Parallelism parallelize) {
+  throw std::runtime_error("Not implemented");
+}
+
+template <typename T, typename U, template <typename> class Grid>
+void Transfer<T, U, Grid>::ParallelSimdParticleToGrid(
+    const Parallelism parallelize) {
   const std::vector<int>& sentinel_particles = particles_->sentinel_particles;
   const std::array<std::vector<int>, 8>& colored_blocks =
       particles_->colored_blocks;
@@ -269,8 +296,8 @@ void Transfer<T>::ParallelSimdParticleToGrid(const Parallelism parallelize) {
           ++next_p;
         }
         if (need_new_pad) {
-          grid_data = sparse_grid_->GetPadData(base_node_offsets[p]);
-          grid_x = sparse_grid_->GetPadNodes(particles_->x[data_indices[p]]);
+          grid_data = grid_->GetPadData(base_node_offsets[p]);
+          grid_x = grid_->GetPadNodes(particles_->x[data_indices[p]]);
         }
         indices.clear();
         for (int i = p; i < next_p; ++i) {
@@ -282,7 +309,7 @@ void Transfer<T>::ParallelSimdParticleToGrid(const Parallelism parallelize) {
         const Matrix3<SimdScalar<T>> C = Load(particles_->C, indices);
         const Matrix3<SimdScalar<T>> tau_v0 = Load(particles_->tau_v0, indices);
         const BsplineWeights<SimdScalar<T>> bspline =
-            BsplineWeights<SimdScalar<T>>(x, sparse_grid_->dx());
+            BsplineWeights<SimdScalar<T>>(x, grid_->dx());
         for (int i = 0; i < 3; ++i) {
           for (int j = 0; j < 3; ++j) {
             for (int k = 0; k < 3; ++k) {
@@ -302,7 +329,7 @@ void Transfer<T>::ParallelSimdParticleToGrid(const Parallelism parallelize) {
         need_new_pad = (next_p == particle_end) ||
                        (base_node_offsets[next_p] != base_node_offsets[p]);
         if (need_new_pad) {
-          sparse_grid_->SetPadData(base_node_offsets[p], grid_data);
+          grid_->SetPadData(base_node_offsets[p], grid_data);
         }
         p = next_p;
       }
@@ -310,35 +337,42 @@ void Transfer<T>::ParallelSimdParticleToGrid(const Parallelism parallelize) {
   }
 }
 
-template <typename T>
-void Transfer<T>::SerialGridToParticle() {
+template <typename T, typename U, template <typename> class Grid>
+void Transfer<T, U, Grid>::SerialGridToParticle() {
   const std::vector<int>& sentinel_particles = particles_->sentinel_particles;
-  const int num_blocks = sparse_grid_->num_blocks();
+  const int num_blocks = grid_->num_blocks();
   const std::vector<int>& data_indices = particles_->data_indices;
   const std::vector<uint64_t>& base_node_offsets =
       particles_->base_node_offsets;
 
   bool need_new_pad = true;
   Pad<Vector3<T>> grid_x;
-  Pad<GridData<T>> grid_data;
+  Pad<GridData<U>> grid_data;
   for (int b = 0; b < num_blocks; ++b) {
     const int particle_start = sentinel_particles[b];
     const int particle_end = sentinel_particles[b + 1];
     for (int p = particle_start; p < particle_end; ++p) {
-      Particle<T> particle = particles_->particle(data_indices[p]);
+      Particle<U> particle = particles_->particle(data_indices[p]);
       particle.v.setZero();
       particle.C.setZero();
+      const auto& x_T = [&]() -> Vector3<T> {
+        if constexpr (std::is_same_v<T, U>) {
+          return particle.x;
+        } else {
+          return math::DiscardZeroGradient(particle.x);
+        }
+      }();
       /* Write grid data to local pad. */
       if (need_new_pad) {
-        grid_data = sparse_grid_->GetPadData(base_node_offsets[p]);
-        grid_x = sparse_grid_->GetPadNodes(particle.x);
+        grid_data = grid_->GetPadData(base_node_offsets[p]);
+        grid_x = grid_->GetPadNodes(x_T);
       }
-      const BsplineWeights<T> bspline(particle.x, sparse_grid_->dx());
+      const BsplineWeights<T> bspline(x_T, grid_->dx());
       for (int i = 0; i < 3; ++i) {
         for (int j = 0; j < 3; ++j) {
           for (int k = 0; k < 3; ++k) {
-            const Vector3<T>& vi = grid_data[i][j][k].v;
-            const Vector3<T>& xi = grid_x[i][j][k];
+            const Vector3<U>& vi = grid_data[i][j][k].v;
+            const Vector3<U>& xi = grid_x[i][j][k];
             const T& w = bspline.weight(i, j, k);
             particle.v += w * vi;
             particle.C += (w * vi) * (xi - particle.x).transpose();
@@ -365,14 +399,19 @@ void Transfer<T>::SerialGridToParticle() {
   }
 }
 
-template <typename T>
-void Transfer<T>::SerialSimdGridToParticle() {
+template <>
+void Transfer<double, AutoDiffXd, MockSparseGrid>::SerialSimdGridToParticle() {
+  throw std::runtime_error("Not implemented.");
+}
+
+template <typename T, typename U, template <typename> class Grid>
+void Transfer<T, U, Grid>::SerialSimdGridToParticle() {
   const int lanes = SimdScalar<T>::lanes();
   const std::vector<int>& sentinel_particles = particles_->sentinel_particles;
   const std::vector<int>& data_indices = particles_->data_indices;
   const std::vector<uint64_t>& base_node_offsets =
       particles_->base_node_offsets;
-  const int num_blocks = sparse_grid_->num_blocks();
+  const int num_blocks = grid_->num_blocks();
 
   std::vector<int> indices;
   indices.reserve(lanes);
@@ -391,8 +430,8 @@ void Transfer<T>::SerialSimdGridToParticle() {
         ++next_p;
       }
       if (need_new_pad) {
-        grid_data = sparse_grid_->GetPadData(base_node_offsets[p]);
-        grid_x = sparse_grid_->GetPadNodes(particles_->x[data_indices[p]]);
+        grid_data = grid_->GetPadData(base_node_offsets[p]);
+        grid_x = grid_->GetPadNodes(particles_->x[data_indices[p]]);
       }
       indices.clear();
       for (int i = p; i < next_p; ++i) {
@@ -402,7 +441,7 @@ void Transfer<T>::SerialSimdGridToParticle() {
       Matrix3<SimdScalar<T>> B = Matrix3<SimdScalar<T>>::Zero();
       Vector3<SimdScalar<T>> x = Load(particles_->x, indices);
       const BsplineWeights<SimdScalar<T>> bspline =
-          BsplineWeights<SimdScalar<T>>(x, sparse_grid_->dx());
+          BsplineWeights<SimdScalar<T>>(x, grid_->dx());
       for (int i = 0; i < 3; ++i) {
         for (int j = 0; j < 3; ++j) {
           for (int k = 0; k < 3; ++k) {
@@ -430,13 +469,20 @@ void Transfer<T>::SerialSimdGridToParticle() {
   }
 }
 
-template <typename T>
-void Transfer<T>::ParallelGridToParticle(const Parallelism parallelize) {
+template <>
+void Transfer<double, AutoDiffXd, MockSparseGrid>::ParallelGridToParticle(
+    const Parallelism parallelize) {
+  throw std::runtime_error("Not implemented.");
+}
+
+template <typename T, typename U, template <typename> class Grid>
+void Transfer<T, U, Grid>::ParallelGridToParticle(
+    const Parallelism parallelize) {
   const std::vector<int>& sentinel_particles = particles_->sentinel_particles;
   const std::vector<int>& data_indices = particles_->data_indices;
   const std::vector<uint64_t>& base_node_offsets =
       particles_->base_node_offsets;
-  const int num_blocks = sparse_grid_->num_blocks();
+  const int num_blocks = grid_->num_blocks();
   [[maybe_unused]] const int num_threads = parallelize.num_threads();
 #if defined(_OPENMP)
 #pragma omp parallel for num_threads(num_threads)
@@ -448,15 +494,15 @@ void Transfer<T>::ParallelGridToParticle(const Parallelism parallelize) {
     const int particle_start = sentinel_particles[b];
     const int particle_end = sentinel_particles[b + 1];
     for (int p = particle_start; p < particle_end; ++p) {
-      Particle<T> particle = particles_->particle(data_indices[p]);
+      Particle<U> particle = particles_->particle(data_indices[p]);
       particle.v.setZero();
       particle.C.setZero();
       /* Write grid data to local pad. */
       if (need_new_pad) {
-        grid_data = sparse_grid_->GetPadData(base_node_offsets[p]);
-        grid_x = sparse_grid_->GetPadNodes(particle.x);
+        grid_data = grid_->GetPadData(base_node_offsets[p]);
+        grid_x = grid_->GetPadNodes(particle.x);
       }
-      const BsplineWeights<T> bspline(particle.x, sparse_grid_->dx());
+      const BsplineWeights<T> bspline(particle.x, grid_->dx());
       for (int i = 0; i < 3; ++i) {
         for (int j = 0; j < 3; ++j) {
           for (int k = 0; k < 3; ++k) {
@@ -477,14 +523,21 @@ void Transfer<T>::ParallelGridToParticle(const Parallelism parallelize) {
   }
 }
 
-template <typename T>
-void Transfer<T>::ParallelSimdGridToParticle(const Parallelism parallelize) {
+template <>
+void Transfer<double, AutoDiffXd, MockSparseGrid>::ParallelSimdGridToParticle(
+    const Parallelism parallelize) {
+  throw std::runtime_error("Not implemented.");
+}
+
+template <typename T, typename U, template <typename> class Grid>
+void Transfer<T, U, Grid>::ParallelSimdGridToParticle(
+    const Parallelism parallelize) {
   const int lanes = SimdScalar<T>::lanes();
   const std::vector<int>& sentinel_particles = particles_->sentinel_particles;
   const std::vector<int>& data_indices = particles_->data_indices;
   const std::vector<uint64_t>& base_node_offsets =
       particles_->base_node_offsets;
-  const int num_blocks = sparse_grid_->num_blocks();
+  const int num_blocks = grid_->num_blocks();
   [[maybe_unused]] const int num_threads = parallelize.num_threads();
 #if defined(_OPENMP)
 #pragma omp parallel for num_threads(num_threads)
@@ -505,8 +558,8 @@ void Transfer<T>::ParallelSimdGridToParticle(const Parallelism parallelize) {
         ++next_p;
       }
       if (need_new_pad) {
-        grid_data = sparse_grid_->GetPadData(base_node_offsets[p]);
-        grid_x = sparse_grid_->GetPadNodes(particles_->x[data_indices[p]]);
+        grid_data = grid_->GetPadData(base_node_offsets[p]);
+        grid_x = grid_->GetPadNodes(particles_->x[data_indices[p]]);
       }
       indices.clear();
       for (int i = p; i < next_p; ++i) {
@@ -516,7 +569,7 @@ void Transfer<T>::ParallelSimdGridToParticle(const Parallelism parallelize) {
       Matrix3<SimdScalar<T>> B = Matrix3<SimdScalar<T>>::Zero();
       Vector3<SimdScalar<T>> x = Load(particles_->x, indices);
       const BsplineWeights<SimdScalar<T>> bspline =
-          BsplineWeights<SimdScalar<T>>(x, sparse_grid_->dx());
+          BsplineWeights<SimdScalar<T>>(x, grid_->dx());
       for (int i = 0; i < 3; ++i) {
         for (int j = 0; j < 3; ++j) {
           for (int k = 0; k < 3; ++k) {
@@ -547,8 +600,13 @@ void Transfer<T>::ParallelSimdGridToParticle(const Parallelism parallelize) {
   }
 }
 
-template <typename T>
-void Transfer<T>::ContactP2G2P() {
+template <>
+void Transfer<double, AutoDiffXd, MockSparseGrid>::ContactP2G2P() {
+  throw std::runtime_error("Not implemented.");
+}
+
+template <typename T, typename U, template <typename> class Grid>
+void Transfer<T, U, Grid>::ContactP2G2P() {
   const std::vector<uint64_t>& base_node_offsets =
       particles_->base_node_offsets;
   const std::vector<int>& data_indices = particles_->data_indices;
@@ -561,9 +619,9 @@ void Transfer<T>::ContactP2G2P() {
   for (int p = 0; p < num_particles; ++p) {
     const Vector3<T>& x = particles_->x[data_indices[p]];
     const Vector3<T>& f = particles_->f[data_indices[p]];
-    BsplineWeights<T> bspline(x, sparse_grid_->dx());
+    BsplineWeights<T> bspline(x, grid_->dx());
     if (need_new_pad) {
-      grid_data = sparse_grid_->GetPadData(base_node_offsets[p]);
+      grid_data = grid_->GetPadData(base_node_offsets[p]);
     }
     for (int i = 0; i < 3; ++i) {
       for (int j = 0; j < 3; ++j) {
@@ -576,7 +634,7 @@ void Transfer<T>::ContactP2G2P() {
     need_new_pad = (p + 1 == num_particles) ||
                    (base_node_offsets[p] != base_node_offsets[p + 1]);
     if (need_new_pad) {
-      sparse_grid_->SetPadData(base_node_offsets[p], grid_data);
+      grid_->SetPadData(base_node_offsets[p], grid_data);
     }
   }
 
@@ -587,9 +645,9 @@ void Transfer<T>::ContactP2G2P() {
     v.setZero();
     /* Write grid data to local pad. */
     if (need_new_pad) {
-      grid_data = sparse_grid_->GetPadData(base_node_offsets[p]);
+      grid_data = grid_->GetPadData(base_node_offsets[p]);
     }
-    const BsplineWeights<T> bspline(x, sparse_grid_->dx());
+    const BsplineWeights<T> bspline(x, grid_->dx());
     for (int i = 0; i < 3; ++i) {
       for (int j = 0; j < 3; ++j) {
         for (int k = 0; k < 3; ++k) {
@@ -612,3 +670,5 @@ void Transfer<T>::ContactP2G2P() {
 
 template class drake::multibody::mpm::internal::Transfer<double>;
 template class drake::multibody::mpm::internal::Transfer<float>;
+template class drake::multibody::mpm::internal::Transfer<
+    double, drake::AutoDiffXd, drake::multibody::mpm::internal::MockSparseGrid>;

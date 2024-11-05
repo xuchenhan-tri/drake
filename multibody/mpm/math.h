@@ -3,6 +3,7 @@
 #include <array>
 
 #include "drake/common/eigen_types.h"
+#include "drake/math/autodiff.h"
 #include "drake/multibody/mpm/simd_scalar.h"
 
 namespace drake {

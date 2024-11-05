@@ -20,6 +20,19 @@ package(
 )
 
 cc_library(
+    name = "mock_sparse_grid",
+    srcs = [
+        "mock_sparse_grid.cc",
+    ],
+    hdrs = [
+        "mock_sparse_grid.h",
+    ],
+    deps = [
+        ":sparse_grid",
+    ],
+)
+
+cc_library(
     name = "sparse_grid",
     srcs = [
         "sparse_grid.cc",
@@ -31,6 +44,7 @@ cc_library(
     ],
     linkopts = ["-fopenmp"],
     deps = [
+        ":grid_data",
         ":math",
         ":particles",
         "//common:essential",
@@ -66,6 +80,7 @@ drake_cc_library(
     deps = [
         ":simd_scalar",
         "//common:essential",
+        "//math:autodiff",
     ],
 )
 
@@ -83,6 +98,7 @@ cc_library(
     deps = [
         ":particles",
         ":sparse_grid",
+        ":mock_sparse_grid",
         ":simd_scalar",
         "//common:essential",
         "//common:parallelism",
@@ -104,6 +120,16 @@ drake_cc_library(
     ],
     implementation_deps = [
         "@poisson_disk_sampling_internal//:poisson_disk_sampling",
+    ],
+)
+
+drake_cc_library(
+    name = "grid_data",
+    hdrs = [
+        "grid_data.h",
+    ],
+    deps = [
+        "//common:essential",
     ],
 )
 
