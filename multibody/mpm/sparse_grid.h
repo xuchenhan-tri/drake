@@ -1,29 +1,18 @@
 #pragma once
 
-// TODO(xuchenhan-tri): SPGrid should be built with Haswell on.
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstring>
 #include <memory>
-#include <unordered_map>
 #include <vector>
 
-#include "SPGrid_Allocator.h"
-#include "SPGrid_Array.h"
-#include "SPGrid_Mask.h"
-#include "SPGrid_Page_Map.h"
+#include "spgrid.h"
 
 #include "drake/common/eigen_types.h"
 #include "drake/common/parallelism.h"
-#include "drake/geometry/query_object.h"
-#include "drake/math/rigid_transform.h"
-#include "drake/multibody/math/spatial_algebra.h"
 #include "drake/multibody/mpm/grid_data.h"
-#include "drake/multibody/mpm/math.h"
 #include "drake/multibody/mpm/particles.h"
-#include "drake/multibody/plant/externally_applied_spatial_force.h"
-#include "drake/multibody/tree/multibody_tree_indexes.h"
 
 namespace drake {
 namespace multibody {
@@ -84,50 +73,13 @@ class SparseGrid {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(SparseGrid);
 
-  static constexpr int kDim = 3;
-  /* The each block is assigned a unique color to facilitate lock-free particle
-   to grid transfer. */
-  static constexpr int kNumColors = 1 << kDim;
-
   /* Constructs a SparseGrid with grid spacing `dx` in meters. */
-  explicit SparseGrid(T dx, Parallelism parallelism = false);
+  explicit SparseGrid(double dx, Parallelism parallelism = false);
 
   std::unique_ptr<SparseGrid<T>> Clone() const {
     auto result = std::make_unique<SparseGrid<T>>(dx_, parallelism_);
-
-    /* Copy over the page maps. */
-    result->blocks_->Clear();
-    auto [block_offsets, num_blocks] = blocks_->Get_Blocks();
-    for (int b = 0; b < static_cast<int>(num_blocks); ++b) {
-      result->blocks_->Set_Page(block_offsets[b]);
-    }
-    result->blocks_->Update_Block_Offsets();
-
-    result->padded_blocks_->Clear();
-    std::tie(block_offsets, num_blocks) = padded_blocks_->Get_Blocks();
-    for (int b = 0; b < static_cast<int>(num_blocks); ++b) {
-      result->padded_blocks_->Set_Page(block_offsets[b]);
-    }
-    result->padded_blocks_->Update_Block_Offsets();
-
-    /* Now we copy over the grid data. The blocks touched by `blocks_` is a
-     subset of blocks touched by `padded_blocks_`. */
-    auto [result_block_offsets, result_num_blocks] =
-        result->padded_blocks_->Get_Blocks();
-    std::tie(block_offsets, num_blocks) = padded_blocks_->Get_Blocks();
-    Array from_data = allocator_->Get_Array();
-    Array to_data = result->allocator_->Get_Array();
-    DRAKE_DEMAND(result_num_blocks == num_blocks);
-    const uint64_t page_size = 1 << kLog2Page;
-    const uint64_t data_size = 1 << kDataBits;
-    for (int b = 0; b < static_cast<int>(num_blocks); ++b) {
-      const uint64_t offset = block_offsets[b];
-      DRAKE_DEMAND(offset == result_block_offsets[b]);
-      for (uint64_t i = 0; i < page_size; i += data_size) {
-        to_data(offset + i) = from_data(offset + i);
-      }
-    }
-
+    result->spgrid_.SetFrom(this->spgrid_);
+    result->num_active_nodes_ = this->num_active_nodes_;
     return result;
   }
 
@@ -140,11 +92,11 @@ class SparseGrid {
   void Allocate(ParticleData<T>* particles);
 
   /* Grid spacing in meters. */
-  const T& dx() const { return dx_; }
+  T dx() const { return dx_; }
 
   /* The number of blocks that contain grid nodes which serve as base nodes for
    at least one particle. */
-  int num_blocks() const { return blocks_->Get_Blocks().second; }
+  int num_blocks() const { return spgrid_.num_blocks(); }
 
   /* Given the position of a particle in the world frame, returns the world
    frame positions of the grid node in its support. */
@@ -153,31 +105,23 @@ class SparseGrid {
   /* Given the offset of a grid node, returns the grid data in the pad with the
    given node at the center.
    @pre All nodes in the requested pad are active. */
-  Pad<GridData<T>> GetPadData(uint64_t center_node_offset) const;
+  Pad<GridData<T>> GetPadData(uint64_t center_node_offset) const {
+    return spgrid_.GetPadData(center_node_offset);
+  }
 
   /* Given the offset of a grid node, writes the grid data in the pad with the
    given node at the center.
    @pre All nodes in the requested pad are active. */
   void SetPadData(uint64_t center_node_offset,
-                  const Pad<GridData<T>>& pad_data);
+                  const Pad<GridData<T>>& pad_data) {
+    spgrid_.SetPadData(center_node_offset, pad_data);
+  }
 
   /* For each active grid node, divide by the grid node mass to convert the
    momentum to velocity and then increment the velocity by dv.
    Also apply boundary conditions along the way.
    @pre the grid data stores momentum of the node, not velocity. */
   void ExplicitVelocityUpdate(const Vector3<T>& dv);
-
-  /* Returns the offset (1D index) of a grid node given its 3D grid
-   coordinates in world space. */
-  uint64_t CoordinateToOffset(int x, int y, int z) const {
-    const uint64_t world_space_offset = Mask::Linear_Offset(x, y, z);
-    return Mask::Packed_Add(world_space_offset, origin_offset_);
-  }
-
-  /* Returns the 3D grid coordinates in world space given the offset (1D index)
-   of a grid node.
-   @note Testing only. */
-  Vector3<int> OffsetToCoordinate(uint64_t offset) const;
 
   /* Sets the grid state with the given callback function that maps the world
    space coordinate of the grid node to the data at that node.
@@ -198,15 +142,6 @@ class SparseGrid {
    @note Testing only. */
   MassAndMomentum<T> ComputeTotalMassAndMomentum() const;
 
-  /* Sort the given particle positions in place first according to their base
-   node offsets and then according to their indices in `q_WPs`.
-  @pre q_WPs != nullptr.
-  @pre q_WPs->size() < 2^31. */
-  void SortParticlePositions(std::vector<Vector3<double>>* q_WPs) const;
-
-  /* Helper for `Allocate()` that sorts particles based on their positions. */
-  void SortParticles(ParticleData<T>* particles);
-
   /* Assigning consecutive indices to all active nodes [0, num_active_nodes()).
    All non-active grid nodes (those with zero mass) gets index -1. */
   void SetNodeIndices();
@@ -215,76 +150,26 @@ class SparseGrid {
    SetNodeIndices(). */
   int num_active_nodes() const { return num_active_nodes_; }
 
- private:
-  static constexpr int kLog2Page = 12;  // 4KB page size.
-  /* The maximum grid size along a single dimension. That is even
-   though the grid is sparsely populated, the maximum grid size
-   that can ever be allocated is kMaxGridSize^3. With 1cm grid dx, that
-   corresponds to more than 10 meters in each dimension, which should be
-   enough for most manipulation simulations. */
-  static constexpr int kLog2MaxGridSize = 10;
-  static constexpr int kMaxGridSize = 1 << kLog2MaxGridSize;
-
-  /* Returns the color of the block given the page bits of the node offset.
-   According to [Setaluri et al. 2014], the blocks are arranged in a 3D space
-   using Z-order curve. Blocks with 8 blocks apart are guaranteed to be
-   non-adjacent. */
-  static int get_color(uint64_t page) {
-    int color = (page & (kNumColors - 1));
-    DRAKE_ASSERT(color >= 0 && color < 8);
-    return color;
+  /* Converts 3D coordinates to 1D indices (offset). Testing only. */
+  SpGrid<GridData<T>>::Offset CoordinateToOffset(int x, int y, int z) const {
+    return spgrid_.CoordinateToOffset(x, y, z);
   }
 
-  using Allocator = SPGrid::SPGrid_Allocator<GridData<T>, kDim, kLog2Page>;
-  /* PageMap keeps track of which blocks in the SPGrid are actually allocated.
-   */
-  using PageMap = SPGrid::SPGrid_Page_Map<kLog2Page>;
-  /* Mask helps convert from offset (1D index) to 3D index and vice versa. */
-  using Mask = typename Allocator::template Array_mask<GridData<T>>;
-  /* Array type for GridData. */
-  using Array = typename Allocator::template Array_type<GridData<T>>;
-  using ConstArray = typename Allocator::template Array_type<const GridData<T>>;
-  static constexpr int kDataBits = Mask::data_bits;
+  /* Converts 1D indices (offset) to 3D coordinates. Testing only. */
+  Vector3<int> OffsetToCoordinate(SpGrid<GridData<T>>::Offset offset) const {
+    return spgrid_.OffsetToCoordinate(offset);
+  }
 
-  static constexpr int kNumNodesInBlockX = 1 << Mask::block_xbits;
-  static constexpr int kNumNodesInBlockY = 1 << Mask::block_ybits;
-  static constexpr int kNumNodesInBlockZ = 1 << Mask::block_zbits;
+  /* Returns the SpGrid underlying this SparseGrid. */
+  const SpGrid<GridData<T>>& spgrid() const { return spgrid_; }
 
-  // TODO(xuchenhan-tri): Allow moving the maximumly allowed grid around the
-  // center of the objects so that the grid can be accommodated to the objects
-  // that are translating.
-  /* 3D coordinates in SPGrid starts at (i, j, k) = (0, 0, 0) with i, j, k
-   always non-negative. We want the grid to center around (0, 0, 0) in world
-   space so we shift the origin by
-   (kMaxGridSize/2, kMaxGridSize/2, kMaxGridSize/2)*/
-  const uint64_t origin_offset_{Mask::Linear_Offset(
-      kMaxGridSize / 2, kMaxGridSize / 2, kMaxGridSize / 2)};
-
+ private:
   /* Grid spacing (in meters). */
-  T dx_{};
-  /* SPGrid allocator. */
-  std::unique_ptr<Allocator> allocator_;
-  /* Blocks containing grid nodes that are base nodes for at least one particle.
-   */
-  std::unique_ptr<PageMap> blocks_;
-  /* Blocks containing all active grid nodes. These are the blocks that are
-   actually allocated. */
-  std::unique_ptr<PageMap> padded_blocks_;
-
-  /* Stores the difference in linear offset from a given grid node to the grid
-   node exactly one block away. For example, let `a` be
-   `block_offset_strides_[0][1][2]` and `b` be the linear offset of a grid
-   node `n`. Then, `a + b` gives the linear offset of the grid node `m` in the
-   block
-   (-1, 0, 1) relative to the block containing `n`. Both `m` and `n` reside at
-   the same relative position within their respective blocks. */
-  std::array<std::array<std::array<uint64_t, 3>, 3>, 3> block_offset_strides_;
-  /* Similar to block_offset_strides_, but instead of providing strides for
-   nodes a "block" away, provides the strides for nodes a "cell" away (i.e.
-   immediate grid neighbors). */
-  std::array<std::array<std::array<uint64_t, 3>, 3>, 3> cell_offset_strides_;
-
+  double dx_{};
   Parallelism parallelism_;
+  SpGrid<GridData<T>> spgrid_;
+  /* Number of grid nodes with non-zero mass (i.e. those that are affected by at
+   least one particle).*/
   int num_active_nodes_{0};
 };
 

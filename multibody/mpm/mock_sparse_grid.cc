@@ -9,7 +9,7 @@ template <typename T>
 Pad<GridData<T>> MockSparseGrid<T>::GetPadData(
     uint64_t center_node_offset) const {
   const Vector3<int> center_node_coordinate =
-      sparse_grid_.OffsetToCoordinate(center_node_offset);
+      spgrid_.OffsetToCoordinate(center_node_offset);
   Pad<GridData<T>> pad_data;
   for (int i = 0; i < 3; ++i) {
     const int x = center_node_coordinate.x() + i - 1;
@@ -31,7 +31,7 @@ template <typename T>
 void MockSparseGrid<T>::SetPadData(uint64_t center_node_offset,
                                    const Pad<GridData<T>>& pad_data) {
   const Vector3<int> center_node_coordinate =
-      sparse_grid_.OffsetToCoordinate(center_node_offset);
+      spgrid_.OffsetToCoordinate(center_node_offset);
   for (int i = 0; i < 3; ++i) {
     const int x = center_node_coordinate.x() + i - 1;
     for (int j = 0; j < 3; ++j) {
@@ -41,6 +41,60 @@ void MockSparseGrid<T>::SetPadData(uint64_t center_node_offset,
         const Vector3<int> node_coordinate(x, y, z);
         grid_data_[node_coordinate] = pad_data[i][j][k];
       }
+    }
+  }
+}
+
+template <typename T>
+void MockSparseGrid<T>::ExplicitVelocityUpdate(const Vector3<T>& dv) {
+  for (auto& [_, data] : grid_data_) {
+    if (data.m > 0.0) {
+      data.v /= data.m;
+      data.v += dv;
+    }
+  }
+}
+
+template <typename T>
+void MockSparseGrid<T>::SetGridData(
+    const std::function<GridData<T>(const Vector3<int>&)>& callback) {
+  for (auto& [node, data] : grid_data_) {
+    data = callback(node);
+  }
+}
+
+template <typename T>
+std::vector<std::pair<Vector3<int>, GridData<T>>>
+MockSparseGrid<T>::GetGridData() const {
+  std::vector<std::pair<Vector3<int>, GridData<T>>> result;
+  for (const auto& [node, data] : grid_data_) {
+    result.emplace_back(node, data);
+  }
+  return result;
+}
+
+template <typename T>
+MassAndMomentum<T> MockSparseGrid<T>::ComputeTotalMassAndMomentum() const {
+  MassAndMomentum<T> result;
+  for (const auto& [node, data] : grid_data_) {
+    if (data.m > 0.0) {
+      const Vector3<double> xi = dx_ * node.template cast<double>();
+      result.mass += data.m;
+      result.linear_momentum += data.m * data.v;
+      result.angular_momentum += data.m * xi.cross(data.v);
+    }
+  }
+  return result;
+}
+
+template <typename T>
+void MockSparseGrid<T>::SetNodeIndices() {
+  int node_index = 0;
+  for (auto& [node, data] : grid_data_) {
+    if (data.m > 0.0) {
+      data.index = node_index++;
+    } else {
+      data.index = -1;
     }
   }
 }

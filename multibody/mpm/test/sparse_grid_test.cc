@@ -3,11 +3,6 @@
 #include <gtest/gtest.h>
 
 #include "drake/common/test_utilities/eigen_matrix_compare.h"
-#include "drake/geometry/proximity_properties.h"
-#include "drake/multibody/plant/multibody_plant.h"
-#include "drake/multibody/plant/multibody_plant_config_functions.h"
-#include "drake/systems/framework/diagram.h"
-#include "drake/systems/framework/diagram_builder.h"
 
 namespace drake {
 namespace multibody {
@@ -15,21 +10,9 @@ namespace mpm {
 namespace internal {
 namespace {
 
-using drake::geometry::AddContactMaterial;
-using drake::multibody::MultibodyPlant;
-using drake::multibody::MultibodyPlantConfig;
 using Eigen::Vector3d;
 using Eigen::Vector3f;
 using Eigen::Vector3i;
-using geometry::FrameId;
-using geometry::GeometryInstance;
-using geometry::ProximityProperties;
-using geometry::QueryObject;
-using geometry::SceneGraph;
-using geometry::SourceId;
-using geometry::Sphere;
-using math::RigidTransformd;
-using systems::Context;
 
 GTEST_TEST(SparseGridTest, Allocate) {
   const double dx = 0.01;

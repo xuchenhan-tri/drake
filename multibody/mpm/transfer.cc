@@ -1,4 +1,5 @@
 #include "transfer.h"
+#include "sort_particles.h"
 
 #include <array>
 #include <vector>
@@ -10,6 +11,7 @@
 #endif
 
 #include "drake/common/ssize.h"
+#include "drake/math/autodiff_gradient.h"
 
 namespace drake {
 namespace multibody {
@@ -26,7 +28,7 @@ Transfer<T, U, Grid>::Transfer(T dt, Grid<U>* grid, ParticleData<U>* particles,
   if (reset_grid) {
     grid_->Allocate(particles);
   } else {
-    grid_->SortParticles(particles);
+    SortParticles(grid->spgrid(), grid->dx(), particles);
   }
   D_inverse_ = 4.0 / (grid_->dx() * grid_->dx());
   D_inverse_dt_ = D_inverse_ * dt_;

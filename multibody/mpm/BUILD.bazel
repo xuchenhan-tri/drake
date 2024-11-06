@@ -33,6 +33,41 @@ cc_library(
 )
 
 cc_library(
+    name = "spgrid",
+    srcs = [
+        "spgrid.cc",
+    ],
+    hdrs = [
+        "spgrid.h",
+    ],
+    deps = [
+        "//tools/workspace/spgrid",
+        "//common:essential",
+        ":grid_data",
+    ],
+)
+
+cc_library(
+    name = "sort_particles",
+    srcs = [
+        "sort_particles.cc",
+    ],
+    # TODO(xuchenhan-tri): Remove the hard-coded flag when we build this as a drake_cc_library.
+    copts = ["-fopenmp", "-march=native"],
+    hdrs = [
+        "sort_particles.h",
+    ],
+    linkopts = ["-fopenmp"],
+    deps = [
+        ":math",
+        ":particles",
+        ":spgrid",
+        "//common:parallelism",
+        "//tools/workspace/ips2ra_internal",
+    ],
+)
+
+cc_library(
     name = "sparse_grid",
     srcs = [
         "sparse_grid.cc",
@@ -45,16 +80,12 @@ cc_library(
     linkopts = ["-fopenmp"],
     deps = [
         ":grid_data",
+        ":spgrid",
+        ":sort_particles",
         ":math",
         ":particles",
         "//common:essential",
         "//common:parallelism",
-        "//geometry:scene_graph",
-        "//multibody/math:spatial_algebra",
-        "//multibody/tree:multibody_tree_indexes",
-        "//multibody/plant",
-        "//math:geometric_transform",
-        "//tools/workspace/spgrid",
         "//tools/workspace/ips2ra_internal",
     ],
 )
@@ -98,6 +129,7 @@ cc_library(
     deps = [
         ":particles",
         ":sparse_grid",
+        ":sort_particles",
         ":mock_sparse_grid",
         ":simd_scalar",
         "//common:essential",
@@ -290,6 +322,14 @@ drake_cc_googletest(
     copts = ["-march=native"],
     deps = [
         ":simd_scalar",
+    ],
+)
+
+drake_cc_googletest(
+    name = "spgrid_test",
+    deps = [
+        ":spgrid",
+        "//common/test_utilities:limit_malloc",
     ],
 )
 

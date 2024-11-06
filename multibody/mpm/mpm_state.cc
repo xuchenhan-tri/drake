@@ -42,7 +42,7 @@ void MpmState<T>::CalcResidual(VectorX<T>* b) {
   /* Overwrite old values with M*dv term. */
   grid_->IterateGrid([&](const GridData<T>& node) {
     const int index = node.index;
-    DRAKE_ASSERT(index >= 0 && index < b_->size());
+    DRAKE_ASSERT(index >= 0 && index < b->size());
     b->template segment<kDim>(index * kDim) =
         node.m * dv_.template segment<kDim>(index * kDim);
     node.scratch.setZero();
@@ -51,7 +51,7 @@ void MpmState<T>::CalcResidual(VectorX<T>* b) {
   particles_->IterateParticles([&](const ParticleData<T>& particles,
                                    int particle_data_index,
                                    const BsplineWeights<T>& weights,
-                                   const Pad<Vector3>& grid_x,
+                                   const Pad<Vector3<T>>& grid_x,
                                    Pad<GridData<T>>* grid_data) {
     const int p = particle_data_index;
     for (int i = 0; i < 3; ++i) {
