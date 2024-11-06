@@ -4,7 +4,7 @@
 #include <vector>
 
 #include "drake/common/eigen_types.h"
-#include "drake/multibody/mpm/particles.h"
+#include "drake/multibody/mpm/particle_data.h"
 
 namespace drake {
 namespace multibody {

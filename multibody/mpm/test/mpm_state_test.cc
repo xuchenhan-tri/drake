@@ -16,21 +16,21 @@ using multibody::contact_solvers::internal::BlockSparsityPattern;
 
 /* Adds a particle at position x0 to `particles`. All other data are arbitrary.
  */
-void AddParticle(ParticleData<double>* particles, Vector3d x0) {
-  particles->x.push_back(x0);
+void AddParticle(Particles<double>* particles, Vector3d x0) {
+  particles->data.x.push_back(x0);
   Matrix3d F0 =
       (Matrix3d() << 1.0, 0.1, 0.2, 0.3, 1.0, 0.4, 0.5, 0.6, 1.0).finished();
-  particles->F.push_back(F0);
-  particles->m.push_back(1.0);
-  particles->v.push_back(Vector3d(0.0, 0.0, 0.0));
-  particles->C.push_back(Matrix3d::Zero());
-  particles->tau_v0.push_back(Matrix3d::Zero());
+  particles->data.F.push_back(F0);
+  particles->data.m.push_back(1.0);
+  particles->data.v.push_back(Vector3d(0.0, 0.0, 0.0));
+  particles->data.C.push_back(Matrix3d::Zero());
+  particles->data.tau_v0.push_back(Matrix3d::Zero());
 }
 
 GTEST_TEST(MpmStateTest, MakeTangentMatrix) {
   const double dx = 0.01;
   SparseGrid<double> grid(dx);
-  ParticleData<double> particles;
+  Particles<double> particles;
   /* A single particle produces a fully-connected graph of 27 nodes. */
   const Vector3d x0 = Vector3d(dx, dx, dx);
   AddParticle(&particles, x0);

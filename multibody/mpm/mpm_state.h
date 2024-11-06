@@ -23,7 +23,7 @@ class MpmState {
    @param[in] grid       The grid data structure used to store the state.
    @pre dt > 0.
    @pre particles and grid are non-null. */
-  MpmState(T dt, SparseGrid<T>* grid, ParticleData<T>* particles,
+  MpmState(T dt, SparseGrid<T>* grid, Particles<T>* particles,
            Parallelism parallelism = {});
 
   int num_dofs() const { return dv_.size(); }
@@ -67,14 +67,15 @@ class MpmState {
   /* Computes the particle deformation gradient, stress, and stress
    derivatives based on grid data and dv. */
   void UpdateParticleState();
+  void UpdateParticleStateSimd();
 
   T dt_{};
   VectorX<T> dv_;
   SparseGrid<T>* grid_{};
-  ParticleData<T>* particles_{};
+  Particles<T>* particles_{};
   Parallelism parallelism_{};
-  Data data_;
   T D_inverse_{};
+  Data data_;
 };
 
 }  // namespace internal

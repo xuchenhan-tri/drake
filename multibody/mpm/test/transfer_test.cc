@@ -114,11 +114,10 @@ void CheckMomentumConservation(const MassAndMomentum<double>& grid,
 /* Verify that G2P matches with analytical results with a single particle. */
 GTEST_TEST(TransferTest, GridToParticle) {
   SparseGrid<double> grid(0.01);
-  ParticleData<double> particles;
+  Particles<double> particles;
   const Vector3d x0 = Vector3d(0.001, 0.001, 0.001);
-  AddParticle(&particles, x0);
-  grid.Allocate(&particles);
-  const Matrix3d F0 = particles.F[0];
+  AddParticle(&particles.data, x0);
+  const Matrix3d F0 = particles.data.F[0];
 
   const double dt = 0.0123;
   Transfer<double> transfer(dt, &grid, &particles);
@@ -129,15 +128,15 @@ GTEST_TEST(TransferTest, GridToParticle) {
   grid.SetGridData(constant_velocity_field);
   transfer.SerialGridToParticle();
 
-  EXPECT_TRUE(CompareMatrices(particles.v[0], vel, 1e-14));
-  EXPECT_TRUE(CompareMatrices(particles.x[0], x0 + vel * dt, 1e-14));
-  EXPECT_TRUE(CompareMatrices(particles.C[0], Matrix3d::Zero(), 1e-12));
-  EXPECT_TRUE(CompareMatrices(particles.F[0], F0, 1e-12));
+  EXPECT_TRUE(CompareMatrices(particles.data.v[0], vel, 1e-14));
+  EXPECT_TRUE(CompareMatrices(particles.data.x[0], x0 + vel * dt, 1e-14));
+  EXPECT_TRUE(CompareMatrices(particles.data.C[0], Matrix3d::Zero(), 1e-12));
+  EXPECT_TRUE(CompareMatrices(particles.data.F[0], F0, 1e-12));
 }
 
 GTEST_TEST(TransferTest, ParticleToGrid) {
   SparseGrid<double> grid(0.01);
-  ParticleData<double> particles;
+  Particles<double> particles;
 
   const double m0 = 0.42;
   const Vector3d x0 = Vector3d(0.001, 0.001, 0.001);
@@ -146,14 +145,13 @@ GTEST_TEST(TransferTest, ParticleToGrid) {
 
   const double nan = std::numeric_limits<double>::quiet_NaN();
   const Matrix3d nan_matrix = Matrix3d::Constant(nan);
-  particles.m.push_back(m0);
-  particles.x.push_back(x0);
-  particles.v.push_back(v0);
-  particles.F.push_back(nan_matrix);
-  particles.C.push_back(Matrix3d::Zero());
-  particles.tau_v0.push_back(Matrix3d::Zero());
+  particles.data.m.push_back(m0);
+  particles.data.x.push_back(x0);
+  particles.data.v.push_back(v0);
+  particles.data.F.push_back(nan_matrix);
+  particles.data.C.push_back(Matrix3d::Zero());
+  particles.data.tau_v0.push_back(Matrix3d::Zero());
 
-  grid.Allocate(&particles);
   const double dt = 0.0123;
   Transfer<double> transfer(dt, &grid, &particles);
   transfer.SerialParticleToGrid();
@@ -181,7 +179,7 @@ GTEST_TEST(TransferTest, ParticleToGrid) {
       .linear_momentum = m0 * v0,
       .angular_momentum = m0 * x0.cross(v0)};
   CheckMomentumConservation(grid.ComputeTotalMassAndMomentum(),
-                            ComputeTotalMassAndMomentum(particles, grid.dx()),
+                            ComputeTotalMassAndMomentum(particles.data, grid.dx()),
                             expected_mass_and_momentum);
 }
 
@@ -189,37 +187,37 @@ GTEST_TEST(TransferTest, ParticleToGrid) {
  particle and more than one active block in the sparse grid. */
 GTEST_TEST(TransferTest, MomentumConservation) {
   SparseGrid<double> grid(0.01);
-  ParticleData<double> particles;
+  Particles<double> particles;
   /* Sample 3 particles with 2 in the same cell and the other in a separate
    page. */
   const Vector3d x0 = Vector3d(0.001, 0.002, 0.003);
   const Vector3d x1 = Vector3d(-0.001, 0.002, 0.003);
   const Vector3d x2 = Vector3d(1.011, 0.002, 1.013);
-  AddParticle(&particles, x0);
-  AddParticle(&particles, x1);
-  AddParticle(&particles, x2);
+  AddParticle(&particles.data, x0);
+  AddParticle(&particles.data, x1);
+  AddParticle(&particles.data, x2);
 
   const MassAndMomentum<double> expected =
-      ComputeTotalMassAndMomentum(particles, grid.dx());
+      ComputeTotalMassAndMomentum(particles.data, grid.dx());
 
   const double dt = 0.01;
   Transfer<double> transfer(dt, &grid, &particles);
   transfer.SerialParticleToGrid();
   grid.ExplicitVelocityUpdate(/* dv = */ Vector3d::Zero());
   CheckMomentumConservation(grid.ComputeTotalMassAndMomentum(),
-                            ComputeTotalMassAndMomentum(particles, grid.dx()),
+                            ComputeTotalMassAndMomentum(particles.data, grid.dx()),
                             expected);
 
   transfer.SerialGridToParticle();
   CheckMomentumConservation(grid.ComputeTotalMassAndMomentum(),
-                            ComputeTotalMassAndMomentum(particles, grid.dx()),
+                            ComputeTotalMassAndMomentum(particles.data, grid.dx()),
                             expected);
 }
 
 /* Verify the variants of all 4 P2G and 4 G2P give the same results. */
 GTEST_TEST(TransferTest, Parity) {
   const double dx = 0.01;
-  ParticleData<double> particles;
+  Particles<double> particles;
   const int num_nodes_per_dim = 3;
   const int particles_per_cell = 2;
   for (int i = 0; i < num_nodes_per_dim; ++i) {
@@ -231,55 +229,34 @@ GTEST_TEST(TransferTest, Parity) {
               base_node + static_cast<double>(p) * dx /
                               (static_cast<double>(particles_per_cell) + 1.0) *
                               Vector3d::Ones();
-          AddParticle(&particles, x);
+          AddParticle(&particles.data, x);
         }
       }
     }
   }
 
-  ParticleData particles_simd = particles;
-  ParticleData particles_parallel = particles;
-  ParticleData particles_parallel_simd = particles;
+  Particles particles_parallel_simd = particles;
 
   SparseGrid<double> grid(dx);
-  SparseGrid<double> grid_simd(dx);
-  SparseGrid<double> grid_parallel(dx);
   SparseGrid<double> grid_parallel_simd(dx);
-
-  grid.Allocate(&particles);
-  grid_simd.Allocate(&particles);
-  grid_parallel.Allocate(&particles);
-  grid_parallel_simd.Allocate(&particles);
 
   const double dt = 0.00123;
   Transfer<double> transfer(dt, &grid, &particles);
-  Transfer<double> transfer_simd(dt, &grid_simd, &particles_simd);
-  Transfer<double> transfer_parallel(dt, &grid_parallel, &particles_parallel);
   Transfer<double> transfer_parallel_simd(dt, &grid_parallel_simd,
                                           &particles_parallel_simd);
 
   transfer.SerialParticleToGrid();
-  transfer_simd.SerialSimdParticleToGrid();
-  transfer_parallel.ParallelParticleToGrid(Parallelism(2));
   transfer_parallel_simd.ParallelSimdParticleToGrid(Parallelism(2));
 
-  CheckGridData(grid.GetGridData(), grid_simd.GetGridData());
-  CheckGridData(grid.GetGridData(), grid_parallel.GetGridData());
   CheckGridData(grid.GetGridData(), grid_parallel_simd.GetGridData());
 
   grid.ExplicitVelocityUpdate(/* dv = */ Vector3d::Zero());
-  grid_simd.ExplicitVelocityUpdate(/* dv = */ Vector3d::Zero());
-  grid_parallel.ExplicitVelocityUpdate(/* dv = */ Vector3d::Zero());
   grid_parallel_simd.ExplicitVelocityUpdate(/* dv = */ Vector3d::Zero());
 
   transfer.SerialGridToParticle();
-  transfer_simd.SerialSimdGridToParticle();
-  transfer_parallel.ParallelGridToParticle(Parallelism(2));
   transfer_parallel_simd.ParallelSimdGridToParticle(Parallelism(2));
 
-  CheckParticleData(particles, particles_simd);
-  CheckParticleData(particles, particles_parallel);
-  CheckParticleData(particles, particles_parallel_simd);
+  CheckParticleData(particles.data, particles_parallel_simd.data);
 }
 
 }  // namespace

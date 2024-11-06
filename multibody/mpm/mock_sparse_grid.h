@@ -5,6 +5,7 @@
 #include "sparse_grid.h"
 
 #include "drake/common/eigen_types.h"
+#include "drake/math/autodiff_gradient.h"
 #include "drake/multibody/mpm/grid_data.h"
 
 namespace drake {
@@ -21,6 +22,8 @@ class MockSparseGrid {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(MockSparseGrid);
 
+  using NodeType = Vector3<double>;
+
   explicit MockSparseGrid(double dx) : dx_(dx) {}
 
   std::unique_ptr<MockSparseGrid<T>> Clone() const {
@@ -30,15 +33,25 @@ class MockSparseGrid {
     return clone;
   }
 
-  void Allocate(ParticleData<T>* particles) { grid_data_.clear(); }
+  void Allocate(const ParticleSorter& particles) {
+    spgrid_.Allocate(particles.GetBlockOffsets());
+    grid_data_.clear();
+  }
 
   double dx() const { return dx_; }
 
   int num_blocks() const { return spgrid_.num_blocks(); }
 
-  Pad<Vector3<double>> GetPadNodes(const Vector3<double>& q_WP) const {
+  Pad<Vector3<double>> GetPadNodes(const Vector3<T>& q_WP) const {
+    const auto& q_WP_double = [&]() -> Vector3<double> {
+      if constexpr (std::is_same_v<T, double>) {
+        return q_WP;
+      } else {
+        return math::DiscardZeroGradient(q_WP);
+      }
+    }();
     Pad<Vector3<double>> result;
-    const Vector3<int> base_node = ComputeBaseNode<double>(q_WP / dx_);
+    const Vector3<int> base_node = ComputeBaseNode<double>(q_WP_double / dx_);
     for (int i = 0; i < 3; ++i) {
       for (int j = 0; j < 3; ++j) {
         for (int k = 0; k < 3; ++k) {
@@ -67,6 +80,13 @@ class MockSparseGrid {
   void SetNodeIndices();
 
   const SpGrid<GridData<double>>& spgrid() const { return spgrid_; }
+
+  template <typename Func>
+  void IterateGrid(Func&& func) {
+    for (auto& [_, data] : grid_data_) {
+      std::forward<Func>(func)(&data);
+    }
+  }
 
  private:
   double dx_{};

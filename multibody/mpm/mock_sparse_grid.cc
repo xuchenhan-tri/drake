@@ -47,12 +47,12 @@ void MockSparseGrid<T>::SetPadData(uint64_t center_node_offset,
 
 template <typename T>
 void MockSparseGrid<T>::ExplicitVelocityUpdate(const Vector3<T>& dv) {
-  for (auto& [_, data] : grid_data_) {
-    if (data.m > 0.0) {
-      data.v /= data.m;
-      data.v += dv;
+  IterateGrid([&](GridData<T>* data) {
+    if (data->m > 0.0) {
+      data->v /= data->m;
+      data->v += dv;
     }
-  }
+  });
 }
 
 template <typename T>

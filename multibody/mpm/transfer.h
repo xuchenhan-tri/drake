@@ -1,7 +1,7 @@
 #pragma once
 
-#include "sparse_grid.h"
 #include "particles.h"
+#include "sparse_grid.h"
 
 #include "drake/common/parallelism.h"
 
@@ -24,7 +24,7 @@ namespace internal {
  In ACM SIGGRAPH 2016 courses.
  @tparam <T, U> = <double, double> or <float, float> or <double, AutoDiffXd>
  @tparam Grid is either SparseGrid or MockSparseGrid (for testing). */
-template <typename T, typename U = T, template <typename> class Grid = SparseGrid>
+template <typename T, template <typename> class Grid = SparseGrid>
 class Transfer {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(Transfer);
@@ -34,26 +34,26 @@ class Transfer {
    The constructor prepares the grid for transfer by sorting particle indices
    and allocating memory for grid data.
    @pre grid and particles are not null. */
-  Transfer(T dt, Grid<U>* grid, ParticleData<U>* particles,
+  Transfer(T dt, Grid<T>* grid, Particles<T>* particles,
            bool reset_grid = true);
-  Transfer(T dt, Grid<U>* grid, ContactParticleData<U>* particles);
+  Transfer(T dt, Grid<T>* grid, ContactParticleData<T>* particles);
 
-  const Grid<U>& grid() const {
+  const Grid<T>& grid() const {
     DRAKE_DEMAND(grid_ != nullptr);
     return *grid_;
   }
 
-  const ParticleData<U>& particles() const {
+  const Particles<T>& particles() const {
     DRAKE_DEMAND(particles_ != nullptr);
     return *particles_;
   }
 
-  Grid<U>& mutable_grid() {
+  Grid<T>& mutable_grid() {
     DRAKE_DEMAND(grid_ != nullptr);
     return *grid_;
   }
 
-  ParticleData<U>& mutable_particles() {
+  Particles<T>& mutable_particles() {
     DRAKE_DEMAND(particles_ != nullptr);
     return *particles_;
   }
@@ -72,8 +72,6 @@ class Transfer {
   /* Particle to grid transfer (P2G). After the call to P2G, the grid store the
    mass and momentum transfered from the particles using APIC. */
   void SerialParticleToGrid();
-  void SerialSimdParticleToGrid();
-  void ParallelParticleToGrid(Parallelism parallelize);
   void ParallelSimdParticleToGrid(Parallelism parallelize);
 
   /* Grid to particle transfer (G2P). After the call to G2P, the particles store
@@ -81,17 +79,15 @@ class Transfer {
    @pre the grid stores mass and velocity (not momentum). Hence, the velocity
    from the grid needs to be processed after P2G and before G2P. */
   void SerialGridToParticle();
-  void SerialSimdGridToParticle();
-  void ParallelGridToParticle(Parallelism parallelize);
   void ParallelSimdGridToParticle(Parallelism parallelize);
 
   void ContactP2G2P();
 
  private:
   T dt_{0.0};
-  Grid<U>* grid_{};
-  ParticleData<U>* particles_{};
-  ContactParticleData<U>* contact_particles_{};
+  Grid<T>* grid_{};
+  Particles<T>* particles_{};
+  ContactParticleData<T>* contact_particles_{};
   /* The D inverse matrix in computing the affine matrix. See page 42 in the MPM
    course notes referenced in the class documentation. */
   T D_inverse_{0.0};

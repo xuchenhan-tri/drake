@@ -3,7 +3,7 @@
 #include <array>
 
 #include "drake/common/eigen_types.h"
-#include "drake/math/autodiff.h"
+#include "drake/math/autodiff_gradient.h"
 #include "drake/multibody/mpm/simd_scalar.h"
 
 namespace drake {
@@ -68,7 +68,7 @@ has 3x3x3=27 grid nodes in its support and the weights can be queried with the
 template <typename T>
 struct BsplineWeights {
   DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(BsplineWeights);
-
+  
   /* Constructs the BsplineWeights between a particle with world frame positions
    x and the grid nodes in its support in the cartesian grid with grid spacing
    dx (meter).
@@ -111,6 +111,18 @@ struct BsplineWeights {
   static constexpr int kDim = 3;
   std::array<Vector3<T>, kDim> data_;
 };
+
+template <typename T, typename U>
+BsplineWeights<T> MakeBsplineWeights(const Vector3<U>& x, T dx) {
+  const auto& x_T = [&]() -> Vector3<T> {
+    if constexpr (std::is_same_v<T, U>) {
+      return x;
+    } else {
+      return math::DiscardZeroGradient(x);
+    }
+  }();
+  return BsplineWeights<T>(x_T, dx);
+}
 
 }  // namespace internal
 }  // namespace mpm

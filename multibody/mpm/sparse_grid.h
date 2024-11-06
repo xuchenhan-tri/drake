@@ -12,7 +12,7 @@
 #include "drake/common/eigen_types.h"
 #include "drake/common/parallelism.h"
 #include "drake/multibody/mpm/grid_data.h"
-#include "drake/multibody/mpm/particles.h"
+#include "particles.h"
 
 namespace drake {
 namespace multibody {
@@ -72,6 +72,8 @@ template <typename T>
 class SparseGrid {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(SparseGrid);
+  
+  using NodeType = Vector3<T>;
 
   /* Constructs a SparseGrid with grid spacing `dx` in meters. */
   explicit SparseGrid(double dx, Parallelism parallelism = false);
@@ -89,7 +91,7 @@ class SparseGrid {
    As a side effect, this function also orders the particles based on the
    "offset" of their base nodes. In the process, it builds `sentinel_particles`
    and `data_indices`. */
-  void Allocate(ParticleData<T>* particles);
+  void Allocate(const ParticleSorter& particles);
 
   /* Grid spacing in meters. */
   T dx() const { return dx_; }
@@ -162,6 +164,11 @@ class SparseGrid {
 
   /* Returns the SpGrid underlying this SparseGrid. */
   const SpGrid<GridData<T>>& spgrid() const { return spgrid_; }
+
+  template <typename Func>
+  void IterateGrid(Func&& func) {
+    spgrid_.IterateGrid(std::forward<Func>(func));
+  }
 
  private:
   /* Grid spacing (in meters). */

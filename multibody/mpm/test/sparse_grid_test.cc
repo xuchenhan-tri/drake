@@ -19,21 +19,22 @@ GTEST_TEST(SparseGridTest, Allocate) {
   SparseGrid<double> grid(dx);
   const Vector3d q_WP = Vector3d(1.001, 0.001, 0.001);
   std::vector<Vector3d> q_WPs = {q_WP};
-  ParticleData<double> particles;
-  particles.x = q_WPs;
-
-  grid.Allocate(&particles);
+  Particles<double> particles;
+  particles.data.x = q_WPs;
+  particles.Sort(grid);
+  grid.Allocate(particles.sorter);
 
   EXPECT_EQ(grid.dx(), 0.01);
 
   const std::vector<int> expected_sentinel_particles = {0, 1};
-  EXPECT_EQ(particles.sentinel_particles, expected_sentinel_particles);
+  EXPECT_EQ(particles.sorter.sentinel_particles(), expected_sentinel_particles);
 
-  const std::vector<int>& data_indices = particles.data_indices;
+  const std::vector<int>& data_indices = particles.sorter.data_indices();
   ASSERT_EQ(data_indices.size(), 1);
   EXPECT_EQ(data_indices[0], 0);
 
-  const std::vector<uint64_t>& base_node_offsets = particles.base_node_offsets;
+  const std::vector<uint64_t>& base_node_offsets =
+      particles.sorter.base_node_offsets();
   ASSERT_EQ(base_node_offsets.size(), 1);
   EXPECT_EQ(base_node_offsets[0], grid.CoordinateToOffset(100, 0, 0));
 
@@ -60,9 +61,10 @@ GTEST_TEST(SparseGrid, Clone) {
       }
     }
   }
-  ParticleData<double> particles;
-  particles.x = q_WPs;
-  grid.Allocate(&particles);
+  Particles<double> particles;
+  particles.data.x = q_WPs;
+  particles.Sort(grid);
+  grid.Allocate(particles.sorter);
 
   /* Set an arbitrary velocity field (1, 0, 1). */
   auto set_velocity_field = [](const Vector3i& coordinate) {
@@ -103,11 +105,13 @@ GTEST_TEST(SparseGridTest, BaseNodeOffsets) {
   const Vector3d q_WP3 = Vector3d(0.04, 0.0, 0.0);
   std::vector<Vector3d> q_WPs = {q_WP0, q_WP1, q_WP2, q_WP3};
 
-  ParticleData<double> particles;
-  particles.x = q_WPs;
-  grid.Allocate(&particles);
+  Particles<double> particles;
+  particles.data.x = q_WPs;
+  particles.Sort(grid);
+  grid.Allocate(particles.sorter);
 
-  const std::vector<uint64_t>& base_node_offsets = particles.base_node_offsets;
+  const std::vector<uint64_t>& base_node_offsets =
+      particles.sorter.base_node_offsets();
   ASSERT_EQ(base_node_offsets.size(), 4);
   EXPECT_EQ(base_node_offsets[0], grid.CoordinateToOffset(0, 0, 0));
   EXPECT_EQ(base_node_offsets[1], grid.CoordinateToOffset(0, 0, 0));
@@ -129,16 +133,17 @@ GTEST_TEST(SparseGridTest, SentinelParticles) {
   const Vector3d q_WP3 = Vector3d(0.04, 0.0, 0.0);
   std::vector<Vector3d> q_WPs = {q_WP0, q_WP1, q_WP2, q_WP3};
 
-  ParticleData<double> particles;
-  particles.x = q_WPs;
-  grid.Allocate(&particles);
+  Particles<double> particles;
+  particles.data.x = q_WPs;
+  particles.Sort(grid);
+  grid.Allocate(particles.sorter);
 
   EXPECT_EQ(grid.dx(), 0.01);
 
   /* Sentinel particles are particles 0 and 3, marking boundary of new blocks.
    The last entry is the number of particles. */
   const std::vector<int> expected_sentinel_particles = {0, 3, 4};
-  EXPECT_EQ(particles.sentinel_particles, expected_sentinel_particles);
+  EXPECT_EQ(particles.sorter.sentinel_particles(), expected_sentinel_particles);
 
   /* Particles are sorted first based on their base node offsets:
 
@@ -146,7 +151,7 @@ GTEST_TEST(SparseGridTest, SentinelParticles) {
 
     and then on original indices: 0 < 1.*/
   const std::vector<int> expected_data_indices = {0, 1, 2, 3};
-  EXPECT_EQ(particles.data_indices, expected_data_indices);
+  EXPECT_EQ(particles.sorter.data_indices(), expected_data_indices);
 }
 
 GTEST_TEST(SparseGridTest, DataIndices) {
@@ -159,20 +164,21 @@ GTEST_TEST(SparseGridTest, DataIndices) {
   const Vector3d q_WP3 = Vector3d(0.001, 0.001, 0.001);
   std::vector<Vector3d> q_WPs = {q_WP0, q_WP1, q_WP2, q_WP3};
 
-  ParticleData<double> particles;
-  particles.x = q_WPs;
-  grid.Allocate(&particles);
+  Particles<double> particles;
+  particles.data.x = q_WPs;
+  particles.Sort(grid);
+  grid.Allocate(particles.sorter);
 
   EXPECT_EQ(grid.dx(), 0.01);
 
   /* The sentinel particles remain the same. */
   const std::vector<int> expected_sentinel_particles = {0, 3, 4};
-  EXPECT_EQ(particles.sentinel_particles, expected_sentinel_particles);
+  EXPECT_EQ(particles.sorter.sentinel_particles(), expected_sentinel_particles);
 
   /* But the data indices are different.
     base_node(1) == base_node(3) < base_node(2) < base_node(0). */
   const std::vector<int> expected_data_indices = {1, 3, 2, 0};
-  EXPECT_EQ(particles.data_indices, expected_data_indices);
+  EXPECT_EQ(particles.sorter.data_indices(), expected_data_indices);
 }
 
 GTEST_TEST(SparseGridTest, GetPadNodes) {
@@ -200,11 +206,13 @@ GTEST_TEST(SparseGridTest, PadData) {
   const Vector3d q_WP = Vector3d(0.021, 0.031, -0.001);
   std::vector<Vector3d> q_WPs = {q_WP};
 
-  ParticleData<double> particles;
-  particles.x = q_WPs;
-  grid.Allocate(&particles);
+  Particles<double> particles;
+  particles.data.x = q_WPs;
+  particles.Sort(grid);
+  grid.Allocate(particles.sorter);
 
-  const std::vector<uint64_t>& base_node_offsets = particles.base_node_offsets;
+  const std::vector<uint64_t>& base_node_offsets =
+      particles.sorter.base_node_offsets();
   ASSERT_EQ(base_node_offsets.size(), 1);
   const uint64_t base_node_offset = base_node_offsets[0];
 
@@ -255,11 +263,12 @@ GTEST_TEST(SparseGridTest, CoordinateToOffset) {
   /* Base node is (2, 3, 0). */
   const Vector3d q_WP = Vector3d(0.021, 0.031, -0.001);
   std::vector<Vector3d> q_WPs = {q_WP};
-  ParticleData<double> particles;
-  particles.x = q_WPs;
-  grid.Allocate(&particles);
+  Particles<double> particles;
+  particles.data.x = q_WPs;
+  particles.Sort(grid);
+  grid.Allocate(particles.sorter);
 
-  const uint64_t base_node_offset = particles.base_node_offsets[0];
+  const uint64_t base_node_offset = particles.sorter.base_node_offsets()[0];
   EXPECT_EQ(grid.CoordinateToOffset(2, 3, 0), base_node_offset);
   EXPECT_EQ(grid.OffsetToCoordinate(base_node_offset), Vector3i(2, 3, 0));
 }
@@ -269,9 +278,10 @@ GTEST_TEST(SparseGridTest, ExplicitVelocityUpdate) {
   SparseGrid<double> grid(dx);
   const Vector3d q_WP = Vector3d(0.001, 0.001, 0.001);
   std::vector<Vector3d> q_WPs = {q_WP};
-  ParticleData<double> particles;
-  particles.x = q_WPs;
-  grid.Allocate(&particles);
+  Particles<double> particles;
+  particles.data.x = q_WPs;
+  particles.Sort(grid);
+  grid.Allocate(particles.sorter);
 
   auto set_arbitrary_grid_data = [](const Vector3i& node) {
     GridData<double> result;
@@ -307,9 +317,10 @@ GTEST_TEST(SparseGridTest, ComputeTotalMassAndMomentum) {
   SparseGrid<double> grid(dx);
   const Vector3d q_WP = Vector3d(0.001, 0.001, 0.001);
   std::vector<Vector3d> q_WPs = {q_WP};
-  ParticleData<double> particles;
-  particles.x = q_WPs;
-  grid.Allocate(&particles);
+  Particles<double> particles;
+  particles.data.x = q_WPs;
+  particles.Sort(grid);
+  grid.Allocate(particles.sorter);
 
   const double mass = 1.2;
   const Vector3d velocity = Vector3d(1, 2, 3);
@@ -354,17 +365,18 @@ GTEST_TEST(SparseGridTest, ColoredBlocks) {
       }
     }
   }
-  ParticleData<float> particles;
-  particles.x = q_WPs;
-  grid.Allocate(&particles);
+  Particles<float> particles;
+  particles.data.x = q_WPs;
+  particles.Sort(grid);
+  grid.Allocate(particles.sorter);
 
-  const auto& sentinel_particles = particles.sentinel_particles;
+  const auto& sentinel_particles = particles.sorter.sentinel_particles();
   ASSERT_EQ(sentinel_particles.size(), 9);
 
   const std::array<std::vector<int>, 8> expected_blocks = {
       {{0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}}};
 
-  EXPECT_EQ(particles.colored_blocks, expected_blocks);
+  EXPECT_EQ(particles.sorter.colored_blocks(), expected_blocks);
 }
 
 }  // namespace

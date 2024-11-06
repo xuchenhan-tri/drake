@@ -190,6 +190,7 @@ class SpGrid {
     }
   }
 
+  // TODO(xuchenhan-tri): Consider adding a parallel version of IterateGrid.
   /* Func is a function that can be casted to std::function<void(GridData*)>.
    */
   template <typename Func>

@@ -48,6 +48,27 @@ cc_library(
 )
 
 cc_library(
+    name = "particle_sorter",
+    srcs = [
+        "particle_sorter.cc",
+    ],
+    # TODO(xuchenhan-tri): Remove the hard-coded flag when we build this as a drake_cc_library.
+    copts = ["-fopenmp", "-march=native"],
+    hdrs = [
+        "particle_sorter.h",
+    ],
+    linkopts = ["-fopenmp"],
+    deps = [
+        ":math",
+        ":spgrid",
+        ":particle_data",
+        "//common:parallelism",
+        "//math:gradient",
+        "//tools/workspace/ips2ra_internal",
+    ],
+)
+
+cc_library(
     name = "sort_particles",
     srcs = [
         "sort_particles.cc",
@@ -60,7 +81,7 @@ cc_library(
     linkopts = ["-fopenmp"],
     deps = [
         ":math",
-        ":particles",
+        ":particle_data",
         ":spgrid",
         "//common:parallelism",
         "//tools/workspace/ips2ra_internal",
@@ -80,20 +101,31 @@ cc_library(
     linkopts = ["-fopenmp"],
     deps = [
         ":grid_data",
-        ":spgrid",
-        ":sort_particles",
-        ":math",
         ":particles",
+        ":spgrid",
+        ":math",
         "//common:essential",
         "//common:parallelism",
         "//tools/workspace/ips2ra_internal",
     ],
 )
 
-drake_cc_library(
+cc_library(
     name = "particles",
     hdrs = [
         "particles.h",
+    ],
+    deps = [
+        ":particle_data",
+        ":particle_sorter",
+        "//common:essential",
+    ],
+)
+
+drake_cc_library(
+    name = "particle_data",
+    hdrs = [
+        "particle_data.h",
     ],
     deps = [
         ":math",
@@ -111,7 +143,7 @@ drake_cc_library(
     deps = [
         ":simd_scalar",
         "//common:essential",
-        "//math:autodiff",
+        "//math:gradient",
     ],
 )
 
@@ -195,7 +227,8 @@ cc_library(
     ],
     copts = ["-march=native", "-fopenmp"],
     deps = [
-        ":particles",
+        ":particle_data",
+        ":particle_sorter",
         ":poisson_disk",
         ":simd_scalar",
         ":sparse_grid",
@@ -238,7 +271,7 @@ drake_cc_library(
     deps = [
         "//common:essential",
         "//common:find_resource",
-        ":particles",
+        ":particle_data",
         "@partio",
     ],
 )

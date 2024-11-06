@@ -2,7 +2,7 @@
 
 #include <utility>
 
-#include "sort_particles.h"
+#include "drake/common/ssize.h"
 
 namespace drake {
 namespace multibody {
@@ -16,17 +16,8 @@ SparseGrid<T>::SparseGrid(double dx, Parallelism parallelism)
 }
 
 template <typename T>
-void SparseGrid<T>::Allocate(ParticleData<T>* particles) {
-  DRAKE_DEMAND(particles != nullptr);
-  SortParticles<T>(spgrid_, dx_, particles, parallelism_);
-  const auto& sentinel_particles = particles->sentinel_particles;
-  const auto& base_node_offsets = particles->base_node_offsets;
-  std::vector<uint64_t> offsets(ssize(sentinel_particles) - 1);
-  /* Touch all blocks that contain particles. */
-  for (int i = 0; i < ssize(sentinel_particles) - 1; ++i) {
-    offsets[i] = base_node_offsets[sentinel_particles[i]];
-  }
-  spgrid_.Allocate(offsets);
+void SparseGrid<T>::Allocate(const ParticleSorter& particles) {
+  spgrid_.Allocate(particles.GetBlockOffsets());
 }
 
 template <typename T>
