@@ -1,5 +1,4 @@
 #pragma once
-
 #include <vector>
 
 #include "drake/common/eigen_types.h"
@@ -14,7 +13,8 @@ namespace internal {
 @pre q_WPs != nullptr.
 @pre q_WPs->size() < 2^31. */
 template <typename T, typename SpGrid>
-void SortParticlePositions(std::vector<Vector3<double>>* q_WPs, T dx);
+void SortParticlePositions(const SpGrid& spgrid,
+                           std::vector<Vector3<T>>* q_WPs, T dx);
 
 }  // namespace internal
 }  // namespace mpm

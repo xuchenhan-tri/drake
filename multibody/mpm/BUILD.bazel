@@ -237,7 +237,8 @@ cc_library(
         "//common:parallelism",
         "//geometry",
         "//math:geometric_transform",
-        "//multibody/plant:contact_properties",
+        "//multibody/math:spatial_algebra",
+        "//multibody/plant",
     ],
 )
 
@@ -330,6 +331,7 @@ drake_cc_googletest(
     ],
     deps = [
         ":mpm_state",
+        "//common/test_utilities:eigen_matrix_compare",
     ],
 )
 

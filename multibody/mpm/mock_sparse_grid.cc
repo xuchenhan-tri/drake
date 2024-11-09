@@ -19,8 +19,9 @@ Pad<GridData<T>> MockSparseGrid<T>::GetPadData(
         const int z = center_node_coordinate.z() + k - 1;
         const Vector3<int> node_coordinate(x, y, z);
         const auto it = grid_data_.find(node_coordinate);
-        DRAKE_DEMAND(it != grid_data_.end());
-        pad_data[i][j][k] = it->second;
+        if (it != grid_data_.end()) {
+          pad_data[i][j][k] = it->second;
+        };
       }
     }
   }

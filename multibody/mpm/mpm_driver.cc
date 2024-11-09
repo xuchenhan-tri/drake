@@ -3,6 +3,7 @@
 #include <iostream>
 #include <variant>
 
+#include "sort_particles.h"
 #include "transfer.h"
 
 #include "drake/common/ssize.h"
@@ -103,39 +104,45 @@ void MpmDriver<T>::SampleParticles(
   /* Reject points that fall outside of the shape. */
   std::vector<Vector3<double>> q_GPs =
       FilterPoints(q_GP_candidates, geometry_instance->shape());
-  grid_->SortParticlePositions(&q_GPs);
+  std::vector<Vector3<T>> q_GPs_T;
+  q_GPs_T.reserve(q_GPs.size());
+  for (const Vector3<double>& q_GP : q_GPs) {
+    q_GPs_T.push_back(q_GP.cast<T>());
+  }
+  SortParticlePositions(grid_->spgrid(), &q_GPs_T, dx_);
   const int num_particles = ssize(q_GPs);
   const T mass_density = config.mass_density();
   const double total_volume = geometry::CalcVolume(geometry_instance->shape());
   const T volume_per_particle = total_volume / num_particles;
   const RigidTransform<double>& X_WG = geometry_instance->pose();
-  const int num_existing_particles = ssize(particles_.m);
+  auto& particle_data = particles_.data;
+  const int num_existing_particles = ssize(particle_data.m);
   ConstitutiveModelVariant<T> constitutive_model =
       MakeConstitutiveModel<T>(config);
   for (int i = 0; i < num_particles; ++i) {
     const Vector3<double> q_WP = X_WG * q_GPs[i];
-    particles_.m.push_back(mass_density * volume_per_particle);
-    particles_.x.push_back(q_WP.cast<T>());
-    particles_.v.push_back({0, 0, 0});
-    particles_.F.push_back(Matrix3<T>::Identity());
-    particles_.tau_v0.push_back(Matrix3<T>::Zero());
-    particles_.C.push_back(Matrix3<T>::Zero());
-    particles_.volume.push_back(volume_per_particle);
+    particle_data.m.push_back(mass_density * volume_per_particle);
+    particle_data.x.push_back(q_WP.cast<T>());
+    particle_data.v.push_back({0, 0, 0});
+    particle_data.F.push_back(Matrix3<T>::Identity());
+    particle_data.tau_v0.push_back(Matrix3<T>::Zero());
+    particle_data.C.push_back(Matrix3<T>::Zero());
+    particle_data.volume.push_back(volume_per_particle);
     std::visit(
-        [this](auto& model) {
-          particles_.strain_data.push_back(model.MakeDefaultData());
+        [&, this](auto& model) {
+          particle_data.strain_data.push_back(model.MakeDefaultData());
         },
         constitutive_model);
   }
-  particles_.constitutive_models.push_back(constitutive_model);
-  particles_.materials.push_back(
+  particle_data.constitutive_models.push_back(constitutive_model);
+  particle_data.materials.push_back(
       {num_existing_particles, num_existing_particles + num_particles});
 }
 
 template <typename T>
 void MpmDriver<T>::AdvanceOneTimeStep() {
   for (int i = 0; i < num_subteps_; ++i) {
-    UpdateParticleStress();
+    particles_.data.UpdateStress(/*apply plasticity*/ true);
     // Particle to grid transfer.
     Transfer<T> transfer(substep_dt_, grid_.get_mutable(), &particles_);
     transfer.ParallelSimdParticleToGrid(parallelism_);
@@ -163,10 +170,10 @@ void MpmDriver<T>::AdvanceOneTimeStep(
     force.F_Bq_W.SetZero();
   }
   for (int i = 0; i < num_subteps_; ++i) {
-    UpdateParticleStress();
+    particles_.data.UpdateStress(/*apply plasticity*/ true);
     /* Update particle's contact (and friction) momentum and accumulate the
      opposite momentum in rigid_forces_. */
-    for (auto& v : particles_.v) {
+    for (auto& v : particles_.data.v) {
       v += gravity_.template cast<T>() * substep_dt_;
     }
     const std::vector<ContactPair> contact_pairs = CalcContactPairs(
@@ -198,8 +205,9 @@ std::vector<ContactPair> MpmDriver<T>::CalcContactPairs(
   std::vector<ContactPair> contact_pairs;
   int contact_particle_index = 0;
   int constraint_index = 0;
-  for (int p = 0; p < ssize(particles_.m); ++p) {
-    const Vector3<double>& p_WP = particles_.x[p].template cast<double>();
+  const auto& particle_data = particles_.data;
+  for (int p = 0; p < ssize(particle_data.m); ++p) {
+    const Vector3<double>& p_WP = particle_data.x[p].template cast<double>();
     // TODO(xuchenhan-tri): Consider building a constraint for particles that
     // are within a margin of the rigid body.
     const std::vector<SignedDistanceToPoint<double>>& signed_distances =
@@ -249,21 +257,21 @@ std::vector<ContactPair> MpmDriver<T>::CalcContactPairs(
 template <typename T>
 double MpmDriver<T>::ApplyImpulse(
     const std::vector<ContactPair>& contact_pairs,
-    const ContactForceSolver<double>& solver, ParticleData<T>* particles,
+    const ContactForceSolver<double>& solver, ParticleData<T>* particle_data,
     std::vector<Vector3<double>>* impulses) const {
-  DRAKE_DEMAND(particles != nullptr);
+  DRAKE_DEMAND(particle_data != nullptr);
   DRAKE_DEMAND(impulses != nullptr);
   DRAKE_DEMAND(contact_pairs.size() == impulses->size());
-  for (Vector3<T>& f : particles->f) {
+  for (Vector3<T>& f : particle_data->f) {
     f.setZero();
   }
   double impulse_error = 0.0;
   for (const ContactPair& pair : contact_pairs) {
     const int p = pair.contact_particle_index;
     const int c = pair.constraint_index;
-    const Vector3<double>& vp = particles->v[p].template cast<double>();
-    const double volume = particles->volume[p];
-    const double mp = particles->m[p];
+    const Vector3<double>& vp = particle_data->v[p].template cast<double>();
+    const double volume = particle_data->volume[p];
+    const double mp = particle_data->m[p];
     const Vector3<double> vc = vp - pair.rigid_velocity;
     const Vector3<double>& nhat_W = pair.nhat_W;
     const double vn = vc.dot(nhat_W);
@@ -286,33 +294,34 @@ double MpmDriver<T>::ApplyImpulse(
     const Vector3<double> df = new_impulse - old_impulse;
     impulse_error += df.norm() / (old_impulse.norm() + 1e-9);
     (*impulses)[c] = new_impulse;
-    particles->f[p] += df.template cast<T>();
+    particle_data->f[p] += df.template cast<T>();
   }
   return (impulse_error / contact_pairs.size());
 }
 
 template <typename T>
-ParticleData<T> MpmDriver<T>::MakeContactParticles(
-    const ParticleData<T>& all_particles,
+Particles<T> MpmDriver<T>::MakeContactParticles(
+    const Particles<T>& all_particles,
     const std::vector<ContactPair>& contact_pairs) const {
   int num_contact_particles = 0;
   for (const ContactPair& pair : contact_pairs) {
     const int c = pair.contact_particle_index;
     num_contact_particles = std::max(num_contact_particles, c + 1);
   }
-  ParticleData<T> contact_particles;
-  contact_particles.m.resize(num_contact_particles);
-  contact_particles.x.resize(num_contact_particles);
-  contact_particles.v.resize(num_contact_particles);
-  contact_particles.volume.resize(num_contact_particles);
-  contact_particles.f.resize(num_contact_particles);
+  Particles<T> contact_particles;
+  auto& contact_particle_data = contact_particles.data;
+  contact_particle_data.m.resize(num_contact_particles);
+  contact_particle_data.x.resize(num_contact_particles);
+  contact_particle_data.v.resize(num_contact_particles);
+  contact_particle_data.volume.resize(num_contact_particles);
+  contact_particle_data.f.resize(num_contact_particles);
   for (const ContactPair& pair : contact_pairs) {
     const int p = pair.particle_index;
     const int c = pair.contact_particle_index;
-    contact_particles.m[c] = all_particles.m[p];
-    contact_particles.x[c] = all_particles.x[p];
-    contact_particles.v[c] = all_particles.v[p];
-    contact_particles.volume[c] = all_particles.volume[p];
+    contact_particle_data.m[c] = all_particles.data.m[p];
+    contact_particle_data.x[c] = all_particles.data.x[p];
+    contact_particle_data.v[c] = all_particles.data.v[p];
+    contact_particle_data.volume[c] = all_particles.data.volume[p];
   }
   return contact_particles;
 }
@@ -324,7 +333,7 @@ void MpmDriver<T>::SolveContact(const std::vector<ContactPair>& contact_pairs) {
   const double substep_dt = dt_ / double(num_subteps_);
   ContactForceSolver<double> solver(substep_dt, kStiffness, kDamping);
 
-  ParticleData<T> contact_particles =
+  Particles<T> contact_particles =
       MakeContactParticles(particles_, contact_pairs);
   std::vector<Vector3<double>> impulses(ssize(contact_pairs),
                                         Vector3<double>::Zero());
@@ -339,7 +348,7 @@ void MpmDriver<T>::SolveContact(const std::vector<ContactPair>& contact_pairs) {
   while (impulse_error > kTol && count < max_iterations) {
     ++count;
     impulse_error =
-        ApplyImpulse(contact_pairs, solver, &contact_particles, &impulses);
+        ApplyImpulse(contact_pairs, solver, &contact_particles.data, &impulses);
     transfer.ContactP2G2P();
   }
   if (count == max_iterations) {
@@ -359,31 +368,6 @@ void MpmDriver<T>::SolveContact(const std::vector<ContactPair>& contact_pairs) {
     const Vector3<double> h_WPRo_W = p_RP_W.cross(l_WR_W);
     rigid_forces_[pair.rigid_body_index].F_Bq_W +=
         SpatialForce<double>(h_WPRo_W, l_WR_W);
-  }
-}
-
-template <typename T>
-void MpmDriver<T>::UpdateParticleStress() {
-  for (int m = 0; m < ssize(particles_.materials); ++m) {
-    const auto& constitutive_model = particles_.constitutive_models[m];
-    [[maybe_unused]] const int num_threads = parallelism_.num_threads();
-#ifdef _OPENMP
-#pragma omp parallel for num_threads(num_threads)
-#endif
-    for (int i = particles_.materials[m].first;
-         i < particles_.materials[m].second; ++i) {
-      std::visit(
-          [&, this](auto& model) {
-            Matrix3<T>& F = particles_.F[i];
-            using StrainDataType = typename std::decay_t<decltype(model)>::Data;
-            StrainDataType& strain_data =
-                std::get<StrainDataType>(particles_.strain_data[i]);
-            model.ProjectStrain(&F, &strain_data);
-            model.CalcFirstPiolaStress(strain_data, &particles_.tau_v0[i]);
-            particles_.tau_v0[i] *= particles_.volume[i] * F.transpose();
-          },
-          constitutive_model);
-    }
   }
 }
 

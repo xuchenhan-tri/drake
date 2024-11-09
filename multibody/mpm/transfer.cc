@@ -97,7 +97,7 @@ void Transfer<T, Grid>::SerialParticleToGrid() {
 template <>
 void Transfer<AutoDiffXd, MockSparseGrid>::ParallelSimdParticleToGrid(
     const Parallelism parallelize) {
-  throw std::runtime_error("Not implemented");
+  throw std::runtime_error("simd p2g Not implemented");
 }
 
 template <typename T, template <typename> class Grid>
@@ -182,7 +182,7 @@ void Transfer<T, Grid>::SerialGridToParticle() {
 template <>
 void Transfer<AutoDiffXd, MockSparseGrid>::ParallelSimdGridToParticle(
     const Parallelism parallelize) {
-  throw std::runtime_error("Not implemented.");
+  throw std::runtime_error("simd g2p Not implemented.");
 }
 
 template <typename T, template <typename> class Grid>
@@ -227,7 +227,7 @@ void Transfer<T, Grid>::ParallelSimdGridToParticle(
 
 template <>
 void Transfer<AutoDiffXd, MockSparseGrid>::ContactP2G2P() {
-  throw std::runtime_error("Not implemented.");
+  throw std::runtime_error("p2g2p Not implemented.");
 }
 
 template <typename T, template <typename> class Grid>

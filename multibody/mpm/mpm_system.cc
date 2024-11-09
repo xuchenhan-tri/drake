@@ -83,7 +83,7 @@ systems::EventStatus MpmSystem<T>::UpdateMpmState(
   const std::string directory = "/home/xuchenhan/Desktop/mpm_data/";
   const std::string filename = fmt::format("particles_{:04d}.bgeo", i++);
   internal::WriteParticlesToBgeo<T>(directory + filename,
-                                    mpm_state.particles());
+                                    mpm_state.particles().data);
 
   return systems::EventStatus::Succeeded();
 }
@@ -104,7 +104,7 @@ void MpmSystem<T>::CalcParticles(const systems::Context<double>& context,
   DRAKE_THROW_UNLESS(is_finalized_);
   const auto& mpm_state =
       context.get_abstract_state<internal::MpmDriver<T>>(mpm_state_index_);
-  const std::vector<Vector3<T>>& x = mpm_state.particles().x;
+  const std::vector<Vector3<T>>& x = mpm_state.particles().data.x;
   const int num_particles = ssize(x);
   output->resize(num_particles, true);
   Eigen::Ref<Matrix3X<float>> p_WPs = output->mutable_xyzs();

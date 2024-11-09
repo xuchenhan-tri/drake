@@ -79,6 +79,8 @@ class MockSparseGrid {
 
   void SetNodeIndices();
 
+  int num_active_nodes() const { return grid_data_.size(); }
+
   const SpGrid<GridData<double>>& spgrid() const { return spgrid_; }
 
   template <typename Func>

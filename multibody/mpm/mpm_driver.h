@@ -6,7 +6,9 @@
 #include "drake/common/copyable_unique_ptr.h"
 #include "drake/common/parallelism.h"
 #include "drake/geometry/geometry_instance.h"
+#include "drake/geometry/query_object.h"
 #include "drake/multibody/fem/deformable_body_config.h"
+#include "drake/multibody/plant/externally_applied_spatial_force.h"
 
 namespace drake {
 namespace multibody {
@@ -123,18 +125,18 @@ class MpmDriver {
       const std::unordered_map<geometry::GeometryId, multibody::BodyIndex>&
           geometry_id_to_body_index) const;
 
-  ParticleData<T> MakeContactParticles(
-      const ParticleData<T>& all_particles,
+  Particles<T> MakeContactParticles(
+      const Particles<T>& all_particles,
       const std::vector<ContactPair>& contact_pairs) const;
 
   double ApplyImpulse(const std::vector<ContactPair>& contact_pairs,
                       const ContactForceSolver<double>& solver,
-                      ParticleData<T>* particles,
+                      ParticleData<T>* particle_data,
                       std::vector<Vector3<double>>* impulses) const;
 
   void SolveContact(const std::vector<ContactPair>& contact_pairs);
 
-  const ParticleData<T>& particles() const { return particles_; }
+  const Particles<T>& particles() const { return particles_; }
 
   const std::vector<multibody::ExternallyAppliedSpatialForce<double>>&
   rigid_forces() const {
@@ -150,7 +152,7 @@ class MpmDriver {
   T dx_{0.0};
   Vector3<T> gravity_{0, 0, -9.81};
   copyable_unique_ptr<SparseGrid<T>> grid_;
-  ParticleData<T> particles_;
+  Particles<T> particles_;
   Parallelism parallelism_;
   std::vector<multibody::ExternallyAppliedSpatialForce<double>> rigid_forces_;
 };

@@ -1,5 +1,10 @@
 #include "mpm_state.h"
 
+#include <iostream>
+
+#include "mock_sparse_grid.h"
+
+#include "drake/common/fmt_eigen.h"
 namespace drake {
 namespace multibody {
 namespace mpm {
@@ -8,9 +13,9 @@ namespace internal {
 using multibody::contact_solvers::internal::Block3x3SparseSymmetricMatrix;
 using multibody::contact_solvers::internal::BlockSparsityPattern;
 
-template <typename T>
-MpmState<T>::MpmState(T dt, SparseGrid<T>* grid, Particles<T>* particles,
-                      Parallelism parallelism)
+template <typename T, template <typename> class Grid>
+MpmState<T, Grid>::MpmState(T dt, Grid<T>* grid, Particles<T>* particles,
+                            Parallelism parallelism)
     : dt_(dt),
       grid_(grid),
       particles_(particles),
@@ -20,38 +25,52 @@ MpmState<T>::MpmState(T dt, SparseGrid<T>* grid, Particles<T>* particles,
   DRAKE_DEMAND(dt > 0);
   DRAKE_DEMAND(grid != nullptr);
   DRAKE_DEMAND(particles != nullptr);
-  Transfer<T> transfer(dt, grid, particles);
-  transfer.ParallelSimdParticleToGrid(parallelism);
+  Transfer<T, Grid> transfer(dt, grid, particles);
+  if constexpr (std::is_same_v<T, AutoDiffXd>) {
+    transfer.SerialParticleToGrid();
+  } else {
+    transfer.ParallelSimdParticleToGrid(parallelism);
+  }
   grid->SetNodeIndices();
   constexpr int kSpatialDim = 3;
   dv_ = VectorX<T>::Zero(grid->num_active_nodes() * kSpatialDim);
   UpdateParticleState();
 }
 
-template <typename T>
-void MpmState<T>::IncrementDv(const VectorX<T>& ddv) {
+template <typename T, template <typename> class Grid>
+void MpmState<T, Grid>::IncrementDv(const VectorX<T>& ddv) {
   DRAKE_DEMAND(ddv.size() == dv_.size());
   dv_ += ddv;
   UpdateParticleState();
 }
 
+template <typename T, template <typename> class Grid>
+T MpmState<T, Grid>::CalcTotalEnergy() {
+  const int kDim = 3;
+  /* Potential energy from the particles. */
+  T total_energy = particles_->data.ComputeTotalEnergy(data_.F);
+  /* The 1/2*dv*M*dv term. */
+  grid_->IterateGrid([&](GridData<T>* node) {
+    if (node->m > 0.0) {
+      const int index = node->index;
+      DRAKE_ASSERT(index >= 0 && index < dv_.size() / 3);
+      total_energy += 0.5 * node->m *
+                      dv_.template segment<kDim>(index * kDim).squaredNorm();
+    }
+  });
+  return total_energy;
+}
+
 // TODO(xuchenhan-tri): Implement a parallel + simd version of this.
-template <typename T>
-void MpmState<T>::CalcResidual(VectorX<T>* b) {
+template <typename T, template <typename> class Grid>
+void MpmState<T, Grid>::CalcResidual(VectorX<T>* b) {
   DRAKE_DEMAND(b != nullptr);
   b->resizeLike(dv_);
   constexpr int kDim = 3;
-  /* Overwrite old values with M*dv term, and clear the scratch in the grid data
-   to prepare writing temporary forces next. */
-  grid_->IterateGrid([&](GridData<T>* node) {
-    const int index = node->index;
-    DRAKE_ASSERT(index >= 0 && index < b->size());
-    b->template segment<kDim>(index * kDim) =
-        node->m * dv_.template segment<kDim>(index * kDim);
-    node->scratch.setZero();
-  });
+  // TODO(xuchenhan-tri): Make sure the scratch is zeroed out before splating.
   using Scalar = decltype(grid_->dx());
-  /* Splat temporary forces to the grid data scratch and collect them into b. */
+  /* Splat temporary (negative) impulses to the grid data scratch and collect
+   them into b. */
   auto splat_force_kernel = [&](const Pad<Vector3<Scalar>>& grid_x,
                                 Pad<GridData<T>>* grid_data,
                                 ParticleData<T>* particle_data,
@@ -84,13 +103,24 @@ void MpmState<T>::CalcResidual(VectorX<T>* b) {
   const ParticleSorter& sorter = particles_->sorter;
   ParticleData<T>& particle_data = particles_->data;
   sorter.Iterate(grid_, &particle_data, true, std::move(splat_force_kernel));
+  /* Collect from the scratch data, add in the M * dv term, and clear the
+   scratch data. */
+  grid_->IterateGrid([&](GridData<T>* node) {
+    if (node->m > 0.0) {
+      const int index = node->index;
+      DRAKE_ASSERT(index >= 0 && index < b->size() / 3);
+      b->template segment<kDim>(index * kDim) =
+          node->m * dv_.template segment<kDim>(index * kDim) + node->scratch;
+      node->scratch.setZero();
+    }
+  });
 }
 
 // TODO(xuchenhan-tri): We should be able to make a single pass in this function
 // to both index the grid and compute the connectivity (neighbors). This will
 // reduce the number of duplicated neighbors.
-template <typename T>
-Block3x3SparseSymmetricMatrix MpmState<T>::MakeTangentMatrix() const {
+template <typename T, template <typename> class Grid>
+Block3x3SparseSymmetricMatrix MpmState<T, Grid>::MakeTangentMatrix() const {
   /* Here we loop over all particles; each particle creates an edge in the
    connectivity graph that connects all grid nodes in the pad (3x3x3 = 27 grid
    nodes) the particle transfers to. */
@@ -141,15 +171,20 @@ Block3x3SparseSymmetricMatrix MpmState<T>::MakeTangentMatrix() const {
   return Block3x3SparseSymmetricMatrix(std::move(block_pattern));
 }
 
-template <typename T>
-void MpmState<T>::CalcTangentMatrix(
+template <typename T, template <typename> class Grid>
+void MpmState<T, Grid>::CalcTangentMatrix(
     Block3x3SparseSymmetricMatrix* tangent_matrix) {
   DRAKE_DEMAND(tangent_matrix != nullptr);
   // TODO(xuchenhan-tri): Implement this function.
 }
 
-template <typename T>
-void MpmState<T>::UpdateParticleState() {
+template <>
+void MpmState<AutoDiffXd, MockSparseGrid>::UpdateParticleStateSimd() {
+  throw std::runtime_error("UpdateParticleStateSimd(): Not implemented");
+}
+
+template <typename T, template <typename> class Grid>
+void MpmState<T, Grid>::UpdateParticleState() {
   using Scalar = decltype(grid_->dx());
   auto update_F_kernel = [&](const Pad<Vector3<Scalar>>& grid_x,
                              Pad<GridData<T>>* grid_data,
@@ -177,13 +212,14 @@ void MpmState<T>::UpdateParticleState() {
   sorter.Iterate(grid_, &particles_->data, false, std::move(update_F_kernel));
 
   /* Then update stress and stress derivatives. */
-  particles_->data.UpdateStress(data_.F, &data_.tau_v0);
+  particles_->data.UpdateStress(&data_.F, &data_.tau_v0,
+                                /* apply plasticity */ false, parallelism_);
   particles_->data.UpdateStressDerivatives(
       data_.F, &data_.volume_scaled_stress_derivatives);
 }
 
-template <typename T>
-void MpmState<T>::UpdateParticleStateSimd() {
+template <typename T, template <typename> class Grid>
+void MpmState<T, Grid>::UpdateParticleStateSimd() {
   auto update_F_kernel = [&](const Pad<Vector3<T>>& grid_x,
                              Pad<GridData<T>>* grid_data,
                              ParticleData<T>* particle_data,
@@ -214,7 +250,8 @@ void MpmState<T>::UpdateParticleStateSimd() {
                              std::move(update_F_kernel));
 
   /* Then update stress and stress derivatives. */
-  particles_->data.UpdateStress(data_.F, &data_.tau_v0, parallelism_);
+  particles_->data.UpdateStress(&data_.F, &data_.tau_v0,
+                                /* apply plasticity */ false, parallelism_);
   particles_->data.UpdateStressDerivatives(
       data_.F, &data_.volume_scaled_stress_derivatives, parallelism_);
 }
@@ -226,3 +263,5 @@ void MpmState<T>::UpdateParticleStateSimd() {
 
 template class drake::multibody::mpm::internal::MpmState<double>;
 template class drake::multibody::mpm::internal::MpmState<float>;
+template class drake::multibody::mpm::internal::MpmState<
+    drake::AutoDiffXd, drake::multibody::mpm::internal::MockSparseGrid>;

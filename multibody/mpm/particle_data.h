@@ -37,17 +37,10 @@ using DeformationGradientDataVariant =
  @tparam double or float. */
 template <typename T>
 struct ParticleData {
-  /* Use the deformation gradient data to compute the volume-scaled Kirchhoff
-   stress for each particle. */
-  void UpdateStress(const std::vector<Matrix3<T>>& deformation_gradient,
-                    std::vector<Matrix3<T>>* volume_scaled_stress,
-                    Parallelism parallelism = false) {
+  T ComputeTotalEnergy(const std::vector<Matrix3<T>>& deformation_gradient) {
+    T result = 0;
     for (int i = 0; i < ssize(materials); ++i) {
       const auto& constitutive_model = constitutive_models[i];
-      [[maybe_unused]] const int num_threads = parallelism.num_threads();
-#ifdef _OPENMP
-#pragma omp parallel for num_threads(num_threads)
-#endif
       for (int p = materials[i].first; p < materials[i].second; ++p) {
         std::visit(
             [&, this](auto& model) {
@@ -58,9 +51,53 @@ struct ParticleData {
                   std::get<StrainDataType>(strain_data[p]);
               // TODO(xuchenhan-tri): Use the actual F0.
               strain_data_p.UpdateData(F_p, F_p);
+              T Psi;
+              model.CalcElasticEnergyDensity(strain_data_p, &Psi);
+              result += Psi * volume[p];
+            },
+            constitutive_model);
+      }
+    }
+    return result;
+  }
+
+  void UpdateStress(bool apply_plasticity, Parallelism parallelism = false) {
+    UpdateStress(&F, &tau_v0, apply_plasticity, parallelism);
+  }
+
+  // TODO(xuchenhan-tri): Right not, we have an inconsistency: we pass in
+  // deformation gradient and the stress externally so that the data stored in
+  // ParticleData aren't polluted, but we don't do the same for the StrainData.
+  /* Use the deformation gradient data to compute the volume-scaled Kirchhoff
+   stress for each particle. */
+  void UpdateStress(std::vector<Matrix3<T>>* deformation_gradient,
+                    std::vector<Matrix3<T>>* volume_scaled_stress,
+                    bool apply_plasticity = false,
+                    Parallelism parallelism = false) {
+    for (int i = 0; i < ssize(materials); ++i) {
+      const auto& constitutive_model = constitutive_models[i];
+      [[maybe_unused]] const int num_threads = parallelism.num_threads();
+#ifdef _OPENMP
+#pragma omp parallel for num_threads(num_threads)
+#endif
+      for (int p = materials[i].first; p < materials[i].second; ++p) {
+        std::visit(
+            [&, this](auto& model) {
+              Matrix3<T>& F_p = (*deformation_gradient)[p];
+              using StrainDataType =
+                  typename std::decay_t<decltype(model)>::Data;
+              StrainDataType& strain_data_p =
+                  std::get<StrainDataType>(strain_data[p]);
+              // TODO(xuchenhan-tri): Use the actual F0.
+              if (apply_plasticity) {
+                model.ProjectStrain(&F_p, &strain_data_p);
+              } else {
+                strain_data_p.UpdateData(F_p, F_p);
+              }
               auto& tau_v0_p = (*volume_scaled_stress)[p];
+              const Matrix3<T>& particle_F = F[p];
               model.CalcFirstPiolaStress(strain_data_p, &tau_v0_p);
-              tau_v0_p *= volume[p] * F_p.transpose();
+              tau_v0_p *= volume[p] * particle_F.transpose();
             },
             constitutive_model);
       }
@@ -89,6 +126,8 @@ struct ParticleData {
               strain_data_p.UpdateData(F_p, F_p);
               Eigen::Matrix<T, 9, 9> dPdF;
               model.CalcFirstPiolaStressDerivative(strain_data_p, &dPdF);
+              // TODO(xuchenhan-tri): Notice that we should multiply by the
+              // particle F instead of the passed in F.
               /* A = v0 * F : dP/dF : F. */
               auto& A = (*volume_scaled_stress_derivatives)[p];
               unused(A);

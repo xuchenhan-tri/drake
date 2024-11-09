@@ -13,23 +13,41 @@ namespace mpm {
 namespace internal {
 
 /* Newton-Raphson solver for implicit MPM. */
-template <typename T>
+template <typename T, template <typename> class Grid = SparseGrid>
 class MpmState {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(MpmState);
+
+  /* State-dependent data. */
+  struct Data {
+    Data(const ParticleData<T>& particles)
+        : F(particles.F), tau_v0(particles.tau_v0) {
+      volume_scaled_stress_derivatives.resize(F.size());
+    }
+
+    std::vector<Matrix3<T>> F;
+    std::vector<Matrix3<T>> tau_v0;
+    std::vector<Eigen::Matrix<T, 9, 9>> volume_scaled_stress_derivatives;
+  };
+
   /* Creates a MpmState derived from the given particles.
    @param[in] dt         The time step used in this MpmState.
    @param[in] particles  The particle data.
    @param[in] grid       The grid data structure used to store the state.
    @pre dt > 0.
    @pre particles and grid are non-null. */
-  MpmState(T dt, SparseGrid<T>* grid, Particles<T>* particles,
+  MpmState(T dt, Grid<T>* grid, Particles<T>* particles,
            Parallelism parallelism = {});
 
   int num_dofs() const { return dv_.size(); }
 
   /* Sets dv = dv + ddv. */
   void IncrementDv(const VectorX<T>& ddv);
+
+  const VectorX<T>& dv() { return dv_; }
+
+  /* Computes the energy 1/2*dv*M*dv + ∑ₚ Ψ(Fₚ)*volumeₚ*dt. */
+  T CalcTotalEnergy();
 
   /* Computes the residual vector b = M * dv - f(x(v+dv), v+dv) * dt where M is
    the lumped mass matrix. */
@@ -51,19 +69,10 @@ class MpmState {
       multibody::contact_solvers::internal::Block3x3SparseSymmetricMatrix*
           tangent_matrix);
 
+  /* Testing only */
+  const Data& data() const { return data_; }
+
  private:
-  /* State-dependent data. */
-  struct Data {
-    Data(const ParticleData<T>& particles)
-        : F(particles.F), tau_v0(particles.tau_v0) {
-      volume_scaled_stress_derivatives.resize(F.size());
-    }
-
-    std::vector<Matrix3<T>> F;
-    std::vector<Matrix3<T>> tau_v0;
-    std::vector<Eigen::Matrix<T, 9, 9>> volume_scaled_stress_derivatives;
-  };
-
   /* Computes the particle deformation gradient, stress, and stress
    derivatives based on grid data and dv. */
   void UpdateParticleState();
@@ -71,7 +80,7 @@ class MpmState {
 
   T dt_{};
   VectorX<T> dv_;
-  SparseGrid<T>* grid_{};
+  Grid<T>* grid_{};
   Particles<T>* particles_{};
   Parallelism parallelism_{};
   T D_inverse_{};
