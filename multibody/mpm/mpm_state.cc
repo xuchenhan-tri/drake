@@ -171,11 +171,78 @@ Block3x3SparseSymmetricMatrix MpmState<T, Grid>::MakeTangentMatrix() const {
   return Block3x3SparseSymmetricMatrix(std::move(block_pattern));
 }
 
+template <>
+void MpmState<AutoDiffXd, MockSparseGrid>::CalcTangentMatrix(
+    Block3x3SparseSymmetricMatrix* tangent_matrix) {
+  throw std::runtime_error("UpdateParticleStateSimd(): Not implemented");
+}
+
+template <>
+void MpmState<float>::CalcTangentMatrix(
+    Block3x3SparseSymmetricMatrix* tangent_matrix) {
+  throw std::runtime_error("UpdateParticleStateSimd(): Not implemented");
+}
+
 template <typename T, template <typename> class Grid>
 void MpmState<T, Grid>::CalcTangentMatrix(
     Block3x3SparseSymmetricMatrix* tangent_matrix) {
   DRAKE_DEMAND(tangent_matrix != nullptr);
-  // TODO(xuchenhan-tri): Implement this function.
+  tangent_matrix->SetZero();
+  using Scalar = decltype(grid_->dx());
+  const T scale = dt_ * dt_ * D_inverse_ * D_inverse_;
+  const int num_active_nodes = grid_->num_active_nodes();
+  auto splat_force_derivatives_kernel = [&](const Pad<Vector3<Scalar>>& grid_x,
+                                            Pad<GridData<T>>* grid_data,
+                                            ParticleData<T>* particle_data,
+                                            int data_index) {
+    const Vector3<T>& x = particle_data->x[data_index];
+    const BsplineWeights<Scalar> bspline = MakeBsplineWeights(x, grid_->dx());
+    const Eigen::Matrix<T, 9, 9> scaled_dPdF =
+        scale * data_.volume_scaled_stress_derivatives[data_index];
+    Matrix3<T> hessian = Matrix3<T>::Zero();
+
+    for (int idx0 = 0; idx0 < 27; ++idx0) {
+      const int i = idx0 / 9;
+      const int j = (idx0 / 3) % 3;
+      const int k = idx0 % 3;
+      const int index0 = (*grid_data)[i][j][k].index;
+      DRAKE_ASSERT(index0 >= 0 && index0 < num_active_nodes);
+      const Scalar& w0 = bspline.weight(i, j, k);
+      const Vector3<Scalar>& x0 = grid_x[i][j][k];
+      const Vector3<T> u0 =
+          w0 * particle_data->F[data_index].transpose() * (x0 - x);
+
+      for (int idx1 = 0; idx1 <= idx0; ++idx1) {
+        const int ii = idx1 / 9;
+        const int jj = (idx1 / 3) % 3;
+        const int kk = idx1 % 3;
+        const int index1 = (*grid_data)[ii][jj][kk].index;
+        DRAKE_DEMAND(index1 >= 0 && index1 < num_active_nodes);
+        const Scalar& w1 = bspline.weight(ii, jj, kk);
+        const Vector3<Scalar>& x1 = grid_x[ii][jj][kk];
+        const Vector3<T> u1 =
+            w1 * particle_data->F[data_index].transpose() * (x1 - x);
+        PerformDoubleTensorContraction<T>(scaled_dPdF, u0, u1, &hessian);
+        if (index0 >= index1) {
+          tangent_matrix->AddToBlock(index0, index1, hessian);
+        } else {
+          tangent_matrix->AddToBlock(index1, index0, hessian);
+        }
+      }
+    }
+  };
+  const ParticleSorter& sorter = particles_->sorter;
+  ParticleData<T>& particle_data = particles_->data;
+  sorter.Iterate(grid_, &particle_data, false,
+                 std::move(splat_force_derivatives_kernel));
+  /* Add in the mass terms. */
+  grid_->IterateGrid([&](GridData<T>* node) {
+    if (node->m > 0.0) {
+      const int index = node->index;
+      tangent_matrix->AddToBlock(index, index,
+                                 node->m * Matrix3<T>::Identity());
+    }
+  });
 }
 
 template <>

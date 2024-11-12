@@ -80,6 +80,8 @@ struct ParticleData {
 #ifdef _OPENMP
 #pragma omp parallel for num_threads(num_threads)
 #endif
+      // TODO(xuchenhan-tri): This looks wrong... We should use data_indices[p]
+      // instead of p itself.
       for (int p = materials[i].first; p < materials[i].second; ++p) {
         std::visit(
             [&, this](auto& model) {
@@ -124,14 +126,9 @@ struct ParticleData {
                   std::get<StrainDataType>(strain_data[p]);
               // TODO(xuchenhan-tri): The the actual F0.
               strain_data_p.UpdateData(F_p, F_p);
-              Eigen::Matrix<T, 9, 9> dPdF;
+              auto& dPdF = (*volume_scaled_stress_derivatives)[p];
               model.CalcFirstPiolaStressDerivative(strain_data_p, &dPdF);
-              // TODO(xuchenhan-tri): Notice that we should multiply by the
-              // particle F instead of the passed in F.
-              /* A = v0 * F : dP/dF : F. */
-              auto& A = (*volume_scaled_stress_derivatives)[p];
-              unused(A);
-              // TODO(xuchenhan-tri): Implement this.
+              dPdF *= volume[p];
             },
             constitutive_model);
       }

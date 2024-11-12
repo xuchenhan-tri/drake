@@ -13,6 +13,7 @@ namespace internal {
 namespace {
 
 using Eigen::Matrix3d;
+using Eigen::MatrixXd;
 using Eigen::Vector3d;
 using Eigen::Vector3i;
 using multibody::contact_solvers::internal::Block3x3SparseSymmetricMatrix;
@@ -39,7 +40,7 @@ void AddParticle(Particles<T>* particles,
 template <typename T>
 void AddDefaultMaterial(ParticleData<T>* particle_data) {
   const int num_particles = particle_data->m.size();
-  const fem::internal::LinearCorotatedModel<T> model(1e4, 0.45);
+  const fem::internal::CorotatedModel<T> model(1e4, 0.45);
   particle_data->constitutive_models.emplace_back(model);
   for (int i = 0; i < num_particles; ++i) {
     particle_data->strain_data.emplace_back(model.MakeDefaultData());
@@ -253,14 +254,18 @@ GTEST_TEST(MpmStateTest, ResidualIsDerivativeOfEnergy) {
   MockSparseGrid<AutoDiffXd> grid_ad(dx);
   Particles<AutoDiffXd> particles_ad;
   const Vector3<AutoDiffXd> x0_ad(dx, dx, dx);
+  const Vector3<AutoDiffXd> x1_ad(1.1 * dx, 1.2 * dx, 1.3 * dx);
   AddParticle<AutoDiffXd>(&particles_ad, x0_ad);
+  AddParticle<AutoDiffXd>(&particles_ad, x1_ad);
   AddDefaultMaterial(&particles_ad.data);
   const AutoDiffXd dt_ad = 0.02;
 
   SparseGrid<double> grid(dx);
   Particles<double> particles;
   const Vector3<double> x0(dx, dx, dx);
+  const Vector3<double> x1(1.1 * dx, 1.2 * dx, 1.3 * dx);
   AddParticle<double>(&particles, x0);
+  AddParticle<double>(&particles, x1);
   AddDefaultMaterial(&particles.data);
   const double dt = 0.02;
 
@@ -283,6 +288,52 @@ GTEST_TEST(MpmStateTest, ResidualIsDerivativeOfEnergy) {
   VectorX<double> residual;
   state.CalcResidual(&residual);
   EXPECT_TRUE(CompareMatrices(energy.derivatives(), residual, kTol));
+}
+
+GTEST_TEST(MpmStateTest, HessianIsDerivativeOfResidual) {
+  const double dx = 0.01;
+  MockSparseGrid<AutoDiffXd> grid_ad(dx);
+  Particles<AutoDiffXd> particles_ad;
+  const Vector3<AutoDiffXd> x0_ad(dx, dx, dx);
+  // const Vector3<AutoDiffXd> x1_ad(1.1 * dx, 1.2 * dx, 1.3 * dx);
+  AddParticle<AutoDiffXd>(&particles_ad, x0_ad);
+  // AddParticle<AutoDiffXd>(&particles_ad, x1_ad);
+  AddDefaultMaterial(&particles_ad.data);
+  const AutoDiffXd dt_ad = 0.01;
+
+  SparseGrid<double> grid(dx);
+  Particles<double> particles;
+  const Vector3<double> x0(dx, dx, dx);
+  // const Vector3<double> x1(1.1 * dx, 1.2 * dx, 1.3 * dx);
+  AddParticle<double>(&particles, x0);
+  // AddParticle<double>(&particles, x1);
+  AddDefaultMaterial(&particles.data);
+  const double dt = 0.01;
+
+  const double kTol = 1e-10;
+
+  MpmState<AutoDiffXd, MockSparseGrid> state_ad(dt_ad, &grid_ad, &particles_ad);
+  MpmState<double> state(dt, &grid, &particles);
+  const int num_dofs = state.num_dofs();
+  ASSERT_EQ(num_dofs, state_ad.num_dofs());
+
+  VectorX<double> ddv = VectorX<double>::LinSpaced(num_dofs, 0.0, 1.0);
+  VectorX<AutoDiffXd> ddv_ad;
+  ddv_ad.resize(num_dofs);
+  math::InitializeAutoDiff(ddv, &ddv_ad);
+
+  state_ad.IncrementDv(ddv_ad);
+  state.IncrementDv(ddv);
+
+  VectorX<AutoDiffXd> residual;
+  state_ad.CalcResidual(&residual);
+
+  Block3x3SparseSymmetricMatrix tangent_matrix = state.MakeTangentMatrix();
+  state.CalcTangentMatrix(&tangent_matrix);
+  const MatrixXd dense_tangent_matrix = tangent_matrix.MakeDenseMatrix();
+
+  EXPECT_TRUE(CompareMatrices(dense_tangent_matrix.col(0),
+                              residual(0).derivatives(), kTol));
 }
 
 }  // namespace
