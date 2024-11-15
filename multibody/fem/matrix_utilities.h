@@ -5,31 +5,12 @@
 #include <Eigen/SparseCore>
 
 #include "drake/common/eigen_types.h"
+#include "drake/math/fourth_order_tensor.h"
 
 namespace drake {
 namespace multibody {
 namespace fem {
 namespace internal {
-
-/* Some of the following functions involve calculations about a 4th order tensor
-(call it A) of dimension 3*3*3*3. We follow the following convention to flatten
-the 4th order tensor into 9*9 matrices that are organized as follows:
-
-                  l = 1       l = 2       l = 3
-              -------------------------------------
-              |           |           |           |
-    j = 1     |   Aᵢ₁ₖ₁   |   Aᵢ₁ₖ₂   |   Aᵢ₁ₖ₃   |
-              |           |           |           |
-              -------------------------------------
-              |           |           |           |
-    j = 2     |   Aᵢ₂ₖ₁   |   Aᵢ₂ₖ₂   |   Aᵢ₂ₖ₃   |
-              |           |           |           |
-              -------------------------------------
-              |           |           |           |
-    j = 3     |   Aᵢ₃ₖ₁   |   Aᵢ₃ₖ₂   |   Aᵢ₃ₖ₃   |
-              |           |           |           |
-              -------------------------------------
-Namely the ik-th entry in the jl-th block corresponds to the value Aᵢⱼₖₗ. */
 
 /* Calculates the condition number for the given matrix A.
  The condition number is calculated via
@@ -65,9 +46,9 @@ void PolarDecompose(const Matrix3<T>& F, EigenPtr<Matrix3<T>> R,
  @pre scaled_dRdF != nullptr.
  @tparam_nonsymbolic_scalar */
 template <typename T>
-void AddScaledRotationalDerivative(
-    const Matrix3<T>& R, const Matrix3<T>& S, const T& scale,
-    EigenPtr<Eigen::Matrix<T, 9, 9>> scaled_dRdF);
+void AddScaledRotationalDerivative(const Matrix3<T>& R, const Matrix3<T>& S,
+                                   const T& scale,
+                                   math::FourthOrderTensor<T>* scaled_dRdF);
 
 /* Calculates the cofactor matrix of the given input 3-by-3 matrix M.
  @pre cofactor != nullptr.
@@ -83,9 +64,8 @@ void CalcCofactorMatrix(const Matrix3<T>& M, EigenPtr<Matrix3<T>> cofactor);
  @pre scaled_dCdM != nullptr.
  @tparam_nonsymbolic_scalar */
 template <typename T>
-void AddScaledCofactorMatrixDerivative(
-    const Matrix3<T>& M, const T& scale,
-    EigenPtr<Eigen::Matrix<T, 9, 9>> scaled_dCdM);
+void AddScaledCofactorMatrixDerivative(const Matrix3<T>& M, const T& scale,
+                                       math::FourthOrderTensor<T>* scaled_dCdM);
 
 /* Given a size 3N vector with block structure with size 3 block entries Bᵢ
  where i ∈ V = {0, ..., N-1} and a permutation P on V, this function builds the

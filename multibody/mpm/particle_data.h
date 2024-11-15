@@ -108,7 +108,7 @@ struct ParticleData {
 
   void UpdateStressDerivatives(
       const std::vector<Matrix3<T>>& deformation_gradient,
-      std::vector<Eigen::Matrix<T, 9, 9>>* volume_scaled_stress_derivatives,
+      std::vector<math::FourthOrderTensor<T>>* volume_scaled_stress_derivatives,
       Parallelism parallelism = false) {
     for (int i = 0; i < ssize(materials); ++i) {
       const auto& constitutive_model = constitutive_models[i];
@@ -128,7 +128,7 @@ struct ParticleData {
               strain_data_p.UpdateData(F_p, F_p);
               auto& dPdF = (*volume_scaled_stress_derivatives)[p];
               model.CalcFirstPiolaStressDerivative(strain_data_p, &dPdF);
-              dPdF *= volume[p];
+              dPdF.mutable_data() *= volume[p];
             },
             constitutive_model);
       }

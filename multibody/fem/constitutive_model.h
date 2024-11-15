@@ -6,6 +6,7 @@
 
 #include "drake/common/eigen_types.h"
 #include "drake/common/nice_type_name.h"
+#include "drake/math/fourth_order_tensor.h"
 
 namespace drake {
 namespace multibody {
@@ -93,7 +94,7 @@ class ConstitutiveModel {
                    -------------------------------------
   @pre `dPdF != nullptr`. */
   void CalcFirstPiolaStressDerivative(const Data& data,
-                                      Eigen::Matrix<T, 9, 9>* dPdF) const {
+                                      math::FourthOrderTensor<T>* dPdF) const {
     DRAKE_ASSERT(dPdF != nullptr);
     derived().CalcFirstPiolaStressDerivativeImpl(data, dPdF);
   }
@@ -132,8 +133,8 @@ class ConstitutiveModel {
                     NiceTypeName::Get(derived())));
   }
 
-  void CalcFirstPiolaStressDerivativeImpl(const Data& data,
-                                          Eigen::Matrix<T, 9, 9>* dPdF) const {
+  void CalcFirstPiolaStressDerivativeImpl(
+      const Data& data, math::FourthOrderTensor<T>* dPdF) const {
     throw std::logic_error(
         fmt::format("The derived class {} must provide a shadow definition of "
                     "CalcFirstPiolaStressDerivativeImpl() to be correct.",

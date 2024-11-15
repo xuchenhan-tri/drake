@@ -75,8 +75,8 @@ class StvkHenckyVonMisesModel final
 
   /* Shadows ConstitutiveModel::CalcFirstPiolaStressDerivativeImpl() as required
    by the CRTP base class. */
-  void CalcFirstPiolaStressDerivativeImpl(const Data& data,
-                                          Eigen::Matrix<T, 9, 9>* dPdF) const;
+  void CalcFirstPiolaStressDerivativeImpl(
+      const Data& data, math::FourthOrderTensor<T>* dPdF) const;
 
   /* Shadows ConstitutiveModel::ProjectStrain() as required by the CRTP base
    class. */

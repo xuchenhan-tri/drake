@@ -45,7 +45,7 @@ void StvkHenckyVonMisesModel<T>::CalcFirstPiolaStressImpl(const Data& data,
 
 template <typename T>
 void StvkHenckyVonMisesModel<T>::CalcFirstPiolaStressDerivativeImpl(
-    const Data&, Eigen::Matrix<T, 9, 9>*) const {
+    const Data&, math::FourthOrderTensor<T>*) const {
   throw std::runtime_error("Not implemented.");
 }
 

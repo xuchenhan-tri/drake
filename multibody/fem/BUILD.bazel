@@ -102,6 +102,7 @@ drake_cc_library(
     deps = [
         "//common:essential",
         "//common:nice_type_name",
+        "//math:fourth_order_tensor",
         "//multibody/mpm:simd_scalar",
     ],
 )
@@ -427,6 +428,7 @@ drake_cc_library(
     deps = [
         "//common:default_scalars",
         "//common:essential",
+        "//math:fourth_order_tensor",
     ],
 )
 

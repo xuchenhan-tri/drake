@@ -27,7 +27,7 @@ class MpmState {
 
     std::vector<Matrix3<T>> F;
     std::vector<Matrix3<T>> tau_v0;
-    std::vector<Eigen::Matrix<T, 9, 9>> volume_scaled_stress_derivatives;
+    std::vector<math::FourthOrderTensor<T>> volume_scaled_stress_derivatives;
   };
 
   /* Creates a MpmState derived from the given particles.

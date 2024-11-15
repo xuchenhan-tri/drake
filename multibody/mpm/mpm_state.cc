@@ -197,8 +197,7 @@ void MpmState<T, Grid>::CalcTangentMatrix(
                                             int data_index) {
     const Vector3<T>& x = particle_data->x[data_index];
     const BsplineWeights<Scalar> bspline = MakeBsplineWeights(x, grid_->dx());
-    const Eigen::Matrix<T, 9, 9> scaled_dPdF =
-        scale * data_.volume_scaled_stress_derivatives[data_index];
+    const auto& dPdF_v0 = data_.volume_scaled_stress_derivatives[data_index];
     Matrix3<T> hessian = Matrix3<T>::Zero();
 
     for (int idx0 = 0; idx0 < 27; ++idx0) {
@@ -209,8 +208,8 @@ void MpmState<T, Grid>::CalcTangentMatrix(
       DRAKE_ASSERT(index0 >= 0 && index0 < num_active_nodes);
       const Scalar& w0 = bspline.weight(i, j, k);
       const Vector3<Scalar>& x0 = grid_x[i][j][k];
-      const Vector3<T> u0 =
-          w0 * particle_data->F[data_index].transpose() * (x0 - x);
+      const Vector3<T> scaled_u0 =
+          scale * w0 * particle_data->F[data_index].transpose() * (x0 - x);
 
       for (int idx1 = 0; idx1 <= idx0; ++idx1) {
         const int ii = idx1 / 9;
@@ -222,7 +221,7 @@ void MpmState<T, Grid>::CalcTangentMatrix(
         const Vector3<Scalar>& x1 = grid_x[ii][jj][kk];
         const Vector3<T> u1 =
             w1 * particle_data->F[data_index].transpose() * (x1 - x);
-        PerformDoubleTensorContraction<T>(scaled_dPdF, u0, u1, &hessian);
+        dPdF_v0.ContractWithVectors(scaled_u0, u1, &hessian);
         if (index0 >= index1) {
           tangent_matrix->AddToBlock(index0, index1, hessian);
         } else {
