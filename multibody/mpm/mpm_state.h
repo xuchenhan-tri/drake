@@ -6,29 +6,31 @@
 
 #include "drake/common/parallelism.h"
 #include "drake/multibody/contact_solvers/block_sparse_lower_triangular_or_symmetric_matrix.h"
+#include "drake/multibody/contact_solvers/sap/partial_permutation.h"
 
 namespace drake {
 namespace multibody {
 namespace mpm {
 namespace internal {
 
+/* State-dependent data. */
+template <typename T>
+struct MpmImplicitData {
+  MpmImplicitData(const ParticleData<T>& particles)
+      : F(particles.F), tau_v0(particles.tau_v0) {
+    volume_scaled_stress_derivatives.resize(F.size());
+  }
+
+  std::vector<Matrix3<T>> F;
+  std::vector<Matrix3<T>> tau_v0;
+  std::vector<math::FourthOrderTensor<T>> volume_scaled_stress_derivatives;
+};
+
 /* Newton-Raphson solver for implicit MPM. */
 template <typename T, template <typename> class Grid = SparseGrid>
 class MpmState {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(MpmState);
-
-  /* State-dependent data. */
-  struct Data {
-    Data(const ParticleData<T>& particles)
-        : F(particles.F), tau_v0(particles.tau_v0) {
-      volume_scaled_stress_derivatives.resize(F.size());
-    }
-
-    std::vector<Matrix3<T>> F;
-    std::vector<Matrix3<T>> tau_v0;
-    std::vector<math::FourthOrderTensor<T>> volume_scaled_stress_derivatives;
-  };
 
   /* Creates a MpmState derived from the given particles.
    @param[in] dt         The time step used in this MpmState.
@@ -37,7 +39,7 @@ class MpmState {
    @pre dt > 0.
    @pre particles and grid are non-null. */
   MpmState(T dt, Grid<T>* grid, Particles<T>* particles,
-           Parallelism parallelism = {});
+           MpmImplicitData<T>* data, Parallelism parallelism = {});
 
   int num_dofs() const { return dv_.size(); }
 
@@ -69,8 +71,20 @@ class MpmState {
       multibody::contact_solvers::internal::Block3x3SparseSymmetricMatrix*
           tangent_matrix);
 
+  const contact_solvers::internal::PartialPermutation& grid_dof_permutation()
+      const {
+    return dof_permutation_;
+  }
+
+  /* Given `dv`, which contains the v_next - v0 for grid nodes in the order of
+   grid indices, moves `this` MpmState to the next time step. */
+  void CalcNextState(const VectorX<double>& dv);
+
   /* Testing only */
-  const Data& data() const { return data_; }
+  const MpmImplicitData<T>& data() const {
+    DRAKE_DEMAND(data_ != nullptr);
+    return *data_;
+  }
 
  private:
   /* Computes the particle deformation gradient, stress, and stress
@@ -84,7 +98,12 @@ class MpmState {
   Particles<T>* particles_{};
   Parallelism parallelism_{};
   T D_inverse_{};
-  Data data_;
+  MpmImplicitData<T>* data_{};
+  /* Partial permutation that maps all grid node indices to participating node
+   indices. */
+  multibody::contact_solvers::internal::PartialPermutation permutation_;
+  /* Partial permutation that maps all grid dofs to participating dofs. */
+  multibody::contact_solvers::internal::PartialPermutation dof_permutation_;
 };
 
 }  // namespace internal

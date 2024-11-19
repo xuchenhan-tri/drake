@@ -7,12 +7,13 @@
 #include <memory>
 #include <vector>
 
+#include "particles.h"
 #include "spgrid.h"
 
 #include "drake/common/eigen_types.h"
 #include "drake/common/parallelism.h"
+#include "drake/multibody/contact_solvers/sap/partial_permutation.h"
 #include "drake/multibody/mpm/grid_data.h"
-#include "particles.h"
 
 namespace drake {
 namespace multibody {
@@ -72,7 +73,7 @@ template <typename T>
 class SparseGrid {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(SparseGrid);
-  
+
   using NodeType = Vector3<T>;
 
   /* Constructs a SparseGrid with grid spacing `dx` in meters. */
@@ -145,8 +146,12 @@ class SparseGrid {
   MassAndMomentum<T> ComputeTotalMassAndMomentum() const;
 
   /* Assigning consecutive indices to all active nodes [0, num_active_nodes()).
-   All non-active grid nodes (those with zero mass) gets index -1. */
-  void SetNodeIndices();
+   All non-active grid nodes (those with zero mass) gets index -1.
+   @param [in, out] partial_permutation If not null, builds a partial
+   permutation of all grid ndoes to participating nodes into the parameter.
+   @pre If non-null, partial_permutation is empty. */
+  void SetNodeIndices(contact_solvers::internal::PartialPermutation*
+                          partial_permutation = nullptr);
 
   /* Returns the number of active grid nodes as computed by last call to
    SetNodeIndices(). */

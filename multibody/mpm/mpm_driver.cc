@@ -127,6 +127,7 @@ void MpmDriver<T>::SampleParticles(
     particle_data.F.push_back(Matrix3<T>::Identity());
     particle_data.tau_v0.push_back(Matrix3<T>::Zero());
     particle_data.C.push_back(Matrix3<T>::Zero());
+    particle_data.in_constraint.push_back(false);
     particle_data.volume.push_back(volume_per_particle);
     std::visit(
         [&, this](auto& model) {

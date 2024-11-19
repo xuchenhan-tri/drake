@@ -150,6 +150,18 @@ SimdScalar<T> Load(const std::vector<T>& source,
   return SimdScalar<T>(data, size);
 }
 
+/* Loads bools from `source` into a single bool by taking the AND of the data
+ with the given indices.
+ @pre indices.size() <= the SimdScalar<T>::lanes().
+ @pre Each entry in `indices` is in [0, source.size()). */
+inline bool Load(const std::vector<bool>& source, const std::vector<int>& indices) {
+  const size_t size = indices.size();
+  for (size_t j = 0; j < size; ++j) {
+    if (source[indices[j]]) return true;
+  }
+  return false;
+}
+
 /* Loads vector3s from `source` into a vector3 of SimdScalars.
  The d-th component of the result is a SimdScalar of the d-th component of the
  vectors in `source` with the given indices.

@@ -45,6 +45,7 @@ void Transfer<T, Grid>::SerialParticleToGrid() {
     const Vector3<T>& v = particle_data->v[data_index];
     const Matrix3<T>& C = particle_data->C[data_index];
     const Matrix3<T>& tau_v0 = particle_data->tau_v0[data_index];
+    bool participating = particle_data->in_constraint[data_index];
     const BsplineWeights<Scalar> bspline = MakeBsplineWeights(x, grid_->dx());
     for (int i = 0; i < 3; ++i) {
       for (int j = 0; j < 3; ++j) {
@@ -86,6 +87,11 @@ void Transfer<T, Grid>::SerialParticleToGrid() {
           (*grid_data)[i][j][k].v +=
               mi * v + (m * C - D_inverse_dt_ * tau_v0) * (xi - x) * w;
           (*grid_data)[i][j][k].m += mi;
+          /* Set all participating grid node to have grid node index -2. */
+          // TODO(xuchenhan-tri): This is a temporary solution to mark the
+          // participating grid nodes. We should use a special flag instead of a
+          // hard-coded number.
+          if (participating) (*grid_data)[i][j][k].index = -2;
         }
       }
     }
@@ -112,6 +118,7 @@ void Transfer<T, Grid>::ParallelSimdParticleToGrid(
     const Vector3<SimdScalar<T>> x = Load(particle_data->x, data_indices);
     const Vector3<SimdScalar<T>> v = Load(particle_data->v, data_indices);
     const Matrix3<SimdScalar<T>> C = Load(particle_data->C, data_indices);
+    const bool participating = Load(particle_data->in_constraint, data_indices);
     const Matrix3<SimdScalar<T>> tau_v0 =
         Load(particle_data->tau_v0, data_indices);
     const BsplineWeights<SimdScalar<T>> bspline =
@@ -129,6 +136,7 @@ void Transfer<T, Grid>::ParallelSimdParticleToGrid(
               mi * v + (m * C - D_inverse_dt_ * tau_v0) * (xi - x) * w;
           (*grid_data)[i][j][k].m += ReduceSum(mi);
           (*grid_data)[i][j][k].v += ReduceSum(mvi);
+          if (participating) (*grid_data)[i][j][k].index = -2;
         }
       }
     }

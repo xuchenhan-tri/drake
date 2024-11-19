@@ -86,10 +86,17 @@ MassAndMomentum<T> SparseGrid<T>::ComputeTotalMassAndMomentum() const {
 }
 
 template <typename T>
-void SparseGrid<T>::SetNodeIndices() {
+void SparseGrid<T>::SetNodeIndices(
+    contact_solvers::internal::PartialPermutation* partial_permutation) {
+  if (partial_permutation != nullptr) {
+    DRAKE_DEMAND(partial_permutation->domain_size() == 0);
+  }
   int node_index = 0;
   spgrid_.IterateGrid([&](GridData<T>* node_data) {
     if (node_data->m > 0.0) {
+      if (partial_permutation != nullptr && node_data->index == -2) {
+        partial_permutation->push(node_index);
+      }
       node_data->index = node_index++;
     } else {
       node_data->index = -1;

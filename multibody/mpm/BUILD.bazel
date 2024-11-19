@@ -29,6 +29,7 @@ cc_library(
     ],
     deps = [
         ":sparse_grid",
+        "//multibody/contact_solvers/sap:partial_permutation",
     ],
 )
 
@@ -106,6 +107,7 @@ cc_library(
         ":math",
         "//common:essential",
         "//common:parallelism",
+        "//multibody/contact_solvers/sap:partial_permutation",
         "//tools/workspace/ips2ra_internal",
     ],
 )

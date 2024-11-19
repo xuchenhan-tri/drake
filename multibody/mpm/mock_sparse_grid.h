@@ -6,6 +6,7 @@
 
 #include "drake/common/eigen_types.h"
 #include "drake/math/autodiff_gradient.h"
+#include "drake/multibody/contact_solvers/sap/partial_permutation.h"
 #include "drake/multibody/mpm/grid_data.h"
 
 namespace drake {
@@ -77,7 +78,8 @@ class MockSparseGrid {
 
   MassAndMomentum<T> ComputeTotalMassAndMomentum() const;
 
-  void SetNodeIndices();
+  void SetNodeIndices(contact_solvers::internal::PartialPermutation*
+                          partial_permutation = nullptr);
 
   int num_active_nodes() const { return grid_data_.size(); }
 

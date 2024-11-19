@@ -15,13 +15,13 @@ using multibody::contact_solvers::internal::BlockSparsityPattern;
 
 template <typename T, template <typename> class Grid>
 MpmState<T, Grid>::MpmState(T dt, Grid<T>* grid, Particles<T>* particles,
-                            Parallelism parallelism)
+                            MpmImplicitData<T>* data, Parallelism parallelism)
     : dt_(dt),
       grid_(grid),
       particles_(particles),
       parallelism_(parallelism),
       D_inverse_(4.0 / (grid->dx() * grid->dx())),
-      data_(particles->data) {
+      data_(data) {
   DRAKE_DEMAND(dt > 0);
   DRAKE_DEMAND(grid != nullptr);
   DRAKE_DEMAND(particles != nullptr);
@@ -31,9 +31,24 @@ MpmState<T, Grid>::MpmState(T dt, Grid<T>* grid, Particles<T>* particles,
   } else {
     transfer.ParallelSimdParticleToGrid(parallelism);
   }
-  grid->SetNodeIndices();
+  /* Index the grid and build participation permutations. */
+  grid->SetNodeIndices(&permutation_);
+  int permuted_grid_index = 0;
+  const int num_nodes = grid->num_active_nodes();
   constexpr int kSpatialDim = 3;
-  dv_ = VectorX<T>::Zero(grid->num_active_nodes() * kSpatialDim);
+  const int num_dofs = num_nodes * kSpatialDim;
+  std::vector<int> permuted_dof_indices(num_dofs, -1);
+  for (int n = 0; n < num_nodes; ++n) {
+    if (n < permutation_.domain_size() && permutation_.participates(n)) {
+      for (int d = 0; d < kSpatialDim; ++d) {
+        permuted_dof_indices[kSpatialDim * n + d] =
+            kSpatialDim * permuted_grid_index + d;
+      }
+    }
+  }
+  dof_permutation_ = contact_solvers::internal::PartialPermutation(
+      std::move(permuted_dof_indices));
+  dv_ = VectorX<T>::Zero(num_dofs);
   UpdateParticleState();
 }
 
@@ -48,7 +63,7 @@ template <typename T, template <typename> class Grid>
 T MpmState<T, Grid>::CalcTotalEnergy() {
   const int kDim = 3;
   /* Potential energy from the particles. */
-  T total_energy = particles_->data.ComputeTotalEnergy(data_.F);
+  T total_energy = particles_->data.ComputeTotalEnergy(data_->F);
   /* The 1/2*dv*M*dv term. */
   grid_->IterateGrid([&](GridData<T>* node) {
     if (node->m > 0.0) {
@@ -84,7 +99,7 @@ void MpmState<T, Grid>::CalcResidual(VectorX<T>* b) {
           const Vector3<Scalar>& xi = grid_x[i][j][k];
           /* Note that we take the stress from the scratch data here instead
            directly from the particle because we are in the Newton loop. */
-          const Matrix3<T>& tau_v0 = data_.tau_v0[data_index];
+          const Matrix3<T>& tau_v0 = data_->tau_v0[data_index];
           /* For the elastic force from particles, we compute -∂E/∂xᵢ and
            get
 
@@ -197,7 +212,7 @@ void MpmState<T, Grid>::CalcTangentMatrix(
                                             int data_index) {
     const Vector3<T>& x = particle_data->x[data_index];
     const BsplineWeights<Scalar> bspline = MakeBsplineWeights(x, grid_->dx());
-    const auto& dPdF_v0 = data_.volume_scaled_stress_derivatives[data_index];
+    const auto& dPdF_v0 = data_->volume_scaled_stress_derivatives[data_index];
     Matrix3<T> hessian = Matrix3<T>::Zero();
 
     for (int idx0 = 0; idx0 < 27; ++idx0) {
@@ -244,6 +259,22 @@ void MpmState<T, Grid>::CalcTangentMatrix(
   });
 }
 
+template <typename T, template <typename> class Grid>
+void MpmState<T, Grid>::CalcNextState(const VectorX<double>& dv) {
+  DRAKE_DEMAND(dv.size() == num_dofs());
+  dv_ = dv.template cast<T>();
+  auto upgdate_grid_velocity = [&](GridData<T>* node) {
+    node->v += dv_.template segment<3>(3 * node->index);
+  };
+  grid_->IterateGrid(upgdate_grid_velocity);
+  Transfer<T, Grid> transfer(dt_, grid_, particles_);
+  if constexpr (std::is_same_v<T, AutoDiffXd>) {
+    transfer.SerialGridToParticle();
+  } else {
+    transfer.ParallelSimdGridToParticle(parallelism_);
+  }
+}
+
 template <>
 void MpmState<AutoDiffXd, MockSparseGrid>::UpdateParticleStateSimd() {
   throw std::runtime_error("UpdateParticleStateSimd(): Not implemented");
@@ -272,16 +303,16 @@ void MpmState<T, Grid>::UpdateParticleState() {
     }
     C *= D_inverse_;
     const Matrix3<T>& particle_F = particle_data->F[data_index];
-    data_.F[data_index] = particle_F + C * dt_ * particle_F;
+    data_->F[data_index] = particle_F + C * dt_ * particle_F;
   };
   const ParticleSorter& sorter = particles_->sorter;
   sorter.Iterate(grid_, &particles_->data, false, std::move(update_F_kernel));
 
   /* Then update stress and stress derivatives. */
-  particles_->data.UpdateStress(&data_.F, &data_.tau_v0,
+  particles_->data.UpdateStress(&data_->F, &data_->tau_v0,
                                 /* apply plasticity */ false, parallelism_);
   particles_->data.UpdateStressDerivatives(
-      data_.F, &data_.volume_scaled_stress_derivatives);
+      data_->F, &data_->volume_scaled_stress_derivatives);
 }
 
 template <typename T, template <typename> class Grid>
@@ -309,17 +340,17 @@ void MpmState<T, Grid>::UpdateParticleStateSimd() {
     Matrix3<SimdScalar<T>> C = B * D_inverse_;
     Matrix3<SimdScalar<T>> F = Load(particle_data->F, data_indices);
     F += C * dt_ * F;
-    Store(F, &data_.F, data_indices);
+    Store(F, &data_->F, data_indices);
   };
   const ParticleSorter& sorter = particles_->sorter;
   sorter.IterateParallelSimd(grid_, &particles_->data, false, parallelism_,
                              std::move(update_F_kernel));
 
   /* Then update stress and stress derivatives. */
-  particles_->data.UpdateStress(&data_.F, &data_.tau_v0,
+  particles_->data.UpdateStress(&data_->F, &data_->tau_v0,
                                 /* apply plasticity */ false, parallelism_);
   particles_->data.UpdateStressDerivatives(
-      data_.F, &data_.volume_scaled_stress_derivatives, parallelism_);
+      data_->F, &data_->volume_scaled_stress_derivatives, parallelism_);
 }
 
 }  // namespace internal

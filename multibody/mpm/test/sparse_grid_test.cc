@@ -379,6 +379,52 @@ GTEST_TEST(SparseGridTest, ColoredBlocks) {
   EXPECT_EQ(particles.sorter.colored_blocks(), expected_blocks);
 }
 
+GTEST_TEST(SparseGridTest, SetNodeIndices) {
+  const double dx = 1.0;
+  SparseGrid<double> grid(dx);
+  const Vector3d q_WP0 = Vector3d(0.001, 0.001, 0.001);
+  const Vector3d q_WP1 = Vector3d(1.001, 0.001, 0.001);
+  const Vector3d q_WP2 = Vector3d(2.001, 0.001, 0.001);
+  std::vector<Vector3d> q_WPs = {q_WP0, q_WP1, q_WP2};
+  Particles<double> particles;
+  particles.data.x = q_WPs;
+  particles.data.in_constraint = {false, true, false};
+  particles.Sort(grid);
+  grid.Allocate(particles.sorter);
+
+  contact_solvers::internal::PartialPermutation permutation;
+  grid.SetNodeIndices(&permutation);
+
+  const std::vector<std::pair<Vector3i, GridData<double>>> grid_data =
+      grid.GetGridData();
+  std::set<int> indices;
+  for (const auto& [node, data] : grid_data) {
+    EXPECT_GE(data.index, 0);
+    /* Check that there are no duplicates. */
+    EXPECT_FALSE(indices.contains(data.index));
+    indices.insert(data.index);
+
+    /* Grid nodes in the range of influence of the second particle are
+     participating; active nodes that are not in the range of influence of the
+     second particle is not participating. */
+    const bool x_participating = node[0] >= 0 && node[0] <= 2;
+    const bool y_participating = node[1] >= -1 && node[0] <= 1;
+    const bool z_participating = node[2] >= -1 && node[2] <= 1;
+    const bool participating =
+        x_participating && y_participating && z_participating;
+    if (participating) {
+      EXPECT_TRUE(permutation.participates(data.index));
+    } else {
+      /* There are two ways that the fact of a grid node is not participating
+       manifests itself:
+       1. The node is not in the domain.
+       2. The node is in the domain, but is labeled not participatting. */
+      EXPECT_TRUE(data.index > permutation.domain_size() ||
+                  !permutation.participates(data.index));
+    }
+  }
+}
+
 }  // namespace
 }  // namespace internal
 }  // namespace mpm

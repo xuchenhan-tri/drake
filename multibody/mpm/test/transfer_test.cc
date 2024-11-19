@@ -36,6 +36,7 @@ void AddParticle(ParticleData<double>* particles, Vector3d x0) {
     }
   }
   particles->C.push_back(C);
+  particles->in_constraint.push_back(false);
   particles->tau_v0.push_back(P);
 }
 
@@ -150,6 +151,7 @@ GTEST_TEST(TransferTest, ParticleToGrid) {
   particles.data.v.push_back(v0);
   particles.data.F.push_back(nan_matrix);
   particles.data.C.push_back(Matrix3d::Zero());
+  particles.data.in_constraint.push_back(false);
   particles.data.tau_v0.push_back(Matrix3d::Zero());
 
   const double dt = 0.0123;

@@ -135,11 +135,12 @@ struct ParticleData {
     }
   }
 
-  std::vector<T> m;           // mass
-  std::vector<Vector3<T>> x;  // positions
-  std::vector<Vector3<T>> v;  // velocity
-  std::vector<Matrix3<T>> F;  // deformation gradient
-  std::vector<Matrix3<T>> C;  // affine velocity field
+  std::vector<T> m;                 // mass
+  std::vector<Vector3<T>> x;        // positions
+  std::vector<Vector3<T>> v;        // velocity
+  std::vector<Matrix3<T>> F;        // deformation gradient
+  std::vector<Matrix3<T>> C;        // affine velocity field
+  std::vector<bool> in_constraint;  
   std::vector<Matrix3<T>>
       tau_v0;             // Kirchhoff stress scaled by reference volume
   std::vector<T> volume;  // reference volume

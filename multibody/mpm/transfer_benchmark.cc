@@ -42,6 +42,7 @@ class TransferBenchmark : public benchmark::Fixture {
             particles_.data.v.push_back(Vector3f(1 * i, 2 * j, 3 * k));
             particles_.data.F.push_back(Matrix3f::Identity());
             particles_.data.C.push_back(Matrix3f::Identity());
+            particles_.data.in_constraint.push_back(false);
             particles_.data.tau_v0.push_back(Matrix3f::Identity());
           }
         }

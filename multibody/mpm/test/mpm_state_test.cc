@@ -31,6 +31,7 @@ void AddParticle(Particles<T>* particles,
   particles->data.m.push_back(1.0);
   particles->data.v.push_back(Vector3<T>(0.0, 0.0, 0.0));
   particles->data.C.push_back(Matrix3<T>::Zero());
+  particles->data.in_constraint.push_back(false);
   particles->data.volume.push_back(0.01);
   particles->data.tau_v0.push_back(Matrix3<T>::Zero());
 }
@@ -57,7 +58,8 @@ GTEST_TEST(MpmStateTest, MakeTangentMatrix) {
   AddParticle<double>(&particles, x0);
   const double dt = 0.02;
   {
-    MpmState<double> state(dt, &grid, &particles);
+    MpmImplicitData<double> data(particles.data);
+    MpmState<double> state(dt, &grid, &particles, &data);
     const Block3x3SparseSymmetricMatrix tangent_matrix =
         state.MakeTangentMatrix();
     const BlockSparsityPattern& sparsity_pattern =
@@ -82,7 +84,8 @@ GTEST_TEST(MpmStateTest, MakeTangentMatrix) {
    with the existing pad.*/
   AddParticle<double>(&particles, x0 + Vector3d(2.0 * dx, 0.0, 0.0));
   {
-    MpmState<double> state(dt, &grid, &particles);
+    MpmImplicitData<double> data(particles.data);
+    MpmState<double> state(dt, &grid, &particles, &data);
     const Block3x3SparseSymmetricMatrix tangent_matrix =
         state.MakeTangentMatrix();
     const BlockSparsityPattern& sparsity_pattern =
@@ -101,7 +104,8 @@ GTEST_TEST(MpmStateTest, MakeTangentMatrix) {
    two existing pads. */
   AddParticle<double>(&particles, x0 + Vector3d(dx, 0.0, 0.0));
   {
-    MpmState<double> state(dt, &grid, &particles);
+    MpmImplicitData<double> data(particles.data);
+    MpmState<double> state(dt, &grid, &particles, &data);
     const Block3x3SparseSymmetricMatrix tangent_matrix =
         state.MakeTangentMatrix();
     const BlockSparsityPattern& sparsity_pattern =
@@ -131,8 +135,9 @@ GTEST_TEST(MpmStateTest, Residual) {
   particles.data.F[0] = Matrix3d::Identity();
   const double dt = 0.02;
   const double kTol = 1e-14;
+  MpmImplicitData<double> data(particles.data);
 
-  MpmState<double> state(dt, &grid, &particles);
+  MpmState<double> state(dt, &grid, &particles, &data);
   /* A single particle activates 27 grid ndoes. */
   const int expected_num_dofs = 27 * 3;
   EXPECT_EQ(state.num_dofs(), expected_num_dofs);
@@ -216,7 +221,8 @@ GTEST_TEST(MpmStateTest, CalcTotalEnergy) {
   particles.data.F[0] = Matrix3d::Identity();
   const double dt = 0.02;
 
-  MpmState<double> state(dt, &grid, &particles);
+  MpmImplicitData<double> data(particles.data);
+  MpmState<double> state(dt, &grid, &particles, &data);
   double energy = state.CalcTotalEnergy();
   EXPECT_EQ(energy, 0.0);
 
@@ -236,7 +242,7 @@ GTEST_TEST(MpmStateTest, CalcTotalEnergy) {
   double kinetic_energy = 0.0;
   const std::vector<std::pair<Vector3i, GridData<double>>> grid_data =
       grid.GetGridData();
-  for (const auto& [node, data] : grid_data) {
+  for (const auto& [node, node_data] : grid_data) {
     const int i = node[0];
     const int j = node[1];
     const int k = node[2];
@@ -244,7 +250,7 @@ GTEST_TEST(MpmStateTest, CalcTotalEnergy) {
      within a block.*/
     const int node_index = i * 9 + j * 3 + k;
     kinetic_energy +=
-        0.5 * data.m * dv.segment<3>(node_index * 3).squaredNorm();
+        0.5 * node_data.m * dv.segment<3>(node_index * 3).squaredNorm();
   }
   EXPECT_DOUBLE_EQ(energy, kinetic_energy + potential_energy);
 }
@@ -271,8 +277,11 @@ GTEST_TEST(MpmStateTest, ResidualIsDerivativeOfEnergy) {
 
   const double kTol = 1e-10;
 
-  MpmState<AutoDiffXd, MockSparseGrid> state_ad(dt_ad, &grid_ad, &particles_ad);
-  MpmState<double> state(dt, &grid, &particles);
+  MpmImplicitData<AutoDiffXd> data_ad(particles_ad.data);
+  MpmState<AutoDiffXd, MockSparseGrid> state_ad(dt_ad, &grid_ad, &particles_ad,
+                                                &data_ad);
+  MpmImplicitData<double> data(particles.data);
+  MpmState<double> state(dt, &grid, &particles, &data);
   const int num_dofs = state.num_dofs();
   ASSERT_EQ(num_dofs, state_ad.num_dofs());
 
@@ -312,8 +321,11 @@ GTEST_TEST(MpmStateTest, HessianIsDerivativeOfResidual) {
 
   const double kTol = 1e-10;
 
-  MpmState<AutoDiffXd, MockSparseGrid> state_ad(dt_ad, &grid_ad, &particles_ad);
-  MpmState<double> state(dt, &grid, &particles);
+  MpmImplicitData<AutoDiffXd> data_ad(particles_ad.data);
+  MpmState<AutoDiffXd, MockSparseGrid> state_ad(dt_ad, &grid_ad, &particles_ad,
+                                                &data_ad);
+  MpmImplicitData<double> data(particles.data);
+  MpmState<double> state(dt, &grid, &particles, &data);
   const int num_dofs = state.num_dofs();
   ASSERT_EQ(num_dofs, state_ad.num_dofs());
 

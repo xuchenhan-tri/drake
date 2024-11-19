@@ -89,10 +89,17 @@ MassAndMomentum<T> MockSparseGrid<T>::ComputeTotalMassAndMomentum() const {
 }
 
 template <typename T>
-void MockSparseGrid<T>::SetNodeIndices() {
+void MockSparseGrid<T>::SetNodeIndices(
+    contact_solvers::internal::PartialPermutation* partial_permutation) {
+  if (partial_permutation != nullptr) {
+    DRAKE_DEMAND(partial_permutation->domain_size() == 0);
+  }
   int node_index = 0;
   for (auto& [node, data] : grid_data_) {
     if (data.m > 0.0) {
+      if (partial_permutation != nullptr && data.index == -2) {
+        partial_permutation->push(node_index);
+      }
       data.index = node_index++;
     } else {
       data.index = -1;
