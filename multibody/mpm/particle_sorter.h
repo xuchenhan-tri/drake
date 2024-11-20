@@ -56,26 +56,24 @@ class ParticleSorter {
   }
 
   template <typename Func, typename Grid, typename T>
-  void IterateOneParticlePerPad(Grid* grid, ParticleData<T>* particles,
-                                bool write_to_grid, Func&& func) const {
-    const int num_blocks = grid->num_blocks();
+  void IterateOneParticlePerPad(const Grid& grid,
+                                const ParticleData<T>& particles,
+                                Func&& func) const {
+    const int num_blocks = grid.num_blocks();
     DRAKE_DEMAND(ssize(sentinel_particles_) == num_blocks + 1);
-    decltype(grid->GetPadNodes(std::declval<typename Grid::NodeType>())) grid_x;
-    decltype(grid->GetPadData(std::declval<uint64_t>())) grid_data;
+    decltype(grid.GetPadNodes(std::declval<typename Grid::NodeType>())) grid_x;
+    decltype(grid.GetPadData(std::declval<uint64_t>())) grid_data;
     for (int b = 0; b < num_blocks; ++b) {
       const int particle_start = sentinel_particles_[b];
       const int particle_end = sentinel_particles_[b + 1];
       for (int p = particle_start; p < particle_end; ++p) {
         int data_index = data_indices_[p];
-        grid_data = grid->GetPadData(base_node_offsets_[p]);
-        grid_x = grid->GetPadNodes(particles->x[data_index]);
-        std::forward<Func>(func)(grid_x, &grid_data, particles, data_index);
+        grid_data = grid.GetPadData(base_node_offsets_[p]);
+        grid_x = grid.GetPadNodes(particles.x[data_index]);
+        std::forward<Func>(func)(grid_x, grid_data, particles, data_index);
         while (p + 1 != particle_end &&
                base_node_offsets_[p] == base_node_offsets_[p + 1]) {
           ++p;
-        }
-        if (write_to_grid) {
-          grid->SetPadData(base_node_offsets_[p], grid_data);
         }
       }
     }

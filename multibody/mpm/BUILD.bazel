@@ -250,6 +250,7 @@ cc_library(
         "mpm_state.cc",
     ],
     hdrs = [
+        "solver_state.h",
         "mpm_state.h",
     ],
     deps = [

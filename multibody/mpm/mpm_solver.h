@@ -21,11 +21,11 @@ class MpmSolver {
    with unknown variable v on the grid with a Newton-Raphson solver.
    @param [in, out] state  On input, `state` provides the MpmState evaluated at
    the previous time step.*/
-  MpmSolver(MpmState<T>* state) : state_(state);
+  MpmSolver(MpmState<T>* mpm_state, SolverState<T>* solver_state);
 
   /* Given the next time step velocities for the participating grid nodes, moves
    the internal MPM state to the next time step's state. */
-  void CalcNextState(const VectorX<double>& participating_v_next);
+  void AdvanceMpmState(const VectorX<double>& participating_v_next);
 
   /* Returns the Schur complement of the tangent matrix of equation (1). */
   const MatrixX<double>& schur_complement() const {
@@ -40,7 +40,8 @@ class MpmSolver {
  private:
   void SolveFreeMotion();
 
-  MpmState* state_{};
+  MpmState<T>* mpm_state_{};
+  SolverState<T>* solver_state_{};
   contact_solvers::internal::SchurComplement schur_complement_;
   VectorX<double> participating_v_star_;
 };

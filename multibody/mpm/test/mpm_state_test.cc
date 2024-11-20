@@ -1,6 +1,7 @@
 #include "../mpm_state.h"
 
 #include "../mock_sparse_grid.h"
+#include "../solver_state.h"
 #include <gtest/gtest.h>
 
 #include "drake/common/test_utilities/eigen_matrix_compare.h"
@@ -51,15 +52,13 @@ void AddDefaultMaterial(ParticleData<T>* particle_data) {
 
 GTEST_TEST(MpmStateTest, MakeTangentMatrix) {
   const double dx = 0.01;
-  SparseGrid<double> grid(dx);
   Particles<double> particles;
   /* A single particle produces a fully-connected graph of 27 nodes. */
   const Vector3d x0 = Vector3d(dx, dx, dx);
   AddParticle<double>(&particles, x0);
   const double dt = 0.02;
   {
-    MpmImplicitData<double> data(particles.data);
-    MpmState<double> state(dt, &grid, &particles, &data);
+    const MpmState<double> state(dt, dx, particles);
     const Block3x3SparseSymmetricMatrix tangent_matrix =
         state.MakeTangentMatrix();
     const BlockSparsityPattern& sparsity_pattern =
@@ -84,8 +83,7 @@ GTEST_TEST(MpmStateTest, MakeTangentMatrix) {
    with the existing pad.*/
   AddParticle<double>(&particles, x0 + Vector3d(2.0 * dx, 0.0, 0.0));
   {
-    MpmImplicitData<double> data(particles.data);
-    MpmState<double> state(dt, &grid, &particles, &data);
+    const MpmState<double> state(dt, dx, particles);
     const Block3x3SparseSymmetricMatrix tangent_matrix =
         state.MakeTangentMatrix();
     const BlockSparsityPattern& sparsity_pattern =
@@ -104,8 +102,7 @@ GTEST_TEST(MpmStateTest, MakeTangentMatrix) {
    two existing pads. */
   AddParticle<double>(&particles, x0 + Vector3d(dx, 0.0, 0.0));
   {
-    MpmImplicitData<double> data(particles.data);
-    MpmState<double> state(dt, &grid, &particles, &data);
+    const MpmState<double> state(dt, dx, particles);
     const Block3x3SparseSymmetricMatrix tangent_matrix =
         state.MakeTangentMatrix();
     const BlockSparsityPattern& sparsity_pattern =
@@ -124,7 +121,6 @@ GTEST_TEST(MpmStateTest, MakeTangentMatrix) {
 
 GTEST_TEST(MpmStateTest, Residual) {
   const double dx = 0.01;
-  SparseGrid<double> grid(dx);
   Particles<double> particles;
   // TODO(xuchenhan-tri): Test that there's actually only a single block.
   /* Add a particle so that all grid nodes touched by this particle are in a
@@ -135,28 +131,28 @@ GTEST_TEST(MpmStateTest, Residual) {
   particles.data.F[0] = Matrix3d::Identity();
   const double dt = 0.02;
   const double kTol = 1e-14;
-  MpmImplicitData<double> data(particles.data);
 
-  MpmState<double> state(dt, &grid, &particles, &data);
+  MpmState<double> state(dt, dx, particles);
   /* A single particle activates 27 grid ndoes. */
   const int expected_num_dofs = 27 * 3;
   EXPECT_EQ(state.num_dofs(), expected_num_dofs);
-  EXPECT_TRUE(
-      CompareMatrices(state.dv(), VectorX<double>::Zero(expected_num_dofs)));
+  SolverState<double> solver_state(state.num_dofs(), state.num_particles());
+  EXPECT_TRUE(CompareMatrices(solver_state.dv,
+                              VectorX<double>::Zero(expected_num_dofs)));
   /* We set b to be an arbitrary value with an arbitrary size to test that the
    function does not crash. */
   VectorX<double> b = VectorX<double>::LinSpaced(42, 0, 1);
-  state.CalcResidual(&b);
+  state.CalcResidual(solver_state, &b);
   EXPECT_TRUE(CompareMatrices(b, VectorX<double>::Zero(expected_num_dofs)));
 
   /* Give the grid a constant velocity field so that it doesn't induce any
    deformation on the particle. Consequently, the only residual comes from the
    M * dv term. */
   VectorX<double> ddv = VectorX<double>::Ones(expected_num_dofs);
-  state.IncrementDv(ddv);
-  EXPECT_TRUE(CompareMatrices(state.dv(), ddv));
-  state.CalcResidual(&b);
-  BsplineWeights<double> weights(x0, dx);
+  state.UpdateSolverState(ddv, &solver_state);
+  EXPECT_TRUE(CompareMatrices(solver_state.dv, ddv));
+  state.CalcResidual(solver_state, &b);
+  const BsplineWeights<double> weights(x0, dx);
   for (int i = 0; i < 3; ++i) {
     for (int j = 0; j < 3; ++j) {
       for (int k = 0; k < 3; ++k) {
@@ -172,10 +168,10 @@ GTEST_TEST(MpmStateTest, Residual) {
   }
 
   /* Reset dv to zero. */
-  state.IncrementDv(-ddv);
-  EXPECT_TRUE(CompareMatrices(state.dv(),
+  state.UpdateSolverState(-ddv, &solver_state);
+  EXPECT_TRUE(CompareMatrices(solver_state.dv,
                               VectorX<double>::Zero(expected_num_dofs), kTol));
-  state.CalcResidual(&b);
+  state.CalcResidual(solver_state, &b);
   EXPECT_TRUE(
       CompareMatrices(b, VectorX<double>::Zero(expected_num_dofs), kTol));
 
@@ -185,8 +181,8 @@ GTEST_TEST(MpmStateTest, Residual) {
    residual, the contribution to the residual from the particle deformation at
    this node is zero. */
   ddv = VectorX<double>::LinSpaced(expected_num_dofs, 0, 1);
-  state.IncrementDv(ddv);
-  state.CalcResidual(&b);
+  state.UpdateSolverState(ddv, &solver_state);
+  state.CalcResidual(solver_state, &b);
   for (int i = 0; i < 3; ++i) {
     for (int j = 0; j < 3; ++j) {
       for (int k = 0; k < 3; ++k) {
@@ -210,7 +206,6 @@ GTEST_TEST(MpmStateTest, Residual) {
 
 GTEST_TEST(MpmStateTest, CalcTotalEnergy) {
   const double dx = 0.01;
-  SparseGrid<double> grid(dx);
   Particles<double> particles;
   // TODO(xuchenhan-tri): Test that there's actually only a single block.
   /* Add a particle so that all grid nodes touched by this particle are in a
@@ -221,9 +216,9 @@ GTEST_TEST(MpmStateTest, CalcTotalEnergy) {
   particles.data.F[0] = Matrix3d::Identity();
   const double dt = 0.02;
 
-  MpmImplicitData<double> data(particles.data);
-  MpmState<double> state(dt, &grid, &particles, &data);
-  double energy = state.CalcTotalEnergy();
+  MpmState<double> state(dt, dx, particles);
+  SolverState<double> solver_state(state.num_dofs(), state.num_particles());
+  double energy = state.CalcTotalEnergy(solver_state);
   EXPECT_EQ(energy, 0.0);
 
   /* A single particle activates 27 grid ndoes. */
@@ -231,17 +226,16 @@ GTEST_TEST(MpmStateTest, CalcTotalEnergy) {
   EXPECT_EQ(state.num_dofs(), expected_num_dofs);
   /* Arbitrary velocity field. */
   VectorX<double> ddv = VectorX<double>::LinSpaced(expected_num_dofs, 0.0, 1.0);
-  state.IncrementDv(ddv);
-  const VectorX<double>& dv = state.dv();
-  energy = state.CalcTotalEnergy();
+  state.UpdateSolverState(ddv, &solver_state);
+  energy = state.CalcTotalEnergy(solver_state);
 
   /* This is tested in the ParticleData class. */
   const double potential_energy =
-      particles.data.ComputeTotalEnergy(state.data().F);
+      particles.data.ComputeTotalEnergy(solver_state.F);
 
   double kinetic_energy = 0.0;
   const std::vector<std::pair<Vector3i, GridData<double>>> grid_data =
-      grid.GetGridData();
+      state.grid().GetGridData();
   for (const auto& [node, node_data] : grid_data) {
     const int i = node[0];
     const int j = node[1];
@@ -249,15 +243,14 @@ GTEST_TEST(MpmStateTest, CalcTotalEnergy) {
     /* We make use of the fact that SpGrid follows lexicographical order
      within a block.*/
     const int node_index = i * 9 + j * 3 + k;
-    kinetic_energy +=
-        0.5 * node_data.m * dv.segment<3>(node_index * 3).squaredNorm();
+    kinetic_energy += 0.5 * node_data.m *
+                      solver_state.dv.segment<3>(node_index * 3).squaredNorm();
   }
   EXPECT_DOUBLE_EQ(energy, kinetic_energy + potential_energy);
 }
 
 GTEST_TEST(MpmStateTest, ResidualIsDerivativeOfEnergy) {
   const double dx = 0.01;
-  MockSparseGrid<AutoDiffXd> grid_ad(dx);
   Particles<AutoDiffXd> particles_ad;
   const Vector3<AutoDiffXd> x0_ad(dx, dx, dx);
   const Vector3<AutoDiffXd> x1_ad(1.1 * dx, 1.2 * dx, 1.3 * dx);
@@ -266,7 +259,6 @@ GTEST_TEST(MpmStateTest, ResidualIsDerivativeOfEnergy) {
   AddDefaultMaterial(&particles_ad.data);
   const AutoDiffXd dt_ad = 0.02;
 
-  SparseGrid<double> grid(dx);
   Particles<double> particles;
   const Vector3<double> x0(dx, dx, dx);
   const Vector3<double> x1(1.1 * dx, 1.2 * dx, 1.3 * dx);
@@ -277,11 +269,12 @@ GTEST_TEST(MpmStateTest, ResidualIsDerivativeOfEnergy) {
 
   const double kTol = 1e-10;
 
-  MpmImplicitData<AutoDiffXd> data_ad(particles_ad.data);
-  MpmState<AutoDiffXd, MockSparseGrid> state_ad(dt_ad, &grid_ad, &particles_ad,
-                                                &data_ad);
-  MpmImplicitData<double> data(particles.data);
-  MpmState<double> state(dt, &grid, &particles, &data);
+  MpmState<AutoDiffXd, MockSparseGrid> state_ad(dt_ad, dx, particles_ad);
+  SolverState<AutoDiffXd> solver_state_ad(state_ad.num_dofs(),
+                                          state_ad.num_particles());
+
+  MpmState<double> state(dt, dx, particles);
+  SolverState<double> solver_state(state.num_dofs(), state.num_particles());
   const int num_dofs = state.num_dofs();
   ASSERT_EQ(num_dofs, state_ad.num_dofs());
 
@@ -290,18 +283,17 @@ GTEST_TEST(MpmStateTest, ResidualIsDerivativeOfEnergy) {
   ddv_ad.resize(num_dofs);
   math::InitializeAutoDiff(ddv, &ddv_ad);
 
-  state_ad.IncrementDv(ddv_ad);
-  state.IncrementDv(ddv);
+  state.UpdateSolverState(ddv, &solver_state);
+  state_ad.UpdateSolverState(ddv_ad, &solver_state_ad);
 
-  const AutoDiffXd energy = state_ad.CalcTotalEnergy();
+  const AutoDiffXd energy = state_ad.CalcTotalEnergy(solver_state_ad);
   VectorX<double> residual;
-  state.CalcResidual(&residual);
+  state.CalcResidual(solver_state, &residual);
   EXPECT_TRUE(CompareMatrices(energy.derivatives(), residual, kTol));
 }
 
 GTEST_TEST(MpmStateTest, HessianIsDerivativeOfResidual) {
   const double dx = 0.01;
-  MockSparseGrid<AutoDiffXd> grid_ad(dx);
   Particles<AutoDiffXd> particles_ad;
   const Vector3<AutoDiffXd> x0_ad(dx, dx, dx);
   // const Vector3<AutoDiffXd> x1_ad(1.1 * dx, 1.2 * dx, 1.3 * dx);
@@ -310,7 +302,6 @@ GTEST_TEST(MpmStateTest, HessianIsDerivativeOfResidual) {
   AddDefaultMaterial(&particles_ad.data);
   const AutoDiffXd dt_ad = 0.01;
 
-  SparseGrid<double> grid(dx);
   Particles<double> particles;
   const Vector3<double> x0(dx, dx, dx);
   // const Vector3<double> x1(1.1 * dx, 1.2 * dx, 1.3 * dx);
@@ -321,11 +312,13 @@ GTEST_TEST(MpmStateTest, HessianIsDerivativeOfResidual) {
 
   const double kTol = 1e-10;
 
-  MpmImplicitData<AutoDiffXd> data_ad(particles_ad.data);
-  MpmState<AutoDiffXd, MockSparseGrid> state_ad(dt_ad, &grid_ad, &particles_ad,
-                                                &data_ad);
-  MpmImplicitData<double> data(particles.data);
-  MpmState<double> state(dt, &grid, &particles, &data);
+  MpmState<AutoDiffXd, MockSparseGrid> state_ad(dt_ad, dx, particles_ad);
+  SolverState<AutoDiffXd> solver_state_ad(state_ad.num_dofs(),
+                                          state_ad.num_particles());
+
+  MpmState<double> state(dt, dx, particles);
+  SolverState<double> solver_state(state.num_dofs(), state.num_particles());
+
   const int num_dofs = state.num_dofs();
   ASSERT_EQ(num_dofs, state_ad.num_dofs());
 
@@ -334,18 +327,34 @@ GTEST_TEST(MpmStateTest, HessianIsDerivativeOfResidual) {
   ddv_ad.resize(num_dofs);
   math::InitializeAutoDiff(ddv, &ddv_ad);
 
-  state_ad.IncrementDv(ddv_ad);
-  state.IncrementDv(ddv);
+  state_ad.UpdateSolverState(ddv_ad, &solver_state_ad);
+  state.UpdateSolverState(ddv, &solver_state);
 
   VectorX<AutoDiffXd> residual;
-  state_ad.CalcResidual(&residual);
+  state_ad.CalcResidual(solver_state_ad, &residual);
 
   Block3x3SparseSymmetricMatrix tangent_matrix = state.MakeTangentMatrix();
-  state.CalcTangentMatrix(&tangent_matrix);
+  state.CalcTangentMatrix(solver_state, &tangent_matrix);
   const MatrixXd dense_tangent_matrix = tangent_matrix.MakeDenseMatrix();
 
   EXPECT_TRUE(CompareMatrices(dense_tangent_matrix.col(0),
                               residual(0).derivatives(), kTol));
+}
+
+GTEST_TEST(MpmStateTest, AdvanceToNextState) {
+  const double dx = 0.01;
+  Particles<double> particles;
+  const Vector3d x0(dx, dx, dx);
+  AddParticle<double>(&particles, x0);
+  const double dt = 0.02;
+
+  MpmState<double> state(dt, dx, particles);
+  VectorX<double> dv = VectorX<double>::Ones(state.num_dofs());
+
+  state.AdvanceToNextState(dv);
+  particles = state.particles();
+  ASSERT_EQ(particles.data.x.size(), 1);
+  EXPECT_TRUE(CompareMatrices(particles.data.x[0], x0 + dt * Vector3d::Ones()));
 }
 
 }  // namespace

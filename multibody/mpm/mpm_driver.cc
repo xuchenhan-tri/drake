@@ -338,7 +338,6 @@ void MpmDriver<T>::SolveContact(const std::vector<ContactPair>& contact_pairs) {
       MakeContactParticles(particles_, contact_pairs);
   std::vector<Vector3<double>> impulses(ssize(contact_pairs),
                                         Vector3<double>::Zero());
-
   Transfer<T> transfer(substep_dt, grid_.get_mutable(), &contact_particles,
                        false);
 

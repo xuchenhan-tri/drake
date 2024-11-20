@@ -5,6 +5,7 @@
 #include "sparse_grid.h"
 
 #include "drake/common/eigen_types.h"
+#include "drake/common/parallelism.h"
 #include "drake/math/autodiff_gradient.h"
 #include "drake/multibody/contact_solvers/sap/partial_permutation.h"
 #include "drake/multibody/mpm/grid_data.h"
@@ -25,7 +26,8 @@ class MockSparseGrid {
 
   using NodeType = Vector3<double>;
 
-  explicit MockSparseGrid(double dx) : dx_(dx) {}
+  explicit MockSparseGrid(double dx, Parallelism parallelism = false)
+      : dx_(dx) {}
 
   std::unique_ptr<MockSparseGrid<T>> Clone() const {
     auto clone = std::make_unique<MockSparseGrid<T>>(dx_);

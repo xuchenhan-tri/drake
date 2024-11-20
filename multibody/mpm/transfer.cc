@@ -163,6 +163,9 @@ void Transfer<T, Grid>::SerialGridToParticle() {
       for (int j = 0; j < 3; ++j) {
         for (int k = 0; k < 3; ++k) {
           const Vector3<T>& vi = (*grid_data)[i][j][k].v;
+          std::cout << "vi: " << vi << std::endl;
+          std::cout << "grid index " << (*grid_data)[i][j][k].index
+                    << std::endl;
           const Vector3<Scalar>& xi = grid_x[i][j][k];
           const Scalar& w = bspline.weight(i, j, k);
           v += w * vi;
