@@ -37,7 +37,8 @@ using DeformationGradientDataVariant =
  @tparam double or float. */
 template <typename T>
 struct ParticleData {
-  T ComputeTotalEnergy(const std::vector<Matrix3<T>>& deformation_gradient) {
+  using Scalar = T;
+  T ComputeTotalEnergy(const std::vector<Matrix3<T>>& deformation_gradient) const {
     T result = 0;
     for (int i = 0; i < ssize(materials); ++i) {
       const auto& constitutive_model = constitutive_models[i];
@@ -73,7 +74,7 @@ struct ParticleData {
   void UpdateStress(std::vector<Matrix3<T>>* deformation_gradient,
                     std::vector<Matrix3<T>>* volume_scaled_stress,
                     bool apply_plasticity = false,
-                    Parallelism parallelism = false) {
+                    Parallelism parallelism = false) const {
     for (int i = 0; i < ssize(materials); ++i) {
       const auto& constitutive_model = constitutive_models[i];
       [[maybe_unused]] const int num_threads = parallelism.num_threads();
@@ -109,7 +110,7 @@ struct ParticleData {
   void UpdateStressDerivatives(
       const std::vector<Matrix3<T>>& deformation_gradient,
       std::vector<math::FourthOrderTensor<T>>* volume_scaled_stress_derivatives,
-      Parallelism parallelism = false) {
+      Parallelism parallelism = false) const {
     for (int i = 0; i < ssize(materials); ++i) {
       const auto& constitutive_model = constitutive_models[i];
       [[maybe_unused]] const int num_threads = parallelism.num_threads();
@@ -144,7 +145,7 @@ struct ParticleData {
   std::vector<Matrix3<T>>
       tau_v0;             // Kirchhoff stress scaled by reference volume
   std::vector<T> volume;  // reference volume
-  std::vector<DeformationGradientDataVariant<T>>
+  mutable std::vector<DeformationGradientDataVariant<T>>
       strain_data;  // Deformation gradient dependent data that is used to
                     // calculate the energy density and its derivatives.
 

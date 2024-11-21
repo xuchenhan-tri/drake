@@ -28,11 +28,12 @@ class ParticleSorter {
   /* Using the order defined by `this` sorter, iterate through all particles and
    the grid data relevant to the particle. Potentially write to those grid
    nodes too upon the request of the `write_to_grid` flag. */
-  template <typename Func, typename Grid, typename T>
-  void Iterate(Grid* grid, ParticleData<T>* particles, bool write_to_grid,
-               Func&& func) const {
+  template <typename GridPtr, typename ParticleDataPtr, typename Func>
+  void Iterate(GridPtr grid, ParticleDataPtr particle_data,
+               bool write_to_grid, Func&& func) const {
     const int num_blocks = grid->num_blocks();
     DRAKE_DEMAND(ssize(sentinel_particles_) == num_blocks + 1);
+    using Grid = std::remove_pointer_t<decltype(grid)>;
     decltype(grid->GetPadNodes(std::declval<typename Grid::NodeType>())) grid_x;
     decltype(grid->GetPadData(std::declval<uint64_t>())) grid_data;
     bool need_new_pad = true;
@@ -43,9 +44,9 @@ class ParticleSorter {
         int data_index = data_indices_[p];
         if (need_new_pad) {
           grid_data = grid->GetPadData(base_node_offsets_[p]);
-          grid_x = grid->GetPadNodes(particles->x[data_index]);
+          grid_x = grid->GetPadNodes(particle_data->x[data_index]);
         }
-        std::forward<Func>(func)(grid_x, &grid_data, particles, data_index);
+        std::forward<Func>(func)(grid_x, &grid_data, particle_data, data_index);
         need_new_pad = (p + 1 == particle_end) ||
                        (base_node_offsets_[p] != base_node_offsets_[p + 1]);
         if (write_to_grid && need_new_pad) {
@@ -79,13 +80,15 @@ class ParticleSorter {
     }
   }
 
-  template <typename Func, typename Grid, typename T>
-  void IterateParallelSimd(Grid* grid, ParticleData<T>* particles,
+  template <typename GridPtr, typename ParticleDataPtr, typename Func>
+  void IterateParallelSimd(GridPtr grid, ParticleDataPtr particle_data,
                            bool write_to_grid, Parallelism parallelism,
                            Func&& func) const {
     const int num_blocks = grid->num_blocks();
+    using T = typename std::remove_pointer_t<ParticleDataPtr>::Scalar;
     const int lanes = SimdScalar<T>::lanes();
     DRAKE_DEMAND(ssize(sentinel_particles_) == num_blocks + 1);
+    using Grid = std::remove_pointer_t<decltype(grid)>;
     decltype(grid->GetPadNodes(std::declval<typename Grid::NodeType>())) grid_x;
     decltype(grid->GetPadData(std::declval<uint64_t>())) grid_data;
     std::vector<int> indices;
@@ -112,16 +115,16 @@ class ParticleSorter {
           int data_index = data_indices_[p];
           if (need_new_pad) {
             grid_data = grid->GetPadData(base_node_offsets_[p]);
-            grid_x = grid->GetPadNodes(particles->x[data_index]);
+            grid_x = grid->GetPadNodes(particle_data->x[data_index]);
           }
           indices.clear();
           for (int i = p; i < next_p; ++i) {
             indices.push_back(data_indices_[i]);
           }
-          std::forward<Func>(func)(grid_x, &grid_data, particles, indices);
+          std::forward<Func>(func)(grid_x, &grid_data, particle_data, indices);
           need_new_pad = (next_p == particle_end) ||
                          (base_node_offsets_[next_p] != base_node_offsets_[p]);
-          if (need_new_pad) {
+          if (write_to_grid && need_new_pad) {
             grid->SetPadData(base_node_offsets_[p], grid_data);
           }
           p = next_p;

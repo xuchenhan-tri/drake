@@ -37,7 +37,7 @@ MpmState<T, Grid>::MpmState(T dt, double dx, Particles<T> particles,
 
 template <typename T, template <typename> class Grid>
 void MpmState<T, Grid>::UpdateSolverState(const VectorX<T>& ddv,
-                                          SolverState<T>* solver_state) {
+                                          SolverState<T>* solver_state) const {
   DRAKE_DEMAND(solver_state != nullptr);
   DRAKE_DEMAND(ddv.size() == num_dofs());
   DRAKE_DEMAND(solver_state->dv.size() == num_dofs());
@@ -46,7 +46,7 @@ void MpmState<T, Grid>::UpdateSolverState(const VectorX<T>& ddv,
 }
 
 template <typename T, template <typename> class Grid>
-T MpmState<T, Grid>::CalcTotalEnergy(const SolverState<T>& solver_state) {
+T MpmState<T, Grid>::CalcTotalEnergy(const SolverState<T>& solver_state) const {
   const int kDim = 3;
   const VectorX<T>& dv = solver_state.dv;
   const std::vector<Matrix3<T>>& F = solver_state.F;
@@ -67,7 +67,7 @@ T MpmState<T, Grid>::CalcTotalEnergy(const SolverState<T>& solver_state) {
 // TODO(xuchenhan-tri): Implement a parallel + simd version of this.
 template <typename T, template <typename> class Grid>
 void MpmState<T, Grid>::CalcResidual(const SolverState<T>& solver_state,
-                                     VectorX<T>* b) {
+                                     VectorX<T>* b) const {
   DRAKE_DEMAND(b != nullptr);
   b->resize(num_dofs());
   constexpr int kDim = 3;
@@ -77,7 +77,7 @@ void MpmState<T, Grid>::CalcResidual(const SolverState<T>& solver_state,
    them into b. */
   auto splat_force_kernel = [&](const Pad<Vector3<Scalar>>& grid_x,
                                 Pad<GridData<T>>* grid_data,
-                                ParticleData<T>* particle_data,
+                                const ParticleData<T>* particle_data,
                                 int data_index) {
     const Vector3<T>& x = particle_data->x[data_index];
     const BsplineWeights<Scalar> bspline = MakeBsplineWeights(x, grid_.dx());
@@ -105,7 +105,7 @@ void MpmState<T, Grid>::CalcResidual(const SolverState<T>& solver_state,
     }
   };
   const ParticleSorter& sorter = particles_.sorter;
-  ParticleData<T>& particle_data = particles_.data;
+  const ParticleData<T>& particle_data = particles_.data;
   sorter.Iterate(&grid_, &particle_data, true, std::move(splat_force_kernel));
   /* Collect from the scratch data, add in the M * dv term, and clear the
    scratch data. */
@@ -178,29 +178,29 @@ Block3x3SparseSymmetricMatrix MpmState<T, Grid>::MakeTangentMatrix() const {
 template <>
 void MpmState<AutoDiffXd, MockSparseGrid>::CalcTangentMatrix(
     const SolverState<AutoDiffXd>& solver_state,
-    Block3x3SparseSymmetricMatrix* tangent_matrix) {
+    Block3x3SparseSymmetricMatrix* tangent_matrix) const {
   throw std::runtime_error("UpdateSolverParticleStateSimd(): Not implemented");
 }
 
 template <>
 void MpmState<float>::CalcTangentMatrix(
     const SolverState<float>& solver_state,
-    Block3x3SparseSymmetricMatrix* tangent_matrix) {
+    Block3x3SparseSymmetricMatrix* tangent_matrix) const {
   throw std::runtime_error("UpdateSolverParticleStateSimd(): Not implemented");
 }
 
 template <typename T, template <typename> class Grid>
 void MpmState<T, Grid>::CalcTangentMatrix(
     const SolverState<T>& solver_state,
-    Block3x3SparseSymmetricMatrix* tangent_matrix) {
+    Block3x3SparseSymmetricMatrix* tangent_matrix) const {
   DRAKE_DEMAND(tangent_matrix != nullptr);
   tangent_matrix->SetZero();
   using Scalar = decltype(grid_.dx());
   const T scale = dt_ * dt_ * D_inverse_ * D_inverse_;
   const int num_active_nodes = grid_.num_active_nodes();
   auto splat_force_derivatives_kernel = [&](const Pad<Vector3<Scalar>>& grid_x,
-                                            Pad<GridData<T>>* grid_data,
-                                            ParticleData<T>* particle_data,
+                                            const Pad<GridData<T>>* grid_data,
+                                            const ParticleData<T>* particle_data,
                                             int data_index) {
     const Vector3<T>& x = particle_data->x[data_index];
     const BsplineWeights<Scalar> bspline = MakeBsplineWeights(x, grid_.dx());
@@ -239,7 +239,7 @@ void MpmState<T, Grid>::CalcTangentMatrix(
     }
   };
   const ParticleSorter& sorter = particles_.sorter;
-  ParticleData<T>& particle_data = particles_.data;
+  const ParticleData<T>& particle_data = particles_.data;
   sorter.Iterate(&grid_, &particle_data, false,
                  std::move(splat_force_derivatives_kernel));
   /* Add in the mass terms. */
@@ -276,18 +276,18 @@ void MpmState<T, Grid>::AdvanceToNextState(const VectorX<T>& dv) {
 
 template <>
 void MpmState<AutoDiffXd, MockSparseGrid>::UpdateSolverParticleStateSimd(
-    SolverState<AutoDiffXd>*) {
+    SolverState<AutoDiffXd>*) const {
   throw std::runtime_error("UpdateSolverParticleStateSimd(): Not implemented");
 }
 
 template <typename T, template <typename> class Grid>
 void MpmState<T, Grid>::UpdateSolverParticleState(
-    SolverState<T>* solver_state) {
+    SolverState<T>* solver_state) const {
   const VectorX<T>& dv = solver_state->dv;
   using Scalar = decltype(grid_.dx());
   auto update_F_kernel = [&](const Pad<Vector3<Scalar>>& grid_x,
-                             Pad<GridData<T>>* grid_data,
-                             ParticleData<T>* particle_data, int data_index) {
+                             const Pad<GridData<T>>* grid_data,
+                             const ParticleData<T>* particle_data, int data_index) {
     const Vector3<T>& x = particle_data->x[data_index];
     Matrix3<T> C = Matrix3<T>::Zero();
     const BsplineWeights<Scalar> bspline = MakeBsplineWeights(x, grid_.dx());
@@ -308,7 +308,8 @@ void MpmState<T, Grid>::UpdateSolverParticleState(
     solver_state->F[data_index] = particle_F + C * dt_ * particle_F;
   };
   const ParticleSorter& sorter = particles_.sorter;
-  sorter.Iterate(&grid_, &particles_.data, false, std::move(update_F_kernel));
+  const ParticleData<T>& particle_data = particles_.data;
+  sorter.Iterate(&grid_, &particle_data, false, std::move(update_F_kernel));
 
   /* Then update stress and stress derivatives. */
   particles_.data.UpdateStress(&solver_state->F, &solver_state->tau_v0,
@@ -319,11 +320,11 @@ void MpmState<T, Grid>::UpdateSolverParticleState(
 
 template <typename T, template <typename> class Grid>
 void MpmState<T, Grid>::UpdateSolverParticleStateSimd(
-    SolverState<T>* solver_state) {
+    SolverState<T>* solver_state) const {
   const VectorX<T>& dv = solver_state->dv;
   auto update_F_kernel = [&](const Pad<Vector3<T>>& grid_x,
-                             Pad<GridData<T>>* grid_data,
-                             ParticleData<T>* particle_data,
+                             const Pad<GridData<T>>* grid_data,
+                             const ParticleData<T>* particle_data,
                              const std::vector<int>& data_indices) {
     Matrix3<SimdScalar<T>> B = Matrix3<SimdScalar<T>>::Zero();
     Vector3<SimdScalar<T>> x = Load(particle_data->x, data_indices);
@@ -347,7 +348,8 @@ void MpmState<T, Grid>::UpdateSolverParticleStateSimd(
     Store(F, &solver_state->F, data_indices);
   };
   const ParticleSorter& sorter = particles_.sorter;
-  sorter.IterateParallelSimd(&grid_, &particles_.data, false, parallelism_,
+  const ParticleData<T>& particle_data = particles_.data;
+  sorter.IterateParallelSimd(&grid_, &particle_data, false, parallelism_,
                              std::move(update_F_kernel));
 
   /* Then update stress and stress derivatives. */

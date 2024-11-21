@@ -79,8 +79,8 @@ void MpmSolver<T>::SolveFreeMotion() {
         "MpmSolver failed to converge with max number of Newton iterations.");
   }
   mpm_state_->CalcTangentMatrix(*solver_state_, &tangent_matrix);
-  schur_complement_ =
-      SchurComplement(tangent_matrix, GetNonParticipatingGridNodes());
+  schur_complement_ = SchurComplement(
+      tangent_matrix, mpm_state->GetNonParticipatingGridNodes());
   participating_v_star_ = mpm_state_->GetParticipatingVelocities();
 }
 

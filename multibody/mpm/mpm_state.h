@@ -36,18 +36,19 @@ class MpmState {
   int num_particles() const { return particles_.data.x.size(); }
 
   /* Sets dv = dv + ddv. */
-  void UpdateSolverState(const VectorX<T>& ddv, SolverState<T>* solver_state);
+  void UpdateSolverState(const VectorX<T>& ddv,
+                         SolverState<T>* solver_state) const;
 
   /* Computes the energy at the given solver state using the formula
     E = 1/2*dv*M*dv  + ∑ₚ Ψ(Fₚ)*volumeₚ*dt. */
-  T CalcTotalEnergy(const SolverState<T>& solver_state);
+  T CalcTotalEnergy(const SolverState<T>& solver_state) const ;
 
   /* Computes the residual vector
 
     b = M * dv - f(x(v+dv), v+dv) * dt,
 
    where M is the lumped mass matrix. */
-  void CalcResidual(const SolverState<T>& solver_state, VectorX<T>* b);
+  void CalcResidual(const SolverState<T>& solver_state, VectorX<T>* b) const;
 
   /* Makes a Block3x3SparseSymmetricMatrix that has the sparsity pattern of
    the grid induced by the particles. Each entry of the returned matrix is set
@@ -64,7 +65,7 @@ class MpmState {
   void CalcTangentMatrix(
       const SolverState<T>& solver_state,
       multibody::contact_solvers::internal::Block3x3SparseSymmetricMatrix*
-          tangent_matrix);
+          tangent_matrix) const;
 
   const Grid<T>& grid() const { return grid_; }
   const Particles<T>& particles() const { return particles_; }
@@ -86,8 +87,8 @@ class MpmState {
  private:
   /* Computes the particle deformation gradient, stress, and stress
    derivatives based on grid data and dv. */
-  void UpdateSolverParticleState(SolverState<T>* solver_state);
-  void UpdateSolverParticleStateSimd(SolverState<T>* solver_state);
+  void UpdateSolverParticleState(SolverState<T>* solver_state) const;
+  void UpdateSolverParticleStateSimd(SolverState<T>* solver_state) const;
 
   /* Updates the grid indices, node permutation and dof permutation after new
    grid data has been transferred from particles. This function must be called
@@ -97,7 +98,7 @@ class MpmState {
   T dt_{};
   double dx_{};
   Particles<T> particles_{};
-  Grid<T> grid_;
+  mutable Grid<T> grid_;
   std::unique_ptr<Transfer<T, Grid>> transfer_{};
   Parallelism parallelism_{};
   int num_dofs_{};

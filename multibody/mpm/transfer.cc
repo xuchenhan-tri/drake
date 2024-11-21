@@ -39,7 +39,7 @@ void Transfer<T, Grid>::SerialParticleToGrid() {
   const ParticleSorter& sorter = particles_->sorter;
   auto p2g_kernel = [&](const Pad<Vector3<Scalar>>& grid_x,
                         Pad<GridData<T>>* grid_data,
-                        ParticleData<T>* particle_data, int data_index) {
+                        const ParticleData<T>* particle_data, int data_index) {
     const T& m = particle_data->m[data_index];
     const Vector3<T>& x = particle_data->x[data_index];
     const Vector3<T>& v = particle_data->v[data_index];
@@ -112,7 +112,7 @@ void Transfer<T, Grid>::ParallelSimdParticleToGrid(
   const ParticleSorter& sorter = particles_->sorter;
   auto p2g_kernel = [&](const Pad<Vector3<T>>& grid_x,
                         Pad<GridData<T>>* grid_data,
-                        ParticleData<T>* particle_data,
+                        const ParticleData<T>* particle_data,
                         const std::vector<int>& data_indices) {
     const SimdScalar<T> m = Load(particle_data->m, data_indices);
     const Vector3<SimdScalar<T>> x = Load(particle_data->x, data_indices);
@@ -163,9 +163,6 @@ void Transfer<T, Grid>::SerialGridToParticle() {
       for (int j = 0; j < 3; ++j) {
         for (int k = 0; k < 3; ++k) {
           const Vector3<T>& vi = (*grid_data)[i][j][k].v;
-          std::cout << "vi: " << vi << std::endl;
-          std::cout << "grid index " << (*grid_data)[i][j][k].index
-                    << std::endl;
           const Vector3<Scalar>& xi = grid_x[i][j][k];
           const Scalar& w = bspline.weight(i, j, k);
           v += w * vi;

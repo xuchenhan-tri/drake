@@ -1,7 +1,7 @@
 #pragma once
 
 #include "mpm_state.h"
-#include "transfer.h"
+#include "solver_state.h"
 
 namespace drake {
 namespace multibody {
@@ -23,9 +23,10 @@ class MpmSolver {
    the previous time step.*/
   MpmSolver(MpmState<T>* mpm_state, SolverState<T>* solver_state);
 
-  /* Given the next time step velocities for the participating grid nodes, moves
-   the internal MPM state to the next time step's state. */
-  void AdvanceMpmState(const VectorX<double>& participating_v_next);
+  /* Given the next time step velocities for the participating grid nodes,
+   computes the dv = v_next - v0 for all active grid nodes in the internal
+   MpmState. */
+  VectorX<double> CalcDv(const VectorX<double>& participating_v_next) const;
 
   /* Returns the Schur complement of the tangent matrix of equation (1). */
   const MatrixX<double>& schur_complement() const {
