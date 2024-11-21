@@ -87,11 +87,7 @@ void Transfer<T, Grid>::SerialParticleToGrid() {
           (*grid_data)[i][j][k].v +=
               mi * v + (m * C - D_inverse_dt_ * tau_v0) * (xi - x) * w;
           (*grid_data)[i][j][k].m += mi;
-          /* Set all participating grid node to have grid node index -2. */
-          // TODO(xuchenhan-tri): This is a temporary solution to mark the
-          // participating grid nodes. We should use a special flag instead of a
-          // hard-coded number.
-          if (participating) (*grid_data)[i][j][k].index = -2;
+          if (participating) (*grid_data)[i][j][k].index.set_participating();
         }
       }
     }
@@ -136,7 +132,7 @@ void Transfer<T, Grid>::ParallelSimdParticleToGrid(
               mi * v + (m * C - D_inverse_dt_ * tau_v0) * (xi - x) * w;
           (*grid_data)[i][j][k].m += ReduceSum(mi);
           (*grid_data)[i][j][k].v += ReduceSum(mvi);
-          if (participating) (*grid_data)[i][j][k].index = -2;
+          if (participating) (*grid_data)[i][j][k].index.set_participating();
         }
       }
     }

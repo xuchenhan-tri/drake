@@ -1,5 +1,7 @@
 #pragma once
 
+#include <unordered_set>
+
 #include "particles.h"
 #include "sparse_grid.h"
 #include "transfer.h"
@@ -80,16 +82,33 @@ class MpmState {
     return node_permutation_;
   }
 
-  /* Given `dv`, which contains the v_next - v0 for grid nodes in the order of
-   grid indices, moves `this` MpmState to the next time step. */
+  /* Adds `dv` to the grid velocities and performs a G2P transfer and then a P2G
+   transfer to move `this` MpmState to the next time step. */
   void AdvanceToNextState(const VectorX<T>& dv);
 
- private:
+  std::unordered_set<int> GetNonParticipatingGridNodes() const {
+    std::unordered_set<int> result;
+    for (int i = 0; i < grid_.num_active_nodes(); ++i) {
+      if (!node_permutation_.participates(i)) {
+        result.insert(i);
+      }
+    }
+    return result;
+  }
+
+  VectorX<T> GetParticipatingVelocities() const {
+    const VectorX<T> grid_velocity = grid_.GetVelocity();
+    VectorX<T> result(dof_permutation_.permuted_domain_size());
+    dof_permutation_.Apply(grid_velocity, &result);
+    return result;
+  }
+
   /* Computes the particle deformation gradient, stress, and stress
    derivatives based on grid data and dv. */
   void UpdateSolverParticleState(SolverState<T>* solver_state) const;
   void UpdateSolverParticleStateSimd(SolverState<T>* solver_state) const;
 
+ private:
   /* Updates the grid indices, node permutation and dof permutation after new
    grid data has been transferred from particles. This function must be called
    after every each time a P2G transfer has happened. */
@@ -108,6 +127,7 @@ class MpmState {
   multibody::contact_solvers::internal::PartialPermutation node_permutation_;
   /* Partial permutation that maps all grid dofs to participating dofs. */
   multibody::contact_solvers::internal::PartialPermutation dof_permutation_;
+  int max_iterations_{100};
 };
 
 }  // namespace internal

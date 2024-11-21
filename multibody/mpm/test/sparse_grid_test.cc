@@ -14,6 +14,63 @@ using Eigen::Vector3d;
 using Eigen::Vector3f;
 using Eigen::Vector3i;
 
+GTEST_TEST(GridNodeIndexTest, Basic) {
+  GridNodeIndex<int32_t> index_32;
+  GridNodeIndex<int64_t> index_64;
+  EXPECT_TRUE(sizeof(index_32) == 4);
+  EXPECT_TRUE(sizeof(index_64) == 8);
+  EXPECT_FALSE(index_64.is_index());
+  EXPECT_FALSE(index_64.is_participating());
+  EXPECT_TRUE(index_64.is_inactive());
+
+  index_64.set_value(123);
+  EXPECT_EQ(index_64.value(), 123);
+  index_64.reset();
+  EXPECT_TRUE(index_64.is_inactive());
+  index_64.set_participating();
+  EXPECT_TRUE(index_64.is_participating());
+  /* Setting participation twice in a row is fine. */
+  index_64.set_participating();
+  EXPECT_TRUE(index_64.is_participating());
+}
+
+GTEST_TEST(GridNodeIndexTest, StateTransition) {
+  GridNodeIndex<int64_t> index_64(123);
+  EXPECT_TRUE(index_64.is_index());
+  EXPECT_FALSE(index_64.is_participating());
+  EXPECT_FALSE(index_64.is_inactive());
+  /* Active to inactive. */
+  index_64.reset();
+  EXPECT_FALSE(index_64.is_index());
+  EXPECT_FALSE(index_64.is_participating());
+  EXPECT_TRUE(index_64.is_inactive());
+  /* Inactive to participating. */
+  index_64.set_participating();
+  EXPECT_FALSE(index_64.is_index());
+  EXPECT_TRUE(index_64.is_participating());
+  EXPECT_FALSE(index_64.is_inactive());
+  /* Participating to inactive. */
+  index_64.reset();
+  EXPECT_FALSE(index_64.is_index());
+  EXPECT_FALSE(index_64.is_participating());
+  EXPECT_TRUE(index_64.is_inactive());
+  /* Inactive to active. */
+  index_64.set_value(123);
+  EXPECT_TRUE(index_64.is_index());
+  EXPECT_FALSE(index_64.is_participating());
+  EXPECT_FALSE(index_64.is_inactive());
+  EXPECT_EQ(index_64.value(), 123);
+
+  GridNodeIndex<int32_t> index_32;
+  index_32.set_participating();
+  /* Participating to active. */
+  index_32.set_value(123);
+  EXPECT_TRUE(index_32.is_index());
+  EXPECT_EQ(index_32.value(), 123);
+  EXPECT_FALSE(index_32.is_participating());
+  EXPECT_FALSE(index_32.is_inactive());
+}
+
 GTEST_TEST(SparseGridTest, Allocate) {
   const double dx = 0.01;
   SparseGrid<double> grid(dx);
@@ -399,10 +456,10 @@ GTEST_TEST(SparseGridTest, SetNodeIndices) {
       grid.GetGridData();
   std::set<int> indices;
   for (const auto& [node, data] : grid_data) {
-    EXPECT_GE(data.index, 0);
+    EXPECT_GE(data.index.value(), 0);
     /* Check that there are no duplicates. */
-    EXPECT_FALSE(indices.contains(data.index));
-    indices.insert(data.index);
+    EXPECT_FALSE(indices.contains(data.index.value()));
+    indices.insert(data.index.value());
 
     /* Grid nodes in the range of influence of the second particle are
      participating; active nodes that are not in the range of influence of the
@@ -413,14 +470,14 @@ GTEST_TEST(SparseGridTest, SetNodeIndices) {
     const bool participating =
         x_participating && y_participating && z_participating;
     if (participating) {
-      EXPECT_TRUE(permutation.participates(data.index));
+      EXPECT_TRUE(permutation.participates(data.index.value()));
     } else {
       /* There are two ways that the fact of a grid node is not participating
        manifests itself:
        1. The node is not in the domain.
        2. The node is in the domain, but is labeled not participatting. */
-      EXPECT_TRUE(data.index > permutation.domain_size() ||
-                  !permutation.participates(data.index));
+      EXPECT_TRUE(data.index.value() > permutation.domain_size() ||
+                  !permutation.participates(data.index.value()));
     }
   }
 }

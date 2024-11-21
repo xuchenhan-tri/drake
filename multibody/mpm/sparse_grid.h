@@ -170,6 +170,9 @@ class SparseGrid {
   /* Returns the SpGrid underlying this SparseGrid. */
   const SpGrid<GridData<T>>& spgrid() const { return spgrid_; }
 
+  /* Returns the grid velocity in the order of the grid node indices. */
+  VectorX<T> GetVelocity() const;
+
   template <typename Func>
   void IterateGrid(Func&& func) {
     spgrid_.IterateGrid(std::forward<Func>(func));

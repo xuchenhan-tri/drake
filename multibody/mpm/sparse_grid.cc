@@ -88,21 +88,39 @@ MassAndMomentum<T> SparseGrid<T>::ComputeTotalMassAndMomentum() const {
 template <typename T>
 void SparseGrid<T>::SetNodeIndices(
     contact_solvers::internal::PartialPermutation* partial_permutation) {
-  if (partial_permutation != nullptr) {
-    DRAKE_DEMAND(partial_permutation->domain_size() == 0);
-  }
+  std::vector<int> participating_nodes;
   int node_index = 0;
+  int participating_node_index = 0;
   spgrid_.IterateGrid([&](GridData<T>* node_data) {
     if (node_data->m > 0.0) {
-      if (partial_permutation != nullptr && node_data->index == -2) {
-        partial_permutation->push(node_index);
+      if (partial_permutation != nullptr) {
+        if (node_data->index.is_participating()) {
+          participating_nodes.push_back(participating_node_index++);
+        } else {
+          participating_nodes.push_back(-1);
+        }
       }
-      node_data->index = node_index++;
-    } else {
-      node_data->index = -1;
+      node_data->index.set_value(node_index++);
     }
   });
   num_active_nodes_ = node_index;
+  if (partial_permutation != nullptr) {
+    *partial_permutation = contact_solvers::internal::PartialPermutation(
+        std::move(participating_nodes));
+  }
+}
+
+template <typename T>
+VectorX<T> SparseGrid<T>::GetVelocity() const {
+  VectorX<T> result(num_active_nodes() * 3);
+  spgrid_.IterateConstGrid([&](const GridData<T>& node_data) {
+    if (node_data.m > 0.0) {
+      DRAKE_ASSERT(node_data.index.value() >= 0 &&
+                   node_data.index.value() < num_active_nodes());
+      result.template segment<3>(3 * node_data.index.value()) = node_data.v;
+    }
+  });
+  return result;
 }
 
 }  // namespace internal

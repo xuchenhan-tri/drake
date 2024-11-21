@@ -6,53 +6,31 @@ namespace mpm {
 namespace internal {
 
 using multibody::contact_solvers::internal::Block3x3SparseSymmetricMatrix;
+using multibody::contact_solvers::internal::PartialPermutation;
+using multibody::contact_solvers::internal::SchurComplement;
 using LinearSolver =
     contact_solvers::internal::BlockSparseCholeskySolver<Matrix3<double>>;
 
 template <typename T>
-MpmSolver<T>::MpmSolver(MpmState<T>* state, SolverState<T>* solver_state)
-    : mpm_state_(mpm_state), solver_state_(solver_state) {
-  DRAKE_DEMAND(mpm_state != nullptr);
-  DRAKE_DEMAND(solver_state != nullptr);
-  DRAKE_DEMAND(solver_state->dv.size() == mpm_state->num_dofs());
-  num_dofs_ = mpm_state->num_dofs();
-  SolveFreeMotion();
-}
+MpmSolver<T>::MpmSolver(MpmSolverParameters parameters)
+    : parameters_(parameters) {}
 
 template <typename T>
-void AdvanceMpmState(const VectorX<double>& participating_v_next) {
-  DRAKE_DEMAND(participating_v_next.size() == participating_v_star_.size());
-  const VectorX<double> participating_dv =
-      participating_v_next - participating_v_star_;
-  const VectorX<double> nonparticipating_dv =
-      schur_complement_.SolveForX(participating_dv);
-  VectorX<double> permutated_dv(num_dofs());
-  permuted_dv << participating_dv, nonparticipating_dv;
-  VectorX<double> dv(num_dofs());
-  mpm_state_->grid_dof_permutation().ApplyInverse(permuted_dv, &dv);
-  mpm_state_->AdvanceToNextState(dv.cast<T>());
-}
-
-template <typename T>
-void MpmSolver<T>::SolveFreeMotion() {
-  VectorX<T> b = VectorX<T>::Zero(state_.num_dofs());
-  mpm_state_->CalcResidual(*solver_state_, &b);
+void MpmSolver<T>::ComputeFreeMotionState(const MpmState<T>& mpm_state) {
+  solver_state_.Resize(mpm_state.num_dofs(), mpm_state.num_particles());
+  VectorX<T> ddv = VectorX<T>::Zero(mpm_state.num_dofs());
+  mpm_state.UpdateSolverState(ddv, &solver_state_);
+  VectorX<T> b = VectorX<T>::Zero(solver_state_.num_dofs());
+  mpm_state.CalcResidual(solver_state_, &b);
   T residual_norm = b.norm();
-  if (residual_norm < abs_tolerance_) {
-    return 0;
-  }
-  VectorX<T> ddv = VectorX<T>::Zero(num_dofs_);
   const T initial_residual_norm = residual_norm;
-  Block3x3SparseSymmetricMatrix tangent_matrix =
-      mpm_state_->MakeTangentMatrix();
+  Block3x3SparseSymmetricMatrix tangent_matrix = mpm_state.MakeTangentMatrix();
   LinearSolver linear_solver;
   int iter = 0;
-
-  while (iter < max_iterations &&
-         /* On first iteration, this is equivalent to residual_norm <
-            abs_tolerance_, which we have ruled out earlier. */
+  while (iter < parameters_.max_iterations &&
+         /* On first iteration, this is equivalent to residual_norm < abs_tol */
          !solver_converged(residual_norm, initial_residual_norm)) {
-    mpm_state_.CalcTangentMatrix(*solver_state_, &tangent_matrix);
+    mpm_state.CalcTangentMatrix(solver_state_, &tangent_matrix);
     if (iter == 0) {
       linear_solver.SetMatrix(tangent_matrix);
     } else {
@@ -68,8 +46,8 @@ void MpmSolver<T>::SolveFreeMotion() {
     }
     /* Solve for the change in unknowns. */
     ddv = linear_solver.Solve(-b);
-    mpm_state_->UpdateSolverState(ddv, solver_state_);
-    mpm_state_->CalcResidual(*solver_state_, &b);
+    mpm_state.UpdateSolverState(ddv, &solver_state_);
+    mpm_state.CalcResidual(solver_state_, &b);
     residual_norm = b.norm();
     ++iter;
   }
@@ -78,11 +56,30 @@ void MpmSolver<T>::SolveFreeMotion() {
     throw std::runtime_error(
         "MpmSolver failed to converge with max number of Newton iterations.");
   }
-  mpm_state_->CalcTangentMatrix(*solver_state_, &tangent_matrix);
-  schur_complement_ = SchurComplement(
-      tangent_matrix, mpm_state->GetNonParticipatingGridNodes());
-  participating_v_star_ = mpm_state_->GetParticipatingVelocities();
+  mpm_state.CalcTangentMatrix(solver_state_, &tangent_matrix);
+  schur_complement_ =
+      SchurComplement(tangent_matrix, mpm_state.GetNonParticipatingGridNodes());
+  participating_v_star_ = mpm_state.GetParticipatingVelocities();
 }
+
+template <typename T>
+VectorX<T> MpmSolver<T>::CalcDv(
+    const VectorX<double>& participating_v_next,
+    const PartialPermutation& participating_dof_permutation) const {
+  DRAKE_DEMAND(participating_v_next.size() == participating_v_star_.size());
+  const int num_dofs = participating_dof_permutation.domain_size();
+  const VectorX<double> participating_dv =
+      participating_v_next - participating_v_star_;
+  const VectorX<double> nonparticipating_dv =
+      schur_complement_.SolveForX(participating_dv);
+  VectorX<double> permuted_dv(num_dofs);
+  permuted_dv << participating_dv, nonparticipating_dv;
+  VectorX<double> dv(num_dofs);
+  participating_dof_permutation.ApplyInverse(permuted_dv, &dv);
+  return dv.cast<T>();
+}
+
+template class MpmSolver<double>;
 
 }  // namespace internal
 }  // namespace mpm

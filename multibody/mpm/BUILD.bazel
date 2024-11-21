@@ -95,7 +95,8 @@ cc_library(
         "sparse_grid.cc",
     ],
     # TODO(xuchenhan-tri): Remove the hard-coded flag when we build this as a drake_cc_library.
-    copts = ["-fopenmp", "-march=native"],
+    # copts = ["-fopenmp", "-march=native"],
+    copts = ["-fopenmp"],
     hdrs = [
         "sparse_grid.h",
     ],
@@ -245,6 +246,22 @@ cc_library(
 )
 
 cc_library(
+    name = "mpm_solver",
+    srcs = [
+        "mpm_solver.cc",
+    ],
+    hdrs = [
+        "mpm_solver.h",
+    ],
+    deps = [
+        ":mpm_state",
+        "//common:essential",
+        "//common:parallelism",
+        "//multibody/contact_solvers",
+    ],
+)
+
+cc_library(
     name = "mpm_state",
     srcs = [
         "mpm_state.cc",
@@ -335,6 +352,18 @@ drake_cc_googletest(
     deps = [
         ":mpm_state",
         "//common/test_utilities:eigen_matrix_compare",
+    ],
+)
+
+drake_cc_googletest(
+    name = "mpm_solver_test",
+    srcs = [
+        "test/mpm_solver_test.cc",
+    ],
+    deps = [
+        ":mpm_solver",
+        "//common/test_utilities:eigen_matrix_compare",
+        "//common/test_utilities:expect_throws_message",
     ],
 )
 

@@ -214,6 +214,27 @@ class SpGrid {
     }
   }
 
+  template <typename Func>
+  void IterateConstGrid(Func&& func) const {
+    const uint64_t data_size = 1 << kDataBits;
+    auto [block_offsets, num_blocks] = blocks_.Get_Blocks();
+    ConstArray grid_data = allocator_.Get_Array();
+    for (int b = 0; b < static_cast<int>(num_blocks); ++b) {
+      const uint64_t block_offset = block_offsets[b];
+      uint64_t node_offset = block_offset;
+      /* The coordinate of the origin of this block. */
+      for (int i = 0; i < kNumNodesInBlockX; ++i) {
+        for (int j = 0; j < kNumNodesInBlockY; ++j) {
+          for (int k = 0; k < kNumNodesInBlockZ; ++k) {
+            const GridData& node_data = grid_data(node_offset);
+            std::forward<Func>(func)(node_data);
+            node_offset += data_size;
+          }
+        }
+      }
+    }
+  }
+
   /* Func is a function that can be casted to
       std::function<void(uint64_t, GridData*)>. */
   template <typename Func>

@@ -7,6 +7,79 @@ namespace multibody {
 namespace mpm {
 namespace internal {
 
+/* A class representing an index or a flag for a grid node in preparation of
+  indexing the grid, with support for specific states.
+
+  This class is a lightweight wrapper around an integer type (`int32_t` or
+  `int64_t`) used to differentiate between active indices, inactive states, and
+  special flags. A GridNodeIndex can be in exactly one of the following states:
+  1. Active index: A non-negative integer representing the index of a grid.
+  2. Generic inactive state (the default state).
+  3. The participating state: A special inactive state used to mark grid nodes
+     to be processed seaparately when activated.
+
+  A GridNodeIndex can transition freely between any two states, except that it
+  cannot transition from the active index state to the participating state.
+
+  @tparam T The integer type for the index. Must be `int32_t` or `int64_t`. */
+template <typename T>
+class GridNodeIndex {
+ public:
+  DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(GridNodeIndex);
+
+  static_assert(std::is_same_v<T, int32_t> || std::is_same_v<T, int64_t>,
+                "T must be int32_t or int64_t.");
+
+  /* Default constructor initializes the index to the inactive state. */
+  constexpr GridNodeIndex() = default;
+
+  /* Constructor for an active index. */
+  explicit constexpr GridNodeIndex(T index) : value_(index) {}
+
+  /* Sets the index to the given value, which must be non-negative. Turns `this`
+  into active state. */
+  void set_value(T index) {
+    DRAKE_ASSERT(index >= 0);
+    value_ = index;
+  }
+
+  /* Returns true if the index is active. */
+  bool is_index() const { return value_ >= 0; }
+
+  /* Returns true iff the index is in generic inactive state. */
+  bool is_inactive() const { return value_ == kInactive; }
+
+  /* Returns the index value.
+   @pre is_index() == true; */
+  T value() const {
+    DRAKE_ASSERT(is_index());
+    return value_;
+  }
+
+  /* Sets `this` to the generic inactive state. */
+  void reset() { value_ = kInactive; }
+  /* Sets `this` to the participating state. */
+  void set_participating() {
+    DRAKE_ASSERT(!is_index());
+    value_ = kParticipating;
+  }
+  /* Returns true iff `this` is in the participating state. */
+  bool is_participating() const { return value_ == kParticipating; }
+
+ private:
+  template <typename U>
+  friend bool operator==(const GridNodeIndex<U>& a, const GridNodeIndex<U>& b);
+
+  static constexpr T kInactive{-1};
+  static constexpr T kParticipating{-2};
+  T value_{kInactive};
+};
+
+template <typename T>
+bool operator==(const GridNodeIndex<T>& a, const GridNodeIndex<T>& b) {
+  return a.value_ == b.value_;
+}
+
 /* GridData stores data at a single a grid node of SparseGrid.
 
  The Vector3<T> entry contains the velocity of the node (sometimes used
@@ -23,15 +96,16 @@ struct GridData {
   void set_zero() {
     v.setZero();
     m = 0.0;
-    index = -1;
+    index.reset();
   }
 
   bool operator==(const GridData<T>& other) const = default;
 
   Vector3<T> v{Vector3<T>::Zero()};
   T m{0.0};
-  typename std::conditional<std::is_same<T, float>::value, int32_t,
-                            int64_t>::type index{-1};
+  typename std::conditional<std::is_same<T, float>::value,
+                            GridNodeIndex<int32_t>,
+                            GridNodeIndex<int64_t>>::type index;
   Vector3<T> scratch{Vector3<T>::Zero()};
 };
 

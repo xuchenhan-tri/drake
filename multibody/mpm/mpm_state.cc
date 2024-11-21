@@ -55,7 +55,7 @@ T MpmState<T, Grid>::CalcTotalEnergy(const SolverState<T>& solver_state) const {
   /* The 1/2*dv*M*dv term. */
   grid_.IterateGrid([&](GridData<T>* node) {
     if (node->m > 0.0) {
-      const int index = node->index;
+      const int index = node->index.value();
       DRAKE_ASSERT(index >= 0 && index < num_dofs_ / 3);
       total_energy +=
           0.5 * node->m * dv.template segment<kDim>(index * kDim).squaredNorm();
@@ -112,7 +112,7 @@ void MpmState<T, Grid>::CalcResidual(const SolverState<T>& solver_state,
   const VectorX<T>& dv = solver_state.dv;
   grid_.IterateGrid([&](GridData<T>* node) {
     if (node->m > 0.0) {
-      const int index = node->index;
+      const int index = node->index.value();
       DRAKE_ASSERT(index >= 0 && index < b->size() / 3);
       b->template segment<kDim>(index * kDim) =
           node->m * dv.template segment<kDim>(index * kDim) + node->scratch;
@@ -144,8 +144,12 @@ Block3x3SparseSymmetricMatrix MpmState<T, Grid>::MakeTangentMatrix() const {
           const int i = idx0 / 9;
           const int j = (idx0 / 3) % 3;
           const int k = idx0 % 3;
-          const int index0 = grid_data[i][j][k].index;
-          DRAKE_DEMAND(index0 >= 0 && index0 < num_active_nodes);
+          const auto index0 = grid_data[i][j][k].index;
+          /* There are pathological corner cases where the grid node is not
+           active even when it belongs to a pad that contains a particle. */
+          if (grid_data[i][j][k].m == 0.0) continue;
+          DRAKE_DEMAND(index0.value() >= 0 &&
+                       index0.value() < num_active_nodes);
 
           /* Process the lower triangle by skipping redundant pairs. */
           for (int idx1 = idx0; idx1 < 27; ++idx1) {
@@ -153,13 +157,15 @@ Block3x3SparseSymmetricMatrix MpmState<T, Grid>::MakeTangentMatrix() const {
             const int jj = (idx1 / 3) % 3;
             const int kk = idx1 % 3;
 
-            const int index1 = grid_data[ii][jj][kk].index;
-            DRAKE_DEMAND(index1 >= 0 && index1 < num_active_nodes);
+            const auto index1 = grid_data[ii][jj][kk].index;
+            if (grid_data[ii][jj][kk].m == 0.0) continue;
+            DRAKE_DEMAND(index1.value() >= 0 &&
+                         index1.value() < num_active_nodes);
 
-            if (index0 <= index1) {
-              sparsity_pattern[index0].push_back(index1);
+            if (index0.value() <= index1.value()) {
+              sparsity_pattern[index0.value()].push_back(index1.value());
             } else {
-              sparsity_pattern[index1].push_back(index0);
+              sparsity_pattern[index1.value()].push_back(index0.value());
             }
           }
         }
@@ -212,7 +218,8 @@ void MpmState<T, Grid>::CalcTangentMatrix(
       const int i = idx0 / 9;
       const int j = (idx0 / 3) % 3;
       const int k = idx0 % 3;
-      const int index0 = (*grid_data)[i][j][k].index;
+      if ((*grid_data)[i][j][k].m == 0.0) continue;
+      const int index0 = (*grid_data)[i][j][k].index.value();
       DRAKE_ASSERT(index0 >= 0 && index0 < num_active_nodes);
       const Scalar& w0 = bspline.weight(i, j, k);
       const Vector3<Scalar>& x0 = grid_x[i][j][k];
@@ -223,7 +230,8 @@ void MpmState<T, Grid>::CalcTangentMatrix(
         const int ii = idx1 / 9;
         const int jj = (idx1 / 3) % 3;
         const int kk = idx1 % 3;
-        const int index1 = (*grid_data)[ii][jj][kk].index;
+        if ((*grid_data)[ii][jj][kk].m == 0.0) continue;
+        const int index1 = (*grid_data)[ii][jj][kk].index.value();
         DRAKE_DEMAND(index1 >= 0 && index1 < num_active_nodes);
         const Scalar& w1 = bspline.weight(ii, jj, kk);
         const Vector3<Scalar>& x1 = grid_x[ii][jj][kk];
@@ -245,7 +253,7 @@ void MpmState<T, Grid>::CalcTangentMatrix(
   /* Add in the mass terms. */
   grid_.IterateGrid([&](GridData<T>* node) {
     if (node->m > 0.0) {
-      const int index = node->index;
+      const int index = node->index.value();
       tangent_matrix->AddToBlock(index, index,
                                  node->m * Matrix3<T>::Identity());
     }
@@ -258,7 +266,7 @@ void MpmState<T, Grid>::AdvanceToNextState(const VectorX<T>& dv) {
   DRAKE_DEMAND(dv.size() == num_dofs());
   auto upgdate_grid_velocity = [&](GridData<T>* node) {
     if (node->m > 0.0) {
-      node->v += dv.template segment<kDim>(kDim * node->index);
+      node->v += dv.template segment<kDim>(kDim * node->index.value());
     }
   };
   grid_.IterateGrid(upgdate_grid_velocity);
@@ -294,7 +302,8 @@ void MpmState<T, Grid>::UpdateSolverParticleState(
     for (int i = 0; i < 3; ++i) {
       for (int j = 0; j < 3; ++j) {
         for (int k = 0; k < 3; ++k) {
-          const int grid_index = (*grid_data)[i][j][k].index;
+          if ((*grid_data)[i][j][k].m == 0.0) continue;
+          const int grid_index = (*grid_data)[i][j][k].index.value();
           const Vector3<T>& vi =
               (*grid_data)[i][j][k].v + dv.template segment<3>(3 * grid_index);
           const Vector3<Scalar>& xi = grid_x[i][j][k];
@@ -333,7 +342,8 @@ void MpmState<T, Grid>::UpdateSolverParticleStateSimd(
     for (int i = 0; i < 3; ++i) {
       for (int j = 0; j < 3; ++j) {
         for (int k = 0; k < 3; ++k) {
-          const int grid_index = (*grid_data)[i][j][k].index;
+          if ((*grid_data)[i][j][k].m == 0.0) continue;
+          const int grid_index = (*grid_data)[i][j][k].index.value();
           const Vector3<T>& vi =
               (*grid_data)[i][j][k].v + dv.template segment<3>(3 * grid_index);
           const Vector3<T>& xi = grid_x[i][j][k];
@@ -367,7 +377,6 @@ void MpmState<T, Grid>::UpdateGrid() {
   constexpr int kDim = 3;
   num_dofs_ = grid_.num_active_nodes() * 3;
 
-  int permuted_grid_index = 0;
   const int num_nodes = grid_.num_active_nodes();
   const int num_dofs = num_nodes * kDim;
   std::vector<int> permuted_dof_indices(num_dofs, -1);
@@ -375,7 +384,8 @@ void MpmState<T, Grid>::UpdateGrid() {
     if (n < node_permutation_.domain_size() &&
         node_permutation_.participates(n)) {
       for (int d = 0; d < kDim; ++d) {
-        permuted_dof_indices[kDim * n + d] = kDim * permuted_grid_index + d;
+        permuted_dof_indices[kDim * n + d] =
+            kDim * node_permutation_.permuted_index(n) + d;
       }
     }
   }

@@ -18,7 +18,6 @@ namespace internal {
 /* This class is used for unit testing only. It uses an std::map<Vector3d,
  GridState<T>> to store the grid data.
  @tparam double or AutoDiffXd. */
-
 template <typename T>
 class MockSparseGrid {
  public:
@@ -86,6 +85,14 @@ class MockSparseGrid {
   int num_active_nodes() const { return grid_data_.size(); }
 
   const SpGrid<GridData<double>>& spgrid() const { return spgrid_; }
+
+  VectorX<T> GetVelocity() const {
+    VectorX<T> result(num_active_nodes() * 3);
+    for (const auto& [_, data] : grid_data_) {
+      result.template segment<3>(data.index.value() * 3) = data.v;
+    }
+    return result;
+  }
 
   template <typename Func>
   void IterateGrid(Func&& func) {
