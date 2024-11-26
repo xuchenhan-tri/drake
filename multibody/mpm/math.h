@@ -112,16 +112,14 @@ struct BsplineWeights {
   std::array<Vector3<T>, kDim> data_;
 };
 
-template <typename T, typename U>
-BsplineWeights<T> MakeBsplineWeights(const Vector3<U>& x, T dx) {
-  const auto& x_T = [&]() -> Vector3<T> {
-    if constexpr (std::is_same_v<T, U>) {
-      return x;
-    } else {
-      return math::DiscardZeroGradient(x);
-    }
-  }();
-  return BsplineWeights<T>(x_T, dx);
+BsplineWeights<double> MakeBsplineWeights(const Vector3<AutoDiffXd>& x, double dx) {
+  const auto x_double = math::DiscardZeroGradient(x);
+  return BsplineWeights<double>(x_double, dx);
+}
+
+template <typename T>
+BsplineWeights<T> MakeBsplineWeights(const Vector3<T>& x, T dx) {
+  return BsplineWeights<T>(x, dx);
 }
 
 }  // namespace internal

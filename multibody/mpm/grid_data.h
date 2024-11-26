@@ -16,10 +16,18 @@ namespace internal {
   1. Active index: A non-negative integer representing the index of a grid.
   2. Generic inactive state (the default state).
   3. The participating state: A special inactive state used to mark grid nodes
-     to be processed seaparately when activated.
+     for deferred processing. The participating state is intended as a marker
+     that must only be set from the inactive state (not from an active index)
+     to maintain consistent workflow logic.
 
-  A GridNodeIndex can transition freely between any two states, except that it
-  cannot transition from the active index state to the participating state.
+  Transitions between states are as follows:
+  - Any state can become inactive.
+  - Any inactive state can become participating.
+  - Any inactive state can become active (with a non-negative index).
+  - Active cannot directly become participating (must go inactive first).
+
+  A GridNodeIndex object is guaranteed to have size equal to its template
+  parameter T.
 
   @tparam T The integer type for the index. Must be `int32_t` or `int64_t`. */
 template <typename T>
@@ -33,81 +41,113 @@ class GridNodeIndex {
   /* Default constructor initializes the index to the inactive state. */
   constexpr GridNodeIndex() = default;
 
-  /* Constructor for an active index. */
-  explicit constexpr GridNodeIndex(T index) : value_(index) {}
+  /* Constructor for an active index.
+     @pre index >= 0 */
+  explicit constexpr GridNodeIndex(T index) {
+    DRAKE_ASSERT(index >= 0);
+    value_ = index;
+  }
 
-  /* Sets the index to the given value, which must be non-negative. Turns `this`
-  into active state. */
+  /* Sets the index to the given value, which must be non-negative, thereby
+     making `this` active.
+     @pre index >= 0 */
   void set_value(T index) {
     DRAKE_ASSERT(index >= 0);
     value_ = index;
   }
 
-  /* Returns true if the index is active. */
-  bool is_index() const { return value_ >= 0; }
+  /* Returns true if the index is active (i.e., a non-negative integer). */
+  constexpr bool is_index() const { return value_ >= 0; }
 
-  /* Returns true iff the index is in generic inactive state. */
-  bool is_inactive() const { return value_ == kInactive; }
+  /* Returns true iff the index is in the generic inactive state. */
+  constexpr bool is_inactive() const { return value_ == kInactive; }
+
+  /* Returns true iff `this` is in the participating state. */
+  constexpr bool is_participating() const { return value_ == kParticipating; }
 
   /* Returns the index value.
-   @pre is_index() == true; */
-  T value() const {
+     @pre is_index() == true; */
+  constexpr T value() const {
     DRAKE_ASSERT(is_index());
     return value_;
   }
 
   /* Sets `this` to the generic inactive state. */
   void reset() { value_ = kInactive; }
-  /* Sets `this` to the participating state. */
+
+  /* Sets `this` to the participating state.
+     @pre !is_index() (i.e., must currently be inactive) */
   void set_participating() {
     DRAKE_ASSERT(!is_index());
     value_ = kParticipating;
   }
-  /* Returns true iff `this` is in the participating state. */
-  bool is_participating() const { return value_ == kParticipating; }
 
  private:
+  enum : T { kInactive = -1, kParticipating = -2 };
+
   template <typename U>
   friend bool operator==(const GridNodeIndex<U>& a, const GridNodeIndex<U>& b);
 
-  static constexpr T kInactive{-1};
-  static constexpr T kParticipating{-2};
+  template <typename U>
+  friend bool operator!=(const GridNodeIndex<U>& a, const GridNodeIndex<U>& b);
+
   T value_{kInactive};
 };
 
-template <typename T>
-bool operator==(const GridNodeIndex<T>& a, const GridNodeIndex<T>& b) {
+/* Equality operator. Two GridNodeIndex objects are equal if and only if their
+   internal values are the same. */
+template <typename U>
+inline bool operator==(const GridNodeIndex<U>& a, const GridNodeIndex<U>& b) {
   return a.value_ == b.value_;
 }
 
-/* GridData stores data at a single a grid node of SparseGrid.
+/* Inequality operator. */
+template <typename U>
+inline bool operator!=(const GridNodeIndex<U>& a, const GridNodeIndex<U>& b) {
+  return !(a == b);
+}
+
+/* GridData stores data at a single grid node of SparseGrid.
 
  The Vector3<T> entry contains the velocity of the node (sometimes used
- temporarily to store the momentum of the node), and the scalar entry is mass of
- the node.
+ temporarily to store the momentum of the node), and the scalar entry is the
+ mass of the node.
 
- The size of GridData is required to be a power of 2 to work with SPGrid.
- With T = float, GridData is 4 * 8 = 32 byte.
- With T = double, GridData is 8 * 8 = 64 byte.
+ It's important to be conscious of the size of GridData since the MPM algorithm
+ is usually memory-bound. We carefully pack GridData to be a power of 2 to work
+ with SPGrid, which automatically packs the data to the next power of 2.
 
  @tparam T double or float. */
 template <typename T>
 struct GridData {
+  static_assert(std::is_same_v<T, float> || std::is_same_v<T, double>,
+                "T must be float or double.");
+
+  /* Resets `this` GridData to its default state. */
   void set_zero() {
     v.setZero();
     m = 0.0;
     index.reset();
   }
 
+  /* Default equality operator to compare all members. */
   bool operator==(const GridData<T>& other) const = default;
 
   Vector3<T> v{Vector3<T>::Zero()};
   T m{0.0};
-  typename std::conditional<std::is_same<T, float>::value,
-                            GridNodeIndex<int32_t>,
-                            GridNodeIndex<int64_t>>::type index;
   Vector3<T> scratch{Vector3<T>::Zero()};
+  typename std::conditional<std::is_same_v<T, float>, GridNodeIndex<int32_t>,
+                            GridNodeIndex<int64_t>>::type index;
 };
+
+/* With T = float, GridData is expected to be 32 bytes. With T = double,
+ GridData is expected to be 64 bytes. We enforce these sizes at compile time
+ with static_assert, so that if future changes to this code, compiler alignment,
+ or Eigen alignment rules cause a size shift, it will be caught early. */
+static_assert(sizeof(GridData<float>) == 32,
+              "Unexpected size for GridData<float>.");
+static_assert(sizeof(GridData<double>) == 64,
+              "Unexpected size for GridData<double>.");
 
 /* A Pad is a 3x3x3 subgrid around a particle.
 
