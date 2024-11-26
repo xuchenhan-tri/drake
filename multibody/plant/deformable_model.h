@@ -79,6 +79,18 @@ class DeformableModel final : public multibody::PhysicalModel<T> {
       std::unique_ptr<geometry::GeometryInstance> geometry_instance,
       const fem::DeformableBodyConfig<T>& config, double resolution_hint);
 
+  template <bool use_double_precision = false>
+  DeformableBodyId RegisterMpmBody(double dx);
+
+  void SampleMpmParticles(
+      std::unique_ptr<geometry::GeometryInstance> geometry_instance,
+      const fem::DeformableBodyConfig<T>& config, int particles_per_cell = 8);
+
+  /* (Internal only) Makes an MpmState based on the existing sampled particles.
+   */
+  template <typename MpmScalarType>
+  MpmState<MpmScalarType> MakeMpmState() const;
+
   // TODO(xuchenhan-tri): Consider pulling PosedHalfSpace out of internal
   // namespace and use it here.
   /** Sets wall boundary conditions for the body with the given `id`. All
@@ -347,6 +359,11 @@ class DeformableModel final : public multibody::PhysicalModel<T> {
   std::map<MultibodyConstraintId, internal::DeformableRigidFixedConstraintSpec>
       fixed_constraint_specs_;
   systems::OutputPortIndex configuration_output_port_index_;
+
+  double mpm_dx_{};
+  std::variant<std::monostate, mpm::internal::Particles<double>,
+               mpm::internal::Particles<float>>
+      mpm_particles_;
 };
 
 }  // namespace multibody

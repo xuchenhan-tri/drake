@@ -136,6 +136,30 @@ struct ParticleData {
     }
   }
 
+  void Sample(const std::vector<Vector3<double>>& positions,
+              double total_volume, const DeformableBodyConfig<double>& config) {
+    DRAKE_DEMAND(total_volume > 0);
+    const int num_particles = ssize(positions);
+    const double mass_density = config.mass_density();
+    const double volume_per_particle = total_volume / num_particles;
+    const int num_existing_particles = ssize(m);
+    for (int i = 0; i < num_particles; ++i) {
+      m.push_back(mass_density * volume_per_particle);
+      x.push_back(positions.cast<T>());
+      v.push_back(Vector3<T>::Zero());
+      F.push_back(Matrix3<T>::Identity());
+      tau_v0.push_back(Matrix3<T>::Zero());
+      C.push_back(Matrix3<T>::Zero());
+      in_constraint.push_back(false);
+      volume.push_back(volume_per_particle);
+    }
+    ConstitutiveModelVariant<T> constitutive_model =
+        MakeConstitutiveModel<T>(config);
+    constitutive_models.push_back(constitutive_model);
+    materials.push_back(
+        {num_existing_particles, num_existing_particles + num_particles});
+  }
+
   std::vector<T> m;                 // mass
   std::vector<Vector3<T>> x;        // positions
   std::vector<Vector3<T>> v;        // velocity

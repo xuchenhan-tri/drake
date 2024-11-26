@@ -89,6 +89,72 @@ DeformableBodyId DeformableModel<T>::RegisterDeformableBody(
 }
 
 template <typename T>
+template <bool use_double_precision>
+DeformableBodyId DeformableModel<T>::RegisterMpmBody(double dx) {
+  this->ThrowIfSystemResourcesDeclared(__func__);
+  ThrowIfNotDouble(__func__);
+  DRAKE_THROW_UNLESS(dx > 0);
+  /* Throws an exception if mpm_particles_ already has value. */
+  if (!std::holds_alternative<std::monostate>(mpm_particles_)) {
+    throw std::logic_error(
+        "RegisterMpmBody() has already been called on this DeformableModel.");
+  }
+  mpm_dx_ = dx;
+  using U =
+      typename std::conditional<use_double_precision, double, float>::type;
+  mpm_particles_ = mpm::internal::Particles<U>();
+  return DeformableBodyId::get_new_id();
+}
+
+template <typename T>
+void DeformableModel<T>::SampleMpmParticles(
+    std::unique_ptr<geometry::GeometryInstance> geometry_instance,
+    const fem::DeformableBodyConfig<T>& config, int particles_per_cell) {
+  this->ThrowIfSystemResourcesDeclared(__func__);
+  ThrowIfNotDouble(__func__);
+  DRAKE_THROW_UNLESS(geometry_instance != nullptr);
+  if (std::holds_alternative<std::monostate>(mpm_particles_)) {
+    throw std::logic_error(
+        "RegisterMpmBody() must be called before SampleMpmParticles().");
+  }
+  DRAKE_DEMAND(dx_ > 0.0);
+  if (particles_per_cell <= 0) {
+    throw std::out_of_range(
+        "The number of particles per cell must be positive. It's recommended "
+        "to have at least 8 particles per cell.");
+  }
+
+  BoundingBoxCalculator calculator;
+  const std::array<std::array<double, 3>, 2> bounding_box =
+      calculator.Compute(geometry_instance->shape());
+  const double sampling_radius =
+      dx_ / std::cbrt(particles_per_cell * 4.0 / 3.0 * M_PI);
+  /* Sample the particles in the geometry's bounding box. */
+  const std::vector<Vector3<double>> q_GP_candidates =
+      PoissonDiskSampling<double>(sampling_radius, bounding_box[0],
+                                  bounding_box[1]);
+  /* Reject points that fall outside of the shape. */
+  std::vector<Vector3<double>> q_GPs =
+      FilterPoints(q_GP_candidates, geometry_instance->shape());
+  std::vector<Vector3<double>> q_WPs(g_GPs.size());
+  const RigidTransform<double>& X_WG = geometry_instance->pose();
+  for (int i = 0; i < ssize(q_GPs); ++i) {
+    q_WPs[i] = X_WG * q_GPs[i];
+  }
+  SortParticlePositions(&q_WPs, dx_);
+  const double total_volume = geometry::CalcVolume(geometry_instance->shape());
+  std::visit(
+      [&](auto&& particles) {
+        if constexpr (std::is_same_v<T, std::monostate>) {
+          DRAKE_UNREACHABLE();
+        } else {
+          particles.data.Sample(q_WPs, total_volume, config);
+        }
+      },
+      mpm_particles_);
+}
+
+template <typename T>
 void DeformableModel<T>::SetWallBoundaryCondition(DeformableBodyId id,
                                                   const Vector3<T>& p_WQ,
                                                   const Vector3<T>& n_W) {
