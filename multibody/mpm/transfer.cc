@@ -126,7 +126,7 @@ void Transfer<T, Grid>::ParallelSimdParticleToGrid(
           const Vector3<T>& xi = grid_x[i][j][k];
           // TODO(xuchenhan-tri): Better document this. The formula isn't
           // exactly the same as the paper spells out.
-          /* Tse the grid velocity data to store momentum. */
+          /* Use the grid velocity data to store momentum. */
           const SimdScalar<T> mi = m * w;
           const Vector3<SimdScalar<T>> mvi =
               mi * v + (m * C - D_inverse_dt_ * tau_v0) * (xi - x) * w;
