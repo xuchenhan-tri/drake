@@ -86,14 +86,12 @@ class ParticleSorter {
                            Func&& func) const {
     const int num_blocks = grid->num_blocks();
     using T = typename std::remove_pointer_t<ParticleDataPtr>::Scalar;
-    const int lanes = SimdScalar<T>::lanes();
     DRAKE_DEMAND(ssize(sentinel_particles_) == num_blocks + 1);
     using Grid = std::remove_pointer_t<decltype(grid)>;
     decltype(grid->GetPadNodes(std::declval<typename Grid::NodeType>())) grid_x;
     decltype(grid->GetPadData(std::declval<uint64_t>())) grid_data;
     std::vector<int> indices;
-    indices.reserve(lanes);
-    bool need_new_pad = true;
+    indices.reserve(64); // Usually, we won't get more than 64 particles per pad.
 
     for (int c = 0; c < 8; ++c) {
       const std::vector<int>& blocks = colored_blocks_[c];
@@ -108,23 +106,18 @@ class ParticleSorter {
         while (p < particle_end) {
           int next_p = p + 1;
           while (next_p < particle_end &&
-                 base_node_offsets_[next_p] == base_node_offsets_[p] &&
-                 next_p - p < lanes) {
+                 base_node_offsets_[next_p] == base_node_offsets_[p]) {
             ++next_p;
           }
           int data_index = data_indices_[p];
-          if (need_new_pad) {
-            grid_data = grid->GetPadData(base_node_offsets_[p]);
-            grid_x = grid->GetPadNodes(particle_data->x[data_index]);
-          }
+          grid_data = grid->GetPadData(base_node_offsets_[p]);
+          grid_x = grid->GetPadNodes(particle_data->x[data_index]);
           indices.clear();
           for (int i = p; i < next_p; ++i) {
             indices.push_back(data_indices_[i]);
           }
           std::forward<Func>(func)(grid_x, &grid_data, particle_data, indices);
-          need_new_pad = (next_p == particle_end) ||
-                         (base_node_offsets_[next_p] != base_node_offsets_[p]);
-          if (write_to_grid && need_new_pad) {
+          if (write_to_grid) {
             grid->SetPadData(base_node_offsets_[p], grid_data);
           }
           p = next_p;

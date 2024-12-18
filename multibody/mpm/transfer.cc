@@ -4,7 +4,6 @@
 #include <vector>
 
 #include "mock_sparse_grid.h"
-#include "simd_scalar.h"
 #include "sort_particles.h"
 #if defined(_OPENMP)
 #include <omp.h>
@@ -100,6 +99,31 @@ template <>
 void Transfer<AutoDiffXd, MockSparseGrid>::ParallelSimdParticleToGrid(
     const Parallelism parallelize) {
   throw std::runtime_error("simd p2g Not implemented");
+}
+
+template <typename T, template <typename> class Grid>
+void Transfer<T, Grid>::ParallelSimdParticleToGrid(
+    const Parallelism parallelism) {
+  const ParticleSorter& sorter = particles_->sorter;
+  WorkingSet<T> working_set(grid_->dx(), D_inverse_dt_);
+  auto p2g_kernel = [&](const Pad<Vector3<T>>& grid_x,
+                        Pad<GridData<T>>* grid_data,
+                        const ParticleData<T>* particle_data,
+                        const std::vector<int>& data_indices) {
+    working_set.Load(*particle_data, data_indices, grid_x);
+    for (int i = 0; i < 3; ++i) {
+      for (int j = 0; j < 3; ++j) {
+        for (int k = 0; k < 3; ++k) {
+          Vector4<T> m_and_mv = working_set.P2G(i, j, k);
+          (*grid_data)[i][j][k].m += m_and_mv[0];
+          (*grid_data)[i][j][k].v += m_and_mv.template tail<3>();
+          if (participating) (*grid_data)[i][j][k].index.set_participating();
+        }
+      }
+    }
+  };
+  sorter.IterateParallelSimd(grid_, &particles_->data, true, parallelism,
+                             std::move(p2g_kernel));
 }
 
 template <typename T, template <typename> class Grid>
