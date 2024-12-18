@@ -19,6 +19,18 @@ drake_cc_package_library(
         ":mass_and_momentum",
         ":particle_data",
         ":particle_sorter",
+        ":soa_types",
+        ":transfer_kernels",
+    ],
+)
+
+drake_cc_library(
+    name = "soa_types",
+    hdrs = [
+        "soa_types.h",
+    ],
+    deps = [
+        "//common:essential",
     ],
 )
 
@@ -31,8 +43,42 @@ drake_cc_library(
         "bspline_weights.h",
     ],
     deps = [
+        ":soa_types",
         "//common:essential",
         "//math:gradient",
+    ],
+    implementation_deps = [
+        "//common:hwy_dynamic",
+        "@highway_internal//:hwy",
+    ],
+)
+
+drake_cc_library(
+    name = "transfer_kernels",
+    srcs = [
+        "transfer_kernels.cc",
+    ],
+    hdrs = [
+        "transfer_kernels.h",
+    ],
+    deps = [
+        ":bspline_weights",
+        ":grid_data",
+        ":particle_data",
+        ":soa_types",
+        "//common:essential",
+    ],
+    implementation_deps = [
+        "//common:hwy_dynamic",
+        "@highway_internal//:hwy",
+    ],
+)
+
+drake_cc_googletest(
+    name = "transfer_kernels_test",
+    deps = [
+        ":transfer_kernels",
+        "//common/test_utilities:eigen_matrix_compare",
     ],
 )
 
