@@ -98,7 +98,7 @@ class ParticleSorter {
     for (int p = 0; p < num_particles; ++p) {
       /* We allow T == AutoDiffXd only for testing purpose. The positions in
        those tests are guaranteed to have zero gradients. */
-      const auto& particle_x = [&]() -> const Vector3<double>& {
+      const auto& particle_x = [&]() -> const Vector3<double> {
         if constexpr (std::is_same_v<T, double>) {
           return particle_positions[p];
         } else if constexpr (std::is_same_v<T, float>) {

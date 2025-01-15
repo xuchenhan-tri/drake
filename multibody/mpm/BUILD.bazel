@@ -1,5 +1,10 @@
 load("//tools/lint:lint.bzl", "add_lint_tests")
 load(
+    "//tools/performance:defs.bzl",
+    "drake_cc_googlebench_binary",
+    "drake_py_experiment_binary",
+)
+load(
     "//tools/skylark:drake_cc.bzl",
     "drake_cc_googletest",
     "drake_cc_googletest_linux_only",
@@ -74,14 +79,6 @@ drake_cc_library(
     ],
 )
 
-drake_cc_googletest(
-    name = "transfer_kernels_test",
-    deps = [
-        ":transfer_kernels",
-        "//common/test_utilities:eigen_matrix_compare",
-    ],
-)
-
 drake_cc_library(
     name = "grid_data",
     hdrs = [
@@ -112,6 +109,7 @@ drake_cc_library(
         "particle_data.h",
     ],
     deps = [
+        ":mass_and_momentum",
         "//common:essential",
         "//common:parallelism",
         "//multibody/fem",
@@ -167,6 +165,24 @@ drake_cc_library_linux_only(
     ],
 )
 
+drake_cc_library_linux_only(
+    name = "transfer",
+    srcs = [
+        "transfer.cc",
+    ],
+    hdrs = [
+        "transfer.h",
+    ],
+    deps = [
+        "//common/test_utilities:limit_malloc",
+        "//common:essential",
+        ":sparse_grid",
+        ":particle_data",
+        ":transfer_kernels",
+        ":particle_sorter",
+    ],
+)
+
 drake_cc_googletest(
     name = "bspline_weights_test",
     deps = [
@@ -212,6 +228,39 @@ drake_cc_googletest_linux_only(
     deps = [
         ":spgrid",
         "//common/test_utilities:limit_malloc",
+    ],
+)
+
+drake_cc_googlebench_binary(
+    name = "transfer_benchmark",
+    srcs = ["transfer_benchmark.cc"],
+    add_test_rule = False,
+    deps = [
+        ":transfer",
+        "//common:add_text_logging_gflags",
+        "//tools/performance:fixture_common",
+        "//tools/performance:gflags_main",
+    ],
+)
+
+drake_py_experiment_binary(
+    name = "transfer_experiment",
+    googlebench_binary = ":transfer_benchmark",
+)
+
+drake_cc_googletest(
+    name = "transfer_kernels_test",
+    deps = [
+        ":transfer_kernels",
+        "//common/test_utilities:eigen_matrix_compare",
+    ],
+)
+
+drake_cc_googletest_linux_only(
+    name = "transfer_test",
+    deps = [
+        ":transfer",
+        "//common/test_utilities:eigen_matrix_compare",
     ],
 )
 

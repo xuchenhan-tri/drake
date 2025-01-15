@@ -128,7 +128,10 @@ class BsplineWeightsSimd {
  public:
   DRAKE_DEFAULT_COPY_AND_MOVE_AND_ASSIGN(BsplineWeightsSimd);
 
-  explicit BsplineWeightsSimd(const T& dx) : dx_(dx) {}
+  explicit BsplineWeightsSimd(const T& dx) : dx_(dx) {
+    x_reference_.Reserve(1024);
+    data_.Reserve(1024);
+  }
 
   /* Constructs the BsplineWeights between a point with world frame positions
    x and the grid nodes in its support in the cartesian grid with grid spacing

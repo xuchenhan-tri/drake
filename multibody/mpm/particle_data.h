@@ -9,11 +9,22 @@
 #include "drake/multibody/fem/deformable_body_config.h"
 #include "drake/multibody/fem/linear_constitutive_model.h"
 #include "drake/multibody/fem/linear_corotated_model.h"
+#include "drake/multibody/mpm/mass_and_momentum.h"
 
 namespace drake {
 namespace multibody {
 namespace mpm {
 namespace internal {
+
+/* Computes A: ε where ε is the Levi-Civita tensor. */
+template <typename T>
+Vector3<T> ContractWithLeviCivita(const Matrix3<T>& A) {
+  Vector3<T> A_dot_eps = {0.0, 0.0, 0.0};
+  A_dot_eps(0) = A(1, 2) - A(2, 1);
+  A_dot_eps(1) = A(2, 0) - A(0, 2);
+  A_dot_eps(2) = A(0, 1) - A(1, 0);
+  return A_dot_eps;
+}
 
 /* TODO(xuchenhan-tri): Move constitutive models outside of the FEM module so
  that it can be more easily shared with MPM code. */
@@ -176,6 +187,21 @@ class ParticleData {
                     double total_volume,
                     const fem::DeformableBodyConfig<double>& config);
 
+  MassAndMomentum<T> ComputeTotalMassAndMomentum(const T& dx) {
+    MassAndMomentum<T> result;
+    const T D = dx * dx * 0.25;
+    for (int i = 0; i < num_particles(); ++i) {
+      result.mass += m_[i];
+      result.linear_momentum += m_[i] * v_[i];
+      const Matrix3<T> B = C_[i] * D;  // C = B * D^{-1}
+      result.angular_momentum +=
+          m_[i] *
+          (x_[i].cross(v_[i]) + ContractWithLeviCivita<T>(B.transpose()));
+    }
+    return result;
+  }
+
+ private:
   /* Per particle state and data. All of the following fields have the same
    size and ordering. */
   /* State */

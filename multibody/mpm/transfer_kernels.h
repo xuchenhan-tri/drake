@@ -23,7 +23,7 @@ class WorkingSet {
  public:
   DRAKE_NO_COPY_NO_MOVE_NO_ASSIGN(WorkingSet);
 
-  constexpr static int kWorkingSetSize = 32;
+  constexpr static int kWorkingSetSize = 1024;
 
   WorkingSet(T dx, T D_inverse_dt)
       : dx_(dx), D_inverse_dt_(D_inverse_dt), bsplines_(dx) {
@@ -54,6 +54,7 @@ class WorkingSet {
 
     data_size_ = data_indices.size();
     A_.Resize(data_size_);
+    w_.resize(data_size_);
     bsplines_.Compute(x_);
   }
 
@@ -75,14 +76,14 @@ class WorkingSet {
 
   /* Reserves space for n elements for all data. */
   void ReserveAll(int n) {
-    m_.reserve(kWorkingSetSize);
-    w_.reserve(kWorkingSetSize);
+    m_.reserve(n);
+    w_.reserve(n);
 
-    v_.Reserve(kWorkingSetSize);
-    x_.Reserve(kWorkingSetSize);
-    tau_.Reserve(kWorkingSetSize);
-    C_.Reserve(kWorkingSetSize);
-    A_.Reserve(kWorkingSetSize);
+    v_.Reserve(n);
+    x_.Reserve(n);
+    tau_.Reserve(n);
+    C_.Reserve(n);
+    A_.Reserve(n);
   }
 
   std::vector<T> m_;

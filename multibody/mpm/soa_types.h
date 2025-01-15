@@ -142,6 +142,8 @@ class SoaMat3 {
          {{data_[2][0].data(), data_[2][1].data(), data_[2][2].data()}}}};
   }
 
+  int size() const { return static_cast<int>(data_[0][0].size()); }
+
  private:
   /* data_[r][c] = [m_rc_1, m_rc_2, ..., m_rc_N] */
   std::array<std::array<std::vector<T>, 3>, 3> data_;
