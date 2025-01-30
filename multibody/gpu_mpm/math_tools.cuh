@@ -613,18 +613,18 @@ inline __host__ __device__ void make_from_one_unit_vector(const T u_A[3], int ax
     T r = T(1.) / mag_a_x_u;
     T s = -r * u_A[i];
 
-    J[axis_index * 3 + 0] = u_A[0];
-    J[axis_index * 3 + 1] = u_A[1];
-    J[axis_index * 3 + 2] = u_A[2];
+    J[0 * 3 + axis_index] = u_A[0];
+    J[1 * 3 + axis_index] = u_A[1];
+    J[2 * 3 + axis_index] = u_A[2];
 
     T v[3] = {0., 0., 0.};
     v[j] = -r * u_A[k];
     v[k] = r * u_A[j];
 
     int v_index = (axis_index + 1) % 3;
-    J[v_index * 3 + i] = 0;
-    J[v_index * 3 + j] = v[j];
-    J[v_index * 3 + k] = v[k];
+    J[i * 3 + v_index] = 0;
+    J[j * 3 + v_index] = v[j];
+    J[k * 3 + v_index] = v[k];
 
     T w[3];
     w[i] = mag_a_x_u;
@@ -632,9 +632,9 @@ inline __host__ __device__ void make_from_one_unit_vector(const T u_A[3], int ax
     w[k] = s * u_A[k];
 
     int w_index = (axis_index + 2) % 3;
-    J[w_index * 3 + 0] = w[0];
-    J[w_index * 3 + 1] = w[1];
-    J[w_index * 3 + 2] = w[2];
+    J[0 * 3 + w_index] = w[0];
+    J[1 * 3 + w_index] = w[1];
+    J[2 * 3 + w_index] = w[2];
 }
 
 
