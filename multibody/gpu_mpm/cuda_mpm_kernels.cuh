@@ -1160,8 +1160,8 @@ __global__ void contact_particle_to_grid_kernel(const size_t n_particles,
             T val[12]; // buffer for both W_Hess & W_Grad
             T weight = weights[threadIdx.x][i][0] * weights[threadIdx.x][j][1] * weights[threadIdx.x][k][2];
             #pragma unroll
-            for (int ii = 0; ii < 9; ++ii) val[ii] = mass * weight * weight * W_Hess[ii];
-            for (int ii = 9; ii < 12; ++ii) val[ii] = mass * weight * W_Grad[ii - 9];
+            for (int ii = 0; ii < 9; ++ii) val[ii] = weight * weight * W_Hess[ii];
+            for (int ii = 9; ii < 12; ++ii) val[ii] = weight * W_Grad[ii - 9];
 
             for (int iter = 1; iter <= mark; iter <<= 1) {
                 T tmp[12]; 
@@ -1187,8 +1187,8 @@ __global__ void contact_particle_to_grid_kernel(const size_t n_particles,
                         T val[12]; // buffer for both W_Hess & W_Grad
                             T weight = weights[threadIdx.x][i][0] * weights[threadIdx.x][j][1] * weights[threadIdx.x][k][2];
                             #pragma unroll
-                            for (int ii = 0; ii < 9; ++ii) val[ii] = mass * weight * weight * W_Hess[ii];
-                            for (int ii = 9; ii < 12; ++ii) val[ii] = mass * weight * W_Grad[ii - 9];
+                            for (int ii = 0; ii < 9; ++ii) val[ii] = weight * weight * W_Hess[ii];
+                            for (int ii = 9; ii < 12; ++ii) val[ii] = weight * W_Grad[ii - 9];
 
                             for (int iter = 1; iter <= mark; iter <<= 1) {
                                 T tmp[12]; 
@@ -1442,31 +1442,31 @@ __global__ void grid_to_particle_vdb_line_search_kernel(const size_t n_particles
             }
         }
         if (global_line_search) {
-            atomicAdd(g_E1, mass * l(new_v_local));
+            atomicAdd(g_E1, l(new_v_local));
             if constexpr (SOLVE_DF_DDF) {
                 T C_Hess[9], C_Grad[3]; // hess and grad in the contact local coordinate
                 compute_contact_grad_and_hess(phi0, dt, stiffness, damping, friction_mu, v0, new_v_local, C_Hess, C_Grad);
                 T R_WC_g_D[3];
                 matmul<3, 3, 1, T>(R_WC, global_Dir, R_WC_g_D);
-                atomicAdd(g_dE1, mass * dot<3>(C_Grad, R_WC_g_D));
+                atomicAdd(g_dE1, dot<3>(C_Grad, R_WC_g_D));
                 T tmp[3];
                 matmul<1, 3, 3, T>(R_WC_g_D, C_Hess, tmp);
-                atomicAdd(g_d2E1, mass * dot<3>(tmp, R_WC_g_D));
+                atomicAdd(g_d2E1, dot<3>(tmp, R_WC_g_D));
             }
         } else {
             if (JACOBI) {
                 printf("ERROR, JACOBI CANNOT USE LOCAL LINE-SEARCH!!!!!!!!!!!!!!!!!!!!!!!\n");
             }
-            atomicAdd(&g_E1[color_index], mass * l(new_v_local));
+            atomicAdd(&g_E1[color_index], l(new_v_local));
         }
         if (eval_E0) {
             if (global_line_search) {
-                atomicAdd(g_E0, mass * l(old_v_local));
+                atomicAdd(g_E0, l(old_v_local));
             } else {
                 if (JACOBI) {
                     printf("ERROR, JACOBI CANNOT USE LOCAL LINE-SEARCH!!!!!!!!!!!!!!!!!!!!!!!\n");
                 }
-                atomicAdd(&g_E0[color_index], mass * l(old_v_local));
+                atomicAdd(&g_E0[color_index], l(old_v_local));
             }
         }
     }

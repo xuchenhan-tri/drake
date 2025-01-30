@@ -39,7 +39,7 @@ DEFINE_string(contact_approximation, "sap",
               "Type of convex contact approximation. See "
               "multibody::DiscreteContactApproximation for details. Options "
               "are: 'sap', 'lagged', and 'similar'.");
-DEFINE_double(stiffness, 1000000.0, "Contact Stiffness.");
+DEFINE_double(stiffness, 100.0, "Contact Stiffness.");
 DEFINE_double(friction, 0.0, "Contact Friction.");
 DEFINE_double(damping, 1e-5,
     "Hunt and Crossley damping for the deformable body, only used when "
