@@ -955,6 +955,7 @@ __device__ __host__ inline void get_color_coordinates(UINT x, UINT y, UINT z, UI
     k = ((3U + k_offset) - (z % 3U)) % 3U;
 }
 
+// SAP model
 template<typename T>
 __device__ void compute_contact_grad_and_hess(
     const T phi0, const T dt, const T stiffness, const T damping, const T friction_mu, 
@@ -994,28 +995,43 @@ __device__ void compute_contact_grad_and_hess(
     // NOTE: follow the pattern in https://github.com/RobotLocomotion/drake/blob/master/multibody/contact_solvers/sap/sap_hunt_crossley_constraint.cc
     // Check if predicted penetration is positive.
     // If not, then the contact force is not repulsive, don't apply it.
-    const T xdot = -v_next[kZAxis];
-    const T phi = phi0 + dt * xdot;
-    if (T(1.) + damping * xdot <= 0 || phi <= 0) { // Quick exits
+
+    // NOTE (changyu): in math eqns from (https://arxiv.org/pdf/2312.03908) and in code,
+    // ϕ differs by a sign.
+    const T phi = phi0 - dt * v_next[kZAxis];
+    // If (-ϕ0 - δt vn)+ or (1 − dvn)+ equals zero, no impulse should be applied
+    if (T(1.) - damping * v_next[kZAxis] <= 0 || phi <= 0) { // Quick exits
         #pragma unroll
         for (int i = 0; i < 9; ++i) C_Hess[i] = 0;
         #pragma unroll
         for (int i = 0; i < 3; ++i) C_Grad[i] = 0;
     }
     else {
-        // normal component
-        // fn(x, x˙) = k x+ (1 + dx˙)+, γn(vn) = n(vn; x0).
-        const T yn = stiffness * dt * (phi0 + dt * xdot) * (T(1.) + damping * xdot); // Eq. 13
-        // d²ℓ_n / dv_n² = δt² * (∂f_n / ∂x) + δt * (∂f_n / ∂x)
-        const T d2lndvn2 = -stiffness * dt * (-dt - damping * phi0 + T(2.) * damping * dt * v_next[kZAxis]); // Eq. 8
+        // normal component (Compliant Contact)
+        // fn(ϕ, vn) = k (−ϕ)+ (1 − dvn)+
+        // γn(vn) = n(vn; ϕ0) = δt fn(ϕ0 + δt vn, vn)
+        //        = δt k (-ϕ0 - δt vn)+ (1 − dvn)+
+        const T yn = dt * stiffness * (phi0 - dt * v_next[kZAxis]) * (T(1.) - damping * v_next[kZAxis]); // Eq. 13
 
-        // frictional component
+        // ∂²ln / ∂vn² = - δt ∂ fn / ∂vn
+        //               = - δt ∂ fn(ϕ0 + δt vn, vn) / ∂vn
+        //               = - δt k ∂ (-ϕ0 - δt vn)+ (1 − dvn)+ / ∂vn
+        // when both (-ϕ0 - δt vn) > 0 and (1 − dvn) > 0 satisfied
+        //               = - δt k ∂ (-ϕ0 - δt vn) (1 − dvn) / ∂vn
+        //               = - δt k ∂ (-ϕ0 - δt vn + ϕ0 dvn + d δt vn²) / ∂vn
+        //               = - δt k (- δt + ϕ0 d + 2 d δt vn)
+        const T d2lndvn2 = - dt * stiffness * (-dt -phi0 * damping + T(2.) * damping * dt * v_next[kZAxis]); // Eq. 8
+
+        // frictional component (Lagged Model)
         // For a physical model of compliance for which γn is only a function of vn
+
+        // γn0 = δt fn(ϕ0, vn0) = δt k (−ϕ0)+ (1 − dvn0)+
         const T yn0 = max(stiffness * dt * phi0 * (T(1.) - damping * v0[kZAxis]), T(0.));
+
         const T ts_coeff = sqrt(v_next[0] * v_next[0] + v_next[1] * v_next[1] + config::epsv<T> * config::epsv<T>);
         const T ts_hat[2] = {v_next[0] / ts_coeff, v_next[1] / ts_coeff}; // Eq. 18
 
-        // γ_t = -μ * γ_{n,0} * t̂_s 
+        // γt = -μ * γn0 * t̂_s 
         const T yt[2] = {
             -friction_mu * yn0 * ts_hat[0], 
             -friction_mu * yn0 * ts_hat[1]
@@ -1028,7 +1044,7 @@ __device__ void compute_contact_grad_and_hess(
             -P_ts_hat[2], T(1.) - P_ts_hat[3]
         };
         const T d2ltdvt2_coeff = friction_mu * yn0 / ts_coeff; // Eq. 33, ts_coeff = ts_soft_norm + epsv
-        // ∂²ℓ_t / ∂v_t² = μ * γ_n0 * (P⊥(t̂_s) / (||v_t||_s + ε_s))
+        // ∂²lt / ∂vt² = μ * γn0 * (P⊥(t̂_s) / (||v_t||_s + ε_s))
         const T d2ltdvt2[4] = {
             d2ltdvt2_coeff * P_perp_ts_hat[0],
             d2ltdvt2_coeff * P_perp_ts_hat[1],
