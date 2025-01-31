@@ -1364,7 +1364,7 @@ __global__ void grid_to_particle_vdb_line_search_kernel(const size_t n_particles
             return;
         }
 
-        T global_dir_W[3] = {0, 0, 0};
+        T vp_search_dir_W[3] = {0, 0, 0};
 
         #pragma unroll
         for (int i = 0; i < 3; ++i) {
@@ -1385,9 +1385,9 @@ __global__ void grid_to_particle_vdb_line_search_kernel(const size_t n_particles
                         v_p_next[0] += weight * (g_v[0] + alpha * g_D[0]);
                         v_p_next[1] += weight * (g_v[1] + alpha * g_D[1]);
                         v_p_next[2] += weight * (g_v[2] + alpha * g_D[2]);
-                        global_dir_W[0] += weight * g_D[0];
-                        global_dir_W[1] += weight * g_D[1];
-                        global_dir_W[2] += weight * g_D[2];
+                        vp_search_dir_W[0] += weight * g_D[0];
+                        vp_search_dir_W[1] += weight * g_D[1];
+                        vp_search_dir_W[2] += weight * g_D[2];
                     } else {
                         if (get_color_mask(base[0] + i, base[1] + j, base[2] + k) == g_color_mask) {
                             const T* g_v = &g_velocities[target_cell_index * 3];
@@ -1483,7 +1483,7 @@ __global__ void grid_to_particle_vdb_line_search_kernel(const size_t n_particles
                 T lc_Hess_C[9], lc_Grad_C[3]; // hess and grad in the contact local coordinate
                 compute_contact_grad_and_hess(phi0, dt, stiffness, damping, friction_mu, vn_C, v_next_C, lc_Hess_C, lc_Grad_C);
                 T global_dir_C[3];
-                matmul<3, 3, 1, T>(R_CW, global_dir_W, global_dir_C);
+                matmul<3, 3, 1, T>(R_CW, vp_search_dir_W, global_dir_C);
                 atomicAdd(g_dE1, dot<3>(lc_Grad_C, global_dir_C));
                 T tmp[3];
                 matmul<1, 3, 3, T>(global_dir_C, lc_Hess_C, tmp);
