@@ -1654,7 +1654,7 @@ template<typename T>
 __global__ void apply_contact_impulse_to_rigid_bodies(
     const size_t n_contacts,
     const T* contact_pos,
-    const T* contact_vel0,
+    const T* contact_vel_star,
     const T* contact_vel,
     const T* volumes,
     const uint32_t* contact_mpm_id,
@@ -1665,9 +1665,9 @@ __global__ void apply_contact_impulse_to_rigid_bodies(
     uint32_t idx = threadIdx.x + blockDim.x * blockIdx.x;
     if (idx < n_contacts) {
         T dv[3] = {
-            contact_vel[idx * 3 + 0] - contact_vel0[idx * 3 + 0],
-            contact_vel[idx * 3 + 1] - contact_vel0[idx * 3 + 1],
-            contact_vel[idx * 3 + 2] - contact_vel0[idx * 3 + 2]
+            contact_vel[idx * 3 + 0] - contact_vel_star[idx * 3 + 0],
+            contact_vel[idx * 3 + 1] - contact_vel_star[idx * 3 + 1],
+            contact_vel[idx * 3 + 2] - contact_vel_star[idx * 3 + 2]
         };
         T m = volumes[contact_mpm_id[idx]] * config::DENSITY<T>;
         // We negate the sign of the grid node's momentum change to get

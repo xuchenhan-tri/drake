@@ -262,12 +262,12 @@ void GpuMpmSolver<T>::UpdateContact(GpuMpmState<T> *state, const int frame, cons
     CUDA_SAFE_CALL(cudaMalloc(&global_dE1_d, sizeof(T)));
     CUDA_SAFE_CALL(cudaMalloc(&global_d2E1_d, sizeof(T)));
 
-    // NOTE (changyu): pre-compute contact particle velocity `contact_vel0` after p2g2g before contact handling
-    // then the dv changed by the implicit contact optimization problem can be extacted by `dv = contact_vel - contact_vel`.
+    // NOTE (changyu): pre-compute contact particle velocity `contact_vel_star` after p2g2g before contact handling
+    // then the dv changed by the implicit contact optimization problem can be extacted by `dv = contact_vel - contact_vel_star`.
     CUDA_SAFE_CALL((
         grid_to_particle_kernel<T, config::DEFAULT_CUDA_BLOCK_SIZE, /*CONTACT_TRANSFER=*/true><<<
         (n_contacts + config::DEFAULT_CUDA_BLOCK_SIZE - 1) / config::DEFAULT_CUDA_BLOCK_SIZE, config::DEFAULT_CUDA_BLOCK_SIZE>>>
-        (n_contacts, state->contact_pos(), state->contact_vel0(), nullptr,
+        (n_contacts, state->contact_pos(), state->contact_vel_star(), nullptr,
         state->grid_masses(), state->grid_momentum(), dt)
         ));
 
@@ -614,7 +614,7 @@ void GpuMpmSolver<T>::UpdateContact(GpuMpmState<T> *state, const int frame, cons
     // NOTE (changyu): two-way coupling part, apply contact impulse back to the rigid part
     CUDA_SAFE_CALL((apply_contact_impulse_to_rigid_bodies<T><<<
         (n_contacts + config::DEFAULT_CUDA_BLOCK_SIZE - 1) / config::DEFAULT_CUDA_BLOCK_SIZE, config::DEFAULT_CUDA_BLOCK_SIZE>>>
-        (n_contacts, state->contact_pos(), state->contact_vel0(), state->contact_vel(), 
+        (n_contacts, state->contact_pos(), state->contact_vel_star(), state->contact_vel(), 
         state->current_volumes(), state->contact_mpm_id(), state->contact_rigid_id(), 
         state->contact_rigid_p_WB(), state->F_Bq_W_tau(), state->F_Bq_W_f())
         ));
