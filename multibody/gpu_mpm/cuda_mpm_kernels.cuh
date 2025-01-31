@@ -1000,7 +1000,8 @@ __device__ void compute_contact_grad_and_hess(
     else {
         // normal component
         // fn(x, x˙) = k x+ (1 + dx˙)+, γn(vn) = n(vn; x0).
-        const T yn = stiffness * dt * (phi0 - dt * v_next[kZAxis]) * (T(1.) - damping * v_next[kZAxis]); // Eq. 13
+        const T xdot = -v_next[kZAxis];
+        const T yn = stiffness * dt * (phi0 + dt * xdot) * (T(1.) + damping * xdot); // Eq. 13
         // d²ℓ_n / dv_n² = δt² * (∂f_n / ∂x) + δt * (∂f_n / ∂x)
         const T d2lndvn2 = -stiffness * dt * (-dt - damping * phi0 + T(2.) * damping * dt * v_next[kZAxis]); // Eq. 8
 
