@@ -1277,9 +1277,10 @@ __global__ void update_grid_contact_coordinate_descent_kernel(
             // Optimization problem for minimizing ℓ(v_i):
             // min_{v_i} ℓ(v_i) = (1/2) * ||v_i - v_i^*||_M^2 + ℓ_c(v_p(v_i))
             // M * (v_{n+1}^i - v_i^*) = J^T * γ(v_p(v_{n+1}^i))
-            T Hess_Inv[9];
-            inverse3(local_Hess, Hess_Inv);
-            matmul<3, 3, 1, T>(Hess_Inv, negative_local_Grad, local_Dir);
+            // T Hess_Inv[9];
+            // inverse3(local_Hess, Hess_Inv);
+            // matmul<3, 3, 1, T>(Hess_Inv, negative_local_Grad, local_Dir);
+            cholesky_solve3(local_Hess, negative_local_Grad, local_Dir);
 
             // stop criterion
             atomicAdd(norm_dir, norm_sqr<3>(local_Dir));
