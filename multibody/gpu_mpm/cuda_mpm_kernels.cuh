@@ -1151,19 +1151,19 @@ __global__ void contact_particle_to_grid_kernel(const size_t n_particles,
         matmul<3, 3, 1, T>(R_CW, vn_rel_W, vn_C);
         matmul<3, 3, 1, T>(R_CW, v_rel_W, v_next_C);
 
-        T C_Hess_lc[9], C_Grad_lc[3]; // hess and grad in the contact local coordinate
-        compute_contact_grad_and_hess(phi0, dt, stiffness, damping, friction_mu, vn_C, v_next_C, C_Hess_lc, C_Grad_lc);
+        T lc_Hess_C[9], lc_Grad_C[3]; // hess and grad in the contact local coordinate
+        compute_contact_grad_and_hess(phi0, dt, stiffness, damping, friction_mu, vn_C, v_next_C, lc_Hess_C, lc_Grad_C);
         
         
         // hess and grad in the world local coordinate
-        T W_Hess_lc[9];
-        T W_Grad_lc[3];
+        T lc_Hess_W[9];
+        T lc_Grad_W[3];
         T tmp[9];
 
         // Grad/Hess for lc(vp(vi))
-        matmul<3, 3, 1, T>(R_WC, C_Grad_lc, W_Grad_lc); // J^T Grad
-        matmul<3, 3, 3, T>(R_WC, C_Hess_lc, tmp);
-        matmul<3, 3, 3, T>(tmp, R_CW, W_Hess_lc); // J^T Hess J
+        matmul<3, 3, 1, T>(R_WC, lc_Grad_C, lc_Grad_W); // J^T Grad
+        matmul<3, 3, 3, T>(R_WC, lc_Hess_C, tmp);
+        matmul<3, 3, 3, T>(tmp, R_CW, lc_Hess_W); // J^T Hess J
 
         if constexpr(!JACOBI) {
             uint32_t i, j, k;
@@ -1172,8 +1172,8 @@ __global__ void contact_particle_to_grid_kernel(const size_t n_particles,
             T val[12]; // buffer for both W_Hess & W_Grad
             T weight = weights[threadIdx.x][i][0] * weights[threadIdx.x][j][1] * weights[threadIdx.x][k][2];
             #pragma unroll
-            for (int ii = 0; ii < 9; ++ii) val[ii] = weight * W_Hess_lc[ii] * weight;
-            for (int ii = 9; ii < 12; ++ii) val[ii] = weight * W_Grad_lc[ii - 9];
+            for (int ii = 0; ii < 9; ++ii) val[ii] = weight * lc_Hess_W[ii] * weight;
+            for (int ii = 9; ii < 12; ++ii) val[ii] = weight * lc_Grad_W[ii - 9];
 
             for (int iter = 1; iter <= mark; iter <<= 1) {
                 T tmp[12]; 
@@ -1199,8 +1199,8 @@ __global__ void contact_particle_to_grid_kernel(const size_t n_particles,
                         T val[12]; // buffer for both W_Hess & W_Grad
                             T weight = weights[threadIdx.x][i][0] * weights[threadIdx.x][j][1] * weights[threadIdx.x][k][2];
                             #pragma unroll
-                            for (int ii = 0; ii < 9; ++ii) val[ii] = weight * weight * W_Hess_lc[ii];
-                            for (int ii = 9; ii < 12; ++ii) val[ii] = weight * W_Grad_lc[ii - 9];
+                            for (int ii = 0; ii < 9; ++ii) val[ii] = weight * weight * lc_Hess_W[ii];
+                            for (int ii = 9; ii < 12; ++ii) val[ii] = weight * lc_Grad_W[ii - 9];
 
                             for (int iter = 1; iter <= mark; iter <<= 1) {
                                 T tmp[12]; 
@@ -1475,13 +1475,13 @@ __global__ void grid_to_particle_vdb_line_search_kernel(const size_t n_particles
         if (global_line_search) {
             atomicAdd(g_E1, lc(v_next_C));
             if constexpr (SOLVE_DF_DDF) {
-                T C_Hess_lc[9], C_Grad_lc[3]; // hess and grad in the contact local coordinate
-                compute_contact_grad_and_hess(phi0, dt, stiffness, damping, friction_mu, vn_C, v_next_C, C_Hess_lc, C_Grad_lc);
+                T lc_Hess_C[9], lc_Grad_C[3]; // hess and grad in the contact local coordinate
+                compute_contact_grad_and_hess(phi0, dt, stiffness, damping, friction_mu, vn_C, v_next_C, lc_Hess_C, lc_Grad_C);
                 T global_dir_C[3];
                 matmul<3, 3, 1, T>(R_CW, global_dir_W, global_dir_C);
-                atomicAdd(g_dE1, dot<3>(C_Grad_lc, global_dir_C));
+                atomicAdd(g_dE1, dot<3>(lc_Grad_C, global_dir_C));
                 T tmp[3];
-                matmul<1, 3, 3, T>(global_dir_C, C_Hess_lc, tmp);
+                matmul<1, 3, 3, T>(global_dir_C, lc_Hess_C, tmp);
                 atomicAdd(g_d2E1, dot<3>(tmp, global_dir_C));
             }
         } else {
