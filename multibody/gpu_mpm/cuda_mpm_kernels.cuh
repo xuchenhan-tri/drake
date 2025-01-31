@@ -990,8 +990,13 @@ __device__ void compute_contact_grad_and_hess(
         After solving for vn_next, we check if the friction force lies in the friction
         cone, if not, we project the velocity back into the friction cone. */
     constexpr int kZAxis = 2;
-    T v_hat = min(phi0 / dt, T(1.) / damping); // Eq. 
-    if (vn[kZAxis] > v_hat) {
+
+    // NOTE: follow the pattern in https://github.com/RobotLocomotion/drake/blob/master/multibody/contact_solvers/sap/sap_hunt_crossley_constraint.cc
+    // Check if predicted penetration is positive.
+    // If not, then the contact force is not repulsive, don't apply it.
+    const T xdot = -v_next[kZAxis];
+    const T phi = phi0 + dt * xdot;
+    if (T(1.) + damping * xdot <= 0 || phi <= 0) { // Quick exits
         #pragma unroll
         for (int i = 0; i < 9; ++i) C_Hess[i] = 0;
         #pragma unroll
@@ -1000,7 +1005,6 @@ __device__ void compute_contact_grad_and_hess(
     else {
         // normal component
         // fn(x, x˙) = k x+ (1 + dx˙)+, γn(vn) = n(vn; x0).
-        const T xdot = -v_next[kZAxis];
         const T yn = stiffness * dt * (phi0 + dt * xdot) * (T(1.) + damping * xdot); // Eq. 13
         // d²ℓ_n / dv_n² = δt² * (∂f_n / ∂x) + δt * (∂f_n / ∂x)
         const T d2lndvn2 = -stiffness * dt * (-dt - damping * phi0 + T(2.) * damping * dt * v_next[kZAxis]); // Eq. 8
