@@ -180,7 +180,7 @@ class DeformableDriver : public ScalarConvertibleComponent<T> {
           {
             result->push_back(
                 uint32_t(p), index_rigid, GpuT(p2geometry.distance),
-                -p2geometry.grad_W.normalized().template cast<GpuT>(),
+                p2geometry.grad_W.normalized().template cast<GpuT>(),
                 mpm_state->positions_host()[p],
                 rigid_v.template cast<GpuT>(),
                 mpm_state->external_forces_host().p_BoBq_B[index_rigid]

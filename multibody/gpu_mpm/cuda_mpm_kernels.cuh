@@ -1118,7 +1118,7 @@ __global__ void contact_particle_to_grid_kernel(const size_t n_particles,
         const T* particle_vn = &velocities[contact_mpm_id[idx] * 3];
         const T* particle_v = &contact_vel[idx * 3];
 
-        T nhat_W[3] = {-contact_normal[idx * 3 + 0], -contact_normal[idx * 3 + 1], -contact_normal[idx * 3 + 2]};
+        T nhat_W[3] = {contact_normal[idx * 3 + 0], contact_normal[idx * 3 + 1], contact_normal[idx * 3 + 2]};
         // TODO (changyu): const GpuT phi0 = -(
         // static_cast<GpuT>(mpm_contact_pairs[i].penetration_distance) + 
         //     (mpm_state->positions_host()[mpm_contact_pairs[i].particle_in_contact_index] - 
@@ -1412,7 +1412,7 @@ __global__ void grid_to_particle_vdb_line_search_kernel(const size_t n_particles
         const T mass = volumes[contact_mpm_id[idx]] * config::DENSITY<T>;
         const T* v_p_n = &velocities[contact_mpm_id[idx] * 3];
 
-        T nhat_W[3] = {-contact_normal[idx * 3 + 0], -contact_normal[idx * 3 + 1], -contact_normal[idx * 3 + 2]};
+        T nhat_W[3] = {contact_normal[idx * 3 + 0], contact_normal[idx * 3 + 1], contact_normal[idx * 3 + 2]};
         T phi0 = -contact_dist[idx];
 #ifdef DEBUG
         if (phi0 < 0) {
