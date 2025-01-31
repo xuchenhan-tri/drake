@@ -958,7 +958,7 @@ __device__ __host__ inline void get_color_coordinates(UINT x, UINT y, UINT z, UI
 template<typename T>
 __device__ void compute_contact_grad_and_hess(
     const T phi0, const T dt, const T stiffness, const T damping, const T friction_mu, 
-    const T *vn, const T *v_next,
+    const T *v0, const T *v_next,
     T *C_Hess, T *C_Grad) {
     /* Solves the contact problem for a single particle against a rigid body
         assuming the rigid body has infinite mass and inertia.
@@ -1011,7 +1011,7 @@ __device__ void compute_contact_grad_and_hess(
 
         // frictional component
         // For a physical model of compliance for which γn is only a function of vn
-        const T yn0 = max(stiffness * dt * phi0 * (T(1.) - damping * vn[kZAxis]), T(0.));
+        const T yn0 = max(stiffness * dt * phi0 * (T(1.) - damping * v0[kZAxis]), T(0.));
         const T ts_coeff = sqrt(v_next[0] * v_next[0] + v_next[1] * v_next[1] + config::epsv<T> * config::epsv<T>);
         const T ts_hat[2] = {v_next[0] / ts_coeff, v_next[1] / ts_coeff}; // Eq. 18
 
