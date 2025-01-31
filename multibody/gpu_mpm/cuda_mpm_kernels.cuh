@@ -1248,9 +1248,7 @@ __global__ void update_grid_contact_coordinate_descent_kernel(
         uint32_t block_idx = g_touched_ids[idx >> (config::G_BLOCK_BITS * 3)];
         uint32_t cell_idx = (block_idx << (config::G_BLOCK_BITS * 3)) | (idx & config::G_BLOCK_VOLUME_MASK);
         uint3 xyz = inverse_cell_index(cell_idx);
-        if (g_masses[cell_idx] > T(0.) && 
-            (get_color_mask(xyz.x, xyz.y, xyz.z) == g_color_mask || JACOBI) &&
-            (norm<9>(&g_Hess[cell_idx * 9]) > 1e-10 || norm<3>(&g_Grad[cell_idx * 3]) > 1e-10)) {
+        if (g_masses[cell_idx] > T(0.) && (get_color_mask(xyz.x, xyz.y, xyz.z) == g_color_mask || JACOBI)) {
             T* g_vel = &g_momentum[cell_idx * 3];
             T mass = g_masses[cell_idx];
             T* local_Hess = &g_Hess[cell_idx * 9];
