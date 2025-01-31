@@ -859,10 +859,12 @@ __global__ void grid_to_particle_kernel(const size_t n_particles,
 
                     if constexpr (CONTACT_TRANSFER) {
                         const T &g_m = g_masses[target_cell_index];
-                        if (g_m > T(1e-7)) {
+                        if (g_m > 0) {
                             new_v[0] += weight * g_v[0];
                             new_v[1] += weight * g_v[1];
                             new_v[2] += weight * g_v[2];
+                        } else {
+                            printf("IMPOSSIBLE g_m=%lf\n", g_m);
                         }
                     } else {
                         new_v[0] += weight * g_v[0];
@@ -1238,7 +1240,7 @@ __global__ void update_grid_contact_coordinate_descent_kernel(
         uint3 xyz = inverse_cell_index(cell_idx);
         if (g_masses[cell_idx] > T(0.) && 
             (get_color_mask(xyz.x, xyz.y, xyz.z) == g_color_mask || JACOBI) &&
-            (norm<9>(&g_Hess[cell_idx * 9]) > 1e-7 || norm<3>(&g_Grad[cell_idx * 3]) > 1e-7)) {
+            (norm<9>(&g_Hess[cell_idx * 9]) > 1e-10 || norm<3>(&g_Grad[cell_idx * 3]) > 1e-10)) {
             T* g_vel = &g_momentum[cell_idx * 3];
             T mass = g_masses[cell_idx];
             T* local_Hess = &g_Hess[cell_idx * 9];
