@@ -999,8 +999,10 @@ __device__ void compute_contact_grad_and_hess(
     }
     else {
         // normal component
+        // fn(x, x˙) = k x+ (1 + dx˙)+, γn(vn) = n(vn; x0).
         const T yn = stiffness * dt * (phi0 - dt * v_next[kZAxis]) * (T(1.) - damping * v_next[kZAxis]); // Eq. 13
-        const T d2lndvn2 = stiffness * dt * (-dt - damping * phi0 + T(2.) * damping * dt * v_next[kZAxis]); // Eq. 8
+        // d²ℓ_n / dv_n² = δt² * (∂f_n / ∂x) + δt * (∂f_n / ∂x)
+        const T d2lndvn2 = -stiffness * dt * (-dt - damping * phi0 + T(2.) * damping * dt * v_next[kZAxis]); // Eq. 8
 
         // frictional component
         // For a physical model of compliance for which γn is only a function of vn
@@ -1008,14 +1010,20 @@ __device__ void compute_contact_grad_and_hess(
         const T ts_coeff = sqrt(v_next[0] * v_next[0] + v_next[1] * v_next[1] + config::epsv<T> * config::epsv<T>);
         const T ts_hat[2] = {v_next[0] / ts_coeff, v_next[1] / ts_coeff}; // Eq. 18
 
-        const T yt[2] = {-friction_mu * yn0 * ts_hat[0], -friction_mu * yn0 * ts_hat[1]}; // Eq. 33
+        // γ_t = -μ * γ_{n,0} * t̂_s 
+        const T yt[2] = {
+            -friction_mu * yn0 * ts_hat[0], 
+            -friction_mu * yn0 * ts_hat[1]
+        }; // Eq. 33
+
         T P_ts_hat[4];
         outer_product<2, T>(ts_hat, ts_hat, P_ts_hat);
         const T P_perp_ts_hat[4] = {
             T(1.) - P_ts_hat[0], -P_ts_hat[1],
             -P_ts_hat[2], T(1.) - P_ts_hat[3]
         };
-        const T d2ltdvt2_coeff = -friction_mu * yn0 / ts_coeff; // Eq. 33, ts_coeff = ts_soft_norm + epsv
+        const T d2ltdvt2_coeff = friction_mu * yn0 / ts_coeff; // Eq. 33, ts_coeff = ts_soft_norm + epsv
+        // ∂²ℓ_t / ∂v_t² = μ * γ_n0 * (P⊥(t̂_s) / (||v_t||_s + ε_s))
         const T d2ltdvt2[4] = {
             d2ltdvt2_coeff * P_perp_ts_hat[0],
             d2ltdvt2_coeff * P_perp_ts_hat[1],
@@ -1035,9 +1043,9 @@ __device__ void compute_contact_grad_and_hess(
         C_Hess[7] = T(0.);
         C_Hess[8] = d2lndvn2;
 
-        C_Grad[0] = yt[0];
-        C_Grad[1] = yt[1];
-        C_Grad[2] = yn;
+        C_Grad[0] = -yt[0];
+        C_Grad[1] = -yt[1];
+        C_Grad[2] = -yn;
     }
 }
 
@@ -1151,9 +1159,11 @@ __global__ void contact_particle_to_grid_kernel(const size_t n_particles,
         T W_Hess_lc[9];
         T W_Grad_lc[3];
         T tmp[9];
-        matmul<3, 3, 1, T>(R_WC, C_Grad_lc, W_Grad_lc); // J^T yamma
+
+        // Grad/Hess for lc(vp(vi))
+        matmul<3, 3, 1, T>(R_WC, C_Grad_lc, W_Grad_lc); // J^T Grad
         matmul<3, 3, 3, T>(R_WC, C_Hess_lc, tmp);
-        matmul<3, 3, 3, T>(tmp, R_CW, W_Hess_lc); // J^T G J
+        matmul<3, 3, 3, T>(tmp, R_CW, W_Hess_lc); // J^T Hess J
 
         if constexpr(!JACOBI) {
             uint32_t i, j, k;
@@ -1162,7 +1172,7 @@ __global__ void contact_particle_to_grid_kernel(const size_t n_particles,
             T val[12]; // buffer for both W_Hess & W_Grad
             T weight = weights[threadIdx.x][i][0] * weights[threadIdx.x][j][1] * weights[threadIdx.x][k][2];
             #pragma unroll
-            for (int ii = 0; ii < 9; ++ii) val[ii] = weight * weight * W_Hess_lc[ii];
+            for (int ii = 0; ii < 9; ++ii) val[ii] = weight * W_Hess_lc[ii] * weight;
             for (int ii = 9; ii < 12; ++ii) val[ii] = weight * W_Grad_lc[ii - 9];
 
             for (int iter = 1; iter <= mark; iter <<= 1) {
@@ -1246,18 +1256,30 @@ __global__ void update_grid_contact_coordinate_descent_kernel(
             T* local_Hess = &g_Hess[cell_idx * 9];
             T* local_Grad = &g_Grad[cell_idx * 3];
             T* local_Dir = &g_Dir[cell_idx * 3];
-            local_Hess[0] -= mass;
-            local_Hess[4] -= mass;
-            local_Hess[8] -= mass;
-            local_Grad[0] -= mass * (g_vel[0] - g_v_star[cell_idx * 3 + 0]);
-            local_Grad[1] -= mass * (g_vel[1] - g_v_star[cell_idx * 3 + 1]);
-            local_Grad[2] -= mass * (g_vel[2] - g_v_star[cell_idx * 3 + 2]);
+
+            // M + J^T * G * J
+            local_Hess[0] += mass;
+            local_Hess[4] += mass;
+            local_Hess[8] += mass;
+
+            // M (v - v*) - J^T * γ
+            local_Grad[0] += mass * (g_vel[0] - g_v_star[cell_idx * 3 + 0]);
+            local_Grad[1] += mass * (g_vel[1] - g_v_star[cell_idx * 3 + 1]);
+            local_Grad[2] += mass * (g_vel[2] - g_v_star[cell_idx * 3 + 2]);
+
+
+            T negative_local_Grad[3] = {
+                -local_Grad[0],
+                -local_Grad[1],
+                -local_Grad[2]
+            };
+
+            // Optimization problem for minimizing ℓ(v_i):
+            // min_{v_i} ℓ(v_i) = (1/2) * ||v_i - v_i^*||_M^2 + ℓ_c(v_p(v_i))
+            // M * (v_{n+1}^i - v_i^*) = J^T * γ(v_p(v_{n+1}^i))
             T Hess_Inv[9];
             inverse3(local_Hess, Hess_Inv);
-            matmul<3, 3, 1, T>(Hess_Inv, local_Grad, local_Dir);
-
-            // NOTE(changyu): enable it to test gradient descent
-            // for (int i = 0; i < 3; ++i) local_Dir[i] = -local_Grad[i];
+            matmul<3, 3, 1, T>(Hess_Inv, negative_local_Grad, local_Dir);
 
             // stop criterion
             atomicAdd(norm_dir, norm_sqr<3>(local_Dir));
@@ -1326,7 +1348,9 @@ __global__ void grid_to_particle_vdb_line_search_kernel(const size_t n_particles
             weights[threadIdx.x][2][i] = T(0.5) * (fx[i] - T(0.5)) * (fx[i] - T(0.5));
         }
 
-        T v_p_star[3] = {0, 0, 0};
+        // v_p of current jacobi iteration{k}
+        T v_p_current[3] = {0, 0, 0};
+        // v_p of next jacobi iteration{k+1}
         T v_p_next[3] = {0, 0, 0};
 
         uint32_t ii, jj, kk;
@@ -1351,12 +1375,12 @@ __global__ void grid_to_particle_vdb_line_search_kernel(const size_t n_particles
                         const T* g_v = &g_velocities[target_cell_index * 3];
                         const T* g_D = &g_Dir[target_cell_index * 3];
                         const T alpha = global_line_search ? global_alpha : g_alpha[target_cell_index];
-                        v_p_star[0] += weight * g_v[0];
-                        v_p_star[1] += weight * g_v[1];
-                        v_p_star[2] += weight * g_v[2];
-                        v_p_next[0] += weight * (g_v[0] - alpha * g_D[0]);
-                        v_p_next[1] += weight * (g_v[1] - alpha * g_D[1]);
-                        v_p_next[2] += weight * (g_v[2] - alpha * g_D[2]);
+                        v_p_current[0] += weight * g_v[0];
+                        v_p_current[1] += weight * g_v[1];
+                        v_p_current[2] += weight * g_v[2];
+                        v_p_next[0] += weight * (g_v[0] + alpha * g_D[0]);
+                        v_p_next[1] += weight * (g_v[1] + alpha * g_D[1]);
+                        v_p_next[2] += weight * (g_v[2] + alpha * g_D[2]);
                         global_dir_W[0] += weight * g_D[0];
                         global_dir_W[1] += weight * g_D[1];
                         global_dir_W[2] += weight * g_D[2];
@@ -1365,17 +1389,17 @@ __global__ void grid_to_particle_vdb_line_search_kernel(const size_t n_particles
                             const T* g_v = &g_velocities[target_cell_index * 3];
                             const T* g_D = &g_Dir[target_cell_index * 3];
                             const T alpha = g_alpha[target_cell_index];
-                            v_p_star[0] += weight * g_v[0];
-                            v_p_star[1] += weight * g_v[1];
-                            v_p_star[2] += weight * g_v[2];
-                            v_p_next[0] += weight * (g_v[0] - alpha * g_D[0]);
-                            v_p_next[1] += weight * (g_v[1] - alpha * g_D[1]);
-                            v_p_next[2] += weight * (g_v[2] - alpha * g_D[2]);
+                            v_p_current[0] += weight * g_v[0];
+                            v_p_current[1] += weight * g_v[1];
+                            v_p_current[2] += weight * g_v[2];
+                            v_p_next[0] += weight * (g_v[0] + alpha * g_D[0]);
+                            v_p_next[1] += weight * (g_v[1] + alpha * g_D[1]);
+                            v_p_next[2] += weight * (g_v[2] + alpha * g_D[2]);
                         } else {
                             const T* g_v = &g_velocities[target_cell_index * 3];
-                            v_p_star[0] += weight * g_v[0];
-                            v_p_star[1] += weight * g_v[1];
-                            v_p_star[2] += weight * g_v[2];
+                            v_p_current[0] += weight * g_v[0];
+                            v_p_current[1] += weight * g_v[1];
+                            v_p_current[2] += weight * g_v[2];
                             v_p_next[0] += weight * g_v[0];
                             v_p_next[1] += weight * g_v[1];
                             v_p_next[2] += weight * g_v[2];
@@ -1401,10 +1425,10 @@ __global__ void grid_to_particle_vdb_line_search_kernel(const size_t n_particles
             v_p_n[1] - contact_rigid_v[idx * 3 + 1],
             v_p_n[2] - contact_rigid_v[idx * 3 + 2]
         };
-        T v_star_rel_W[3] = {
-            v_p_star[0] - contact_rigid_v[idx * 3 + 0],
-            v_p_star[1] - contact_rigid_v[idx * 3 + 1],
-            v_p_star[2] - contact_rigid_v[idx * 3 + 2]
+        T v_current_rel_W[3] = {
+            v_p_current[0] - contact_rigid_v[idx * 3 + 0],
+            v_p_current[1] - contact_rigid_v[idx * 3 + 1],
+            v_p_current[2] - contact_rigid_v[idx * 3 + 2]
         };
 
         T v_next_rel_W[3] = {
@@ -1418,16 +1442,22 @@ __global__ void grid_to_particle_vdb_line_search_kernel(const size_t n_particles
         make_from_one_unit_vector(nhat_W, kZAxis, R_WC);
         transpose<3, 3, T>(R_WC, R_CW);
 
-        T vn_C[3], v_star_C[3], v_next_C[3]; // in the contact local coordinate
+        T vn_C[3], v_current_C[3], v_next_C[3]; // in the contact local coordinate
         matmul<3, 3, 1, T>(R_CW, vn_rel_W, vn_C);
-        matmul<3, 3, 1, T>(R_CW, v_star_rel_W, v_star_C);
+        matmul<3, 3, 1, T>(R_CW, v_current_rel_W, v_current_C);
         matmul<3, 3, 1, T>(R_CW, v_next_rel_W, v_next_C);
         T v_hat = min(phi0 / dt, T(1.) / damping); // Eq. 
 
+        // ℓ_c(v_p(v_i))
         auto lc = [&](const T* v) {
+            // ℓ_t(v_t) = μ * γ_n0 * ||v_t||_s
             const T yn0 = max(stiffness * dt * phi0 * (T(1.) - damping * vn_C[kZAxis]), T(0.));
             const T lt = friction_mu * yn0 * (sqrt(v[0] * v[0] + v[1] * v[1] + config::epsv<T> * config::epsv<T>) - config::epsv<T>); // Eq. 33
             const T f0 = stiffness * phi0;
+            // N(vn) = N +(min(vn, vˆ); f0)
+            // N⁺(v_n; f₀) = δt * (v_n * f₀ + 1/2 * Δf) 
+            //               - (d / 2) * v_n² * (f₀ + 2/3 * Δf)
+            // with ∆f = −δt k vn
             const T vn = min(v_hat, v[kZAxis]); // Eq. 16
             const T ln_a = stiffness * damping * dt * dt;
             const T ln_b = -(stiffness * dt * (dt + damping * phi0));
@@ -1463,12 +1493,12 @@ __global__ void grid_to_particle_vdb_line_search_kernel(const size_t n_particles
         }
         if (eval_E0) {
             if (global_line_search) {
-                atomicAdd(g_E0, lc(v_star_C));
+                atomicAdd(g_E0, lc(v_current_C));
             } else {
                 if constexpr (JACOBI) {
                     printf("ERROR, JACOBI CANNOT USE LOCAL LINE-SEARCH!!!!!!!!!!!!!!!!!!!!!!!\n");
                 }
-                atomicAdd(&g_E0[color_index], lc(v_star_C));
+                atomicAdd(&g_E0[color_index], lc(v_current_C));
             }
         }
     }
@@ -1501,22 +1531,24 @@ __global__ void update_grid_contact_alpha_kernel(
             const T mass = g_masses[cell_idx];
             const T alpha = g_alpha[cell_idx];
             const T* Dir = &g_Dir[cell_idx * 3];
-            T old_v_rel[3] = {
+            T v_current_rel[3] = {
                 g_vel[0] - v_star[0],
                 g_vel[1] - v_star[1],
                 g_vel[2] - v_star[2]
             };
-            T new_v_rel[3] = {
-                g_vel[0] - alpha * Dir[0] - v_star[0],
-                g_vel[1] - alpha * Dir[1] - v_star[1],
-                g_vel[2] - alpha * Dir[2] - v_star[2]
+            T v_next_rel[3] = {
+                g_vel[0] + alpha * Dir[0] - v_star[0],
+                g_vel[1] + alpha * Dir[1] - v_star[1],
+                g_vel[2] + alpha * Dir[2] - v_star[2]
             };
-            T E0 = g_E0[cell_idx] + T(0.5) * mass * norm_sqr<3>(old_v_rel);
-            T E1 = g_E1[cell_idx] + T(0.5) * mass * norm_sqr<3>(new_v_rel);
+
+            // (1/2) * ||v_i - v_i^*||_M^2
+            T E0 = g_E0[cell_idx] + T(0.5) * mass * norm_sqr<3>(v_current_rel);
+            T E1 = g_E1[cell_idx] + T(0.5) * mass * norm_sqr<3>(v_next_rel);
             if (E1 <= E0 || !enable_line_search) {
-                g_vel[0] -= alpha * Dir[0];
-                g_vel[1] -= alpha * Dir[1];
-                g_vel[2] -= alpha * Dir[2];
+                g_vel[0] += alpha * Dir[0];
+                g_vel[1] += alpha * Dir[1];
+                g_vel[2] += alpha * Dir[2];
                 g_alpha[cell_idx] = T(-1.);
                 atomicAdd(solved_grid_DoFs, 1U);
             } else {
@@ -1524,9 +1556,9 @@ __global__ void update_grid_contact_alpha_kernel(
                 g_E1[cell_idx] = T(0.);
                 if (g_alpha[cell_idx] < 1e-4) {
                     printf("Tiny Alpha!!!!!!!!!!! color=%u idx=%u E0=%.10f E1=%.10f\n", g_color_mask, cell_idx, E0, E1);
-                    g_vel[0] -= alpha * Dir[0];
-                    g_vel[1] -= alpha * Dir[1];
-                    g_vel[2] -= alpha * Dir[2];
+                    g_vel[0] += alpha * Dir[0];
+                    g_vel[1] += alpha * Dir[1];
+                    g_vel[2] += alpha * Dir[2];
                     g_alpha[cell_idx] = T(-1.);
                     atomicAdd(solved_grid_DoFs, 1U);
                 }
@@ -1561,15 +1593,15 @@ __global__ void update_global_energy_grid_kernel(
             const T* v_star = &g_v_star[cell_idx * 3];
             const T mass = g_masses[cell_idx];
             const T* Dir = &g_Dir[cell_idx * 3];
-            T old_v_rel[3] = {
+            T v_current_rel[3] = {
                 g_vel[0] - v_star[0],
                 g_vel[1] - v_star[1],
                 g_vel[2] - v_star[2]
             };
-            T new_v_rel[3] = {
-                g_vel[0] - global_alpha * Dir[0] - v_star[0],
-                g_vel[1] - global_alpha * Dir[1] - v_star[1],
-                g_vel[2] - global_alpha * Dir[2] - v_star[2]
+            T v_next_rel[3] = {
+                g_vel[0] + global_alpha * Dir[0] - v_star[0],
+                g_vel[1] + global_alpha * Dir[1] - v_star[1],
+                g_vel[2] + global_alpha * Dir[2] - v_star[2]
             };
 
             if constexpr(SOLVE_DF_DDF) {
@@ -1579,11 +1611,13 @@ __global__ void update_global_energy_grid_kernel(
                 }
             }
             if (eval_E0) {
-                atomicAdd(global_E0, T(0.5) * mass * norm_sqr<3>(old_v_rel));
+                atomicAdd(global_E0, T(0.5) * mass * norm_sqr<3>(v_current_rel));
             }
-            atomicAdd(global_E1, T(0.5) * mass * norm_sqr<3>(new_v_rel));
+
+            // (1/2) * ||v_i - v_i^*||_M^2
+            atomicAdd(global_E1, T(0.5) * mass * norm_sqr<3>(v_next_rel));
             if constexpr(SOLVE_DF_DDF) {
-                atomicAdd(global_dE1, -mass * dot<3>(new_v_rel, Dir));
+                atomicAdd(global_dE1,  mass * dot<3>(v_next_rel, Dir));
                 atomicAdd(global_d2E1, mass * norm_sqr<3>(Dir));
             }
         }
@@ -1608,9 +1642,9 @@ __global__ void apply_global_line_search_grid_kernel(
             (get_color_mask(xyz.x, xyz.y, xyz.z) == g_color_mask || JACOBI)) {
             T* g_vel = &g_momentum[cell_idx * 3];
             const T* Dir = &g_Dir[cell_idx * 3];
-            g_vel[0] -= global_alpha * Dir[0];
-            g_vel[1] -= global_alpha * Dir[1];
-            g_vel[2] -= global_alpha * Dir[2];
+            g_vel[0] += global_alpha * Dir[0];
+            g_vel[1] += global_alpha * Dir[1];
+            g_vel[2] += global_alpha * Dir[2];
         }
     }
 }
