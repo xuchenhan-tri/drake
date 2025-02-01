@@ -39,7 +39,21 @@ DEFINE_string(contact_approximation, "sap",
               "Type of convex contact approximation. See "
               "multibody::DiscreteContactApproximation for details. Options "
               "are: 'sap', 'lagged', and 'similar'.");
-DEFINE_double(stiffness, 1000000.0, "Contact Stiffness.");
+
+// NOTE (xuchen):
+// explanation of why we choose k ~= 100
+// So the objective when choosing k is so that we get a reasonably small amount of penetration for manipulation tasks. My experience has been 0.1mm (1e-4m) penetration is ok.
+// Imagine a piece of cloth on a flat ground, with density rho and side length L and thickness h. The total gravity force would be L^2 * h * rho.
+// Let's define a stiffness with unit Pa/m, call it C.
+// The contact force would then be C*L^2*phi with penetration phi
+// Equating the two and solve for C we get C = h * rho / phi.
+// In your case your h is ~1e-2m and rho is ~1000kg/m^3 and phi is 1e-4m so that work out to be C = 1e5 Pa/m.
+// This is a more favorable parameter to work with because it's independent from how dense the cloth mesh is.
+// To translate it to k (whose unit is Pa*m), we need to multiply by the area of particle.
+// The area of a particle is about 1e-2m * 1e-2m. So C*Area = 1e5 * 1e-4 = 1e1 = 10 Pa*m = 10 N/m
+
+// NOTE (changyu): here we choose k=100 for smaller amount of penetration (0.01mm or 1e-5m).
+DEFINE_double(stiffness, 10.0, "Contact Stiffness.");
 DEFINE_double(friction, 0.0, "Contact Friction.");
 DEFINE_double(damping, 1e-5,
     "Hunt and Crossley damping for the deformable body, only used when "

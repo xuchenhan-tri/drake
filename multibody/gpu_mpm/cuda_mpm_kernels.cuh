@@ -858,12 +858,9 @@ __global__ void grid_to_particle_kernel(const size_t n_particles,
                     T weight = weights[threadIdx.x][i][0] * weights[threadIdx.x][j][1] * weights[threadIdx.x][k][2];
 
                     if constexpr (CONTACT_TRANSFER) {
-                        const T &g_m = g_masses[target_cell_index];
-                        if (g_m > T(1e-7)) {
-                            new_v[0] += weight * g_v[0];
-                            new_v[1] += weight * g_v[1];
-                            new_v[2] += weight * g_v[2];
-                        }
+                        new_v[0] += weight * g_v[0];
+                        new_v[1] += weight * g_v[1];
+                        new_v[2] += weight * g_v[2];
                     } else {
                         new_v[0] += weight * g_v[0];
                         new_v[1] += weight * g_v[1];
@@ -953,6 +950,7 @@ __device__ __host__ inline void get_color_coordinates(UINT x, UINT y, UINT z, UI
     k = ((3U + k_offset) - (z % 3U)) % 3U;
 }
 
+// SAP model
 template<typename T>
 __device__ void compute_contact_grad_and_hess(
     const T phi0, const T dt, const T stiffness, const T damping, const T friction_mu, 
@@ -988,32 +986,60 @@ __device__ void compute_contact_grad_and_hess(
         After solving for vn_next, we check if the friction force lies in the friction
         cone, if not, we project the velocity back into the friction cone. */
     constexpr int kZAxis = 2;
-    T v_hat = min(phi0 / dt, T(1.) / damping); // Eq. 
-    if (v0[kZAxis] > v_hat) {
+
+    // NOTE: follow the pattern in https://github.com/RobotLocomotion/drake/blob/master/multibody/contact_solvers/sap/sap_hunt_crossley_constraint.cc
+    // Check if predicted penetration is positive.
+    // If not, then the contact force is not repulsive, don't apply it.
+
+    // NOTE (changyu): in math eqns from (https://arxiv.org/pdf/2312.03908) and in code,
+    // ϕ differs by a sign.
+    const T phi = phi0 - dt * v_next[kZAxis];
+    // If (-ϕ0 - δt vn)+ or (1 − dvn)+ equals zero, no impulse should be applied
+    if (T(1.) - damping * v_next[kZAxis] <= 0 || phi <= 0) { // Quick exits
         #pragma unroll
         for (int i = 0; i < 9; ++i) C_Hess[i] = 0;
         #pragma unroll
         for (int i = 0; i < 3; ++i) C_Grad[i] = 0;
     }
     else {
-        // normal component
-        const T yn = stiffness * dt * (phi0 - dt * v_next[kZAxis]) * (T(1.) - damping * v_next[kZAxis]); // Eq. 13
-        const T d2lndvn2 = stiffness * dt * (-dt - damping * phi0 + T(2.) * damping * dt * v_next[kZAxis]); // Eq. 8
+        // normal component (Compliant Contact)
+        // fn(ϕ, vn) = k (−ϕ)+ (1 − dvn)+
+        // γn(vn) = n(vn; ϕ0) = δt fn(ϕ0 + δt vn, vn)
+        //        = δt k (-ϕ0 - δt vn)+ (1 − dvn)+
+        const T yn = dt * stiffness * (phi0 - dt * v_next[kZAxis]) * (T(1.) - damping * v_next[kZAxis]); // Eq. 13
 
-        // frictional component
+        // ∂²ln / ∂vn² = - δt ∂ fn / ∂vn
+        //               = - δt ∂ fn(ϕ0 + δt vn, vn) / ∂vn
+        //               = - δt k ∂ (-ϕ0 - δt vn)+ (1 − dvn)+ / ∂vn
+        // when both (-ϕ0 - δt vn) > 0 and (1 − dvn) > 0 satisfied
+        //               = - δt k ∂ (-ϕ0 - δt vn) (1 − dvn) / ∂vn
+        //               = - δt k ∂ (-ϕ0 - δt vn + ϕ0 dvn + d δt vn²) / ∂vn
+        //               = - δt k (- δt + ϕ0 d + 2 d δt vn)
+        const T d2lndvn2 = - dt * stiffness * (-dt -phi0 * damping + T(2.) * damping * dt * v_next[kZAxis]); // Eq. 8
+
+        // frictional component (Lagged Model)
         // For a physical model of compliance for which γn is only a function of vn
+
+        // γn0 = δt fn(ϕ0, vn0) = δt k (−ϕ0)+ (1 − dvn0)+
         const T yn0 = max(stiffness * dt * phi0 * (T(1.) - damping * v0[kZAxis]), T(0.));
+
         const T ts_coeff = sqrt(v_next[0] * v_next[0] + v_next[1] * v_next[1] + config::epsv<T> * config::epsv<T>);
         const T ts_hat[2] = {v_next[0] / ts_coeff, v_next[1] / ts_coeff}; // Eq. 18
 
-        const T yt[2] = {-friction_mu * yn0 * ts_hat[0], -friction_mu * yn0 * ts_hat[1]}; // Eq. 33
+        // γt = -μ * γn0 * t̂_s 
+        const T yt[2] = {
+            -friction_mu * yn0 * ts_hat[0], 
+            -friction_mu * yn0 * ts_hat[1]
+        }; // Eq. 33
+
         T P_ts_hat[4];
         outer_product<2, T>(ts_hat, ts_hat, P_ts_hat);
         const T P_perp_ts_hat[4] = {
             T(1.) - P_ts_hat[0], -P_ts_hat[1],
             -P_ts_hat[2], T(1.) - P_ts_hat[3]
         };
-        const T d2ltdvt2_coeff = -friction_mu * yn0 / ts_coeff; // Eq. 33, ts_coeff = ts_soft_norm + epsv
+        const T d2ltdvt2_coeff = friction_mu * yn0 / ts_coeff; // Eq. 33, ts_coeff = ts_soft_norm + epsv
+        // ∂²lt / ∂vt² = μ * γn0 * (P⊥(t̂_s) / (||v_t||_s + ε_s))
         const T d2ltdvt2[4] = {
             d2ltdvt2_coeff * P_perp_ts_hat[0],
             d2ltdvt2_coeff * P_perp_ts_hat[1],
@@ -1033,9 +1059,9 @@ __device__ void compute_contact_grad_and_hess(
         C_Hess[7] = T(0.);
         C_Hess[8] = d2lndvn2;
 
-        C_Grad[0] = yt[0];
-        C_Grad[1] = yt[1];
-        C_Grad[2] = yn;
+        C_Grad[0] = -yt[0];
+        C_Grad[1] = -yt[1];
+        C_Grad[2] = -yn;
     }
 }
 
@@ -1105,10 +1131,10 @@ __global__ void contact_particle_to_grid_kernel(const size_t n_particles,
         }
 
         const T mass = volumes[contact_mpm_id[idx]] * config::DENSITY<T>;
-        const T* particle_v0 = &velocities[contact_mpm_id[idx] * 3];
+        const T* particle_vn = &velocities[contact_mpm_id[idx] * 3];
         const T* particle_v = &contact_vel[idx * 3];
 
-        T nhat_W[3] = {-contact_normal[idx * 3 + 0], -contact_normal[idx * 3 + 1], -contact_normal[idx * 3 + 2]};
+        T nhat_W[3] = {contact_normal[idx * 3 + 0], contact_normal[idx * 3 + 1], contact_normal[idx * 3 + 2]};
         // TODO (changyu): const GpuT phi0 = -(
         // static_cast<GpuT>(mpm_contact_pairs[i].penetration_distance) + 
         //     (mpm_state->positions_host()[mpm_contact_pairs[i].particle_in_contact_index] - 
@@ -1121,12 +1147,12 @@ __global__ void contact_particle_to_grid_kernel(const size_t n_particles,
         }
 #endif
 
-        T v0_rel[3] = {
-            particle_v0[0] - contact_rigid_v[idx * 3 + 0],
-            particle_v0[1] - contact_rigid_v[idx * 3 + 1],
-            particle_v0[2] - contact_rigid_v[idx * 3 + 2]
+        T vn_rel_W[3] = {
+            particle_vn[0] - contact_rigid_v[idx * 3 + 0],
+            particle_vn[1] - contact_rigid_v[idx * 3 + 1],
+            particle_vn[2] - contact_rigid_v[idx * 3 + 2]
         };
-        T v_rel[3] = {
+        T v_rel_W[3] = {
             particle_v[0] - contact_rigid_v[idx * 3 + 0],
             particle_v[1] - contact_rigid_v[idx * 3 + 1],
             particle_v[2] - contact_rigid_v[idx * 3 + 2]
@@ -1137,21 +1163,23 @@ __global__ void contact_particle_to_grid_kernel(const size_t n_particles,
         make_from_one_unit_vector(nhat_W, kZAxis, R_WC);
         transpose<3, 3, T>(R_WC, R_CW);
 
-        T v0[3], v_next[3]; // in the contact local coordinate
-        matmul<3, 3, 1, T>(R_WC, v0_rel, v0);
-        matmul<3, 3, 1, T>(R_WC, v_rel, v_next);
+        T vn_C[3], v_next_C[3]; // in the contact local coordinate
+        matmul<3, 3, 1, T>(R_CW, vn_rel_W, vn_C);
+        matmul<3, 3, 1, T>(R_CW, v_rel_W, v_next_C);
 
-        T C_Hess[9], C_Grad[3]; // hess and grad in the contact local coordinate
-        compute_contact_grad_and_hess(phi0, dt, stiffness, damping, friction_mu, v0, v_next, C_Hess, C_Grad);
+        T lc_Hess_C[9], lc_Grad_C[3]; // hess and grad in the contact local coordinate
+        compute_contact_grad_and_hess(phi0, dt, stiffness, damping, friction_mu, vn_C, v_next_C, lc_Hess_C, lc_Grad_C);
         
         
         // hess and grad in the world local coordinate
-        T W_Hess[9];
-        T W_Grad[3];
+        T lc_Hess_W[9];
+        T lc_Grad_W[3];
         T tmp[9];
-        matmul<3, 3, 1, T>(R_CW, C_Grad, W_Grad); // J^T yamma
-        matmul<3, 3, 3, T>(R_CW, C_Hess, tmp);
-        matmul<3, 3, 3, T>(tmp, R_WC, W_Hess); // J^T G J
+
+        // Grad/Hess for lc(vp(vi))
+        matmul<3, 3, 1, T>(R_WC, lc_Grad_C, lc_Grad_W); // J^T Grad
+        matmul<3, 3, 3, T>(R_WC, lc_Hess_C, tmp);
+        matmul<3, 3, 3, T>(tmp, R_CW, lc_Hess_W); // J^T Hess J
 
         if constexpr(!JACOBI) {
             uint32_t i, j, k;
@@ -1160,8 +1188,8 @@ __global__ void contact_particle_to_grid_kernel(const size_t n_particles,
             T val[12]; // buffer for both W_Hess & W_Grad
             T weight = weights[threadIdx.x][i][0] * weights[threadIdx.x][j][1] * weights[threadIdx.x][k][2];
             #pragma unroll
-            for (int ii = 0; ii < 9; ++ii) val[ii] = mass * weight * weight * W_Hess[ii];
-            for (int ii = 9; ii < 12; ++ii) val[ii] = mass * weight * W_Grad[ii - 9];
+            for (int ii = 0; ii < 9; ++ii) val[ii] = weight * lc_Hess_W[ii] * weight;
+            for (int ii = 9; ii < 12; ++ii) val[ii] = weight * lc_Grad_W[ii - 9];
 
             for (int iter = 1; iter <= mark; iter <<= 1) {
                 T tmp[12]; 
@@ -1187,8 +1215,8 @@ __global__ void contact_particle_to_grid_kernel(const size_t n_particles,
                         T val[12]; // buffer for both W_Hess & W_Grad
                             T weight = weights[threadIdx.x][i][0] * weights[threadIdx.x][j][1] * weights[threadIdx.x][k][2];
                             #pragma unroll
-                            for (int ii = 0; ii < 9; ++ii) val[ii] = mass * weight * weight * W_Hess[ii];
-                            for (int ii = 9; ii < 12; ++ii) val[ii] = mass * weight * W_Grad[ii - 9];
+                            for (int ii = 0; ii < 9; ++ii) val[ii] = weight * weight * lc_Hess_W[ii];
+                            for (int ii = 9; ii < 12; ++ii) val[ii] = weight * lc_Grad_W[ii - 9];
 
                             for (int iter = 1; iter <= mark; iter <<= 1) {
                                 T tmp[12]; 
@@ -1236,26 +1264,37 @@ __global__ void update_grid_contact_coordinate_descent_kernel(
         uint32_t block_idx = g_touched_ids[idx >> (config::G_BLOCK_BITS * 3)];
         uint32_t cell_idx = (block_idx << (config::G_BLOCK_BITS * 3)) | (idx & config::G_BLOCK_VOLUME_MASK);
         uint3 xyz = inverse_cell_index(cell_idx);
-        if (g_masses[cell_idx] > T(0.) && 
-            (get_color_mask(xyz.x, xyz.y, xyz.z) == g_color_mask || JACOBI) &&
-            (norm<9>(&g_Hess[cell_idx * 9]) > 1e-7 || norm<3>(&g_Grad[cell_idx * 3]) > 1e-7)) {
+        if (g_masses[cell_idx] > T(0.) && (get_color_mask(xyz.x, xyz.y, xyz.z) == g_color_mask || JACOBI)) {
             T* g_vel = &g_momentum[cell_idx * 3];
             T mass = g_masses[cell_idx];
             T* local_Hess = &g_Hess[cell_idx * 9];
             T* local_Grad = &g_Grad[cell_idx * 3];
             T* local_Dir = &g_Dir[cell_idx * 3];
-            local_Hess[0] -= mass;
-            local_Hess[4] -= mass;
-            local_Hess[8] -= mass;
-            local_Grad[0] -= mass * (g_vel[0] - g_v_star[cell_idx * 3 + 0]);
-            local_Grad[1] -= mass * (g_vel[1] - g_v_star[cell_idx * 3 + 1]);
-            local_Grad[2] -= mass * (g_vel[2] - g_v_star[cell_idx * 3 + 2]);
-            T Hess_Inv[9];
-            inverse3(local_Hess, Hess_Inv);
-            matmul<3, 3, 1, T>(Hess_Inv, local_Grad, local_Dir);
 
-            // NOTE(changyu): enable it to test gradient descent
-            // for (int i = 0; i < 3; ++i) local_Dir[i] = -local_Grad[i];
+            // M + J^T * G * J
+            local_Hess[0] += mass;
+            local_Hess[4] += mass;
+            local_Hess[8] += mass;
+
+            // M (v - v*) - J^T * γ
+            local_Grad[0] += mass * (g_vel[0] - g_v_star[cell_idx * 3 + 0]);
+            local_Grad[1] += mass * (g_vel[1] - g_v_star[cell_idx * 3 + 1]);
+            local_Grad[2] += mass * (g_vel[2] - g_v_star[cell_idx * 3 + 2]);
+
+
+            T negative_local_Grad[3] = {
+                -local_Grad[0],
+                -local_Grad[1],
+                -local_Grad[2]
+            };
+
+            // Optimization problem for minimizing ℓ(v_i):
+            // min_{v_i} ℓ(v_i) = (1/2) * ||v_i - v_i^*||_M^2 + ℓ_c(v_p(v_i))
+            // M * (v_{n+1}^i - v_i^*) = J^T * γ(v_p(v_{n+1}^i))
+            // T Hess_Inv[9];
+            // inverse3(local_Hess, Hess_Inv);
+            // matmul<3, 3, 1, T>(Hess_Inv, negative_local_Grad, local_Dir);
+            cholesky_solve3(local_Hess, negative_local_Grad, local_Dir);
 
             // stop criterion
             atomicAdd(norm_dir, norm_sqr<3>(local_Dir));
@@ -1324,8 +1363,10 @@ __global__ void grid_to_particle_vdb_line_search_kernel(const size_t n_particles
             weights[threadIdx.x][2][i] = T(0.5) * (fx[i] - T(0.5)) * (fx[i] - T(0.5));
         }
 
-        T old_v[3] = {0, 0, 0};
-        T new_v[3] = {0, 0, 0};
+        // v_p of current jacobi iteration{k}
+        T v_p_current[3] = {0, 0, 0};
+        // v_p of next jacobi iteration{k+1}
+        T v_p_next[3] = {0, 0, 0};
 
         uint32_t ii, jj, kk;
         get_color_coordinates(base[0], base[1], base[2], g_color_mask, ii, jj, kk);
@@ -1334,7 +1375,7 @@ __global__ void grid_to_particle_vdb_line_search_kernel(const size_t n_particles
             return;
         }
 
-        T global_Dir[3] = {0, 0, 0};
+        T vp_search_dir_W[3] = {0, 0, 0};
 
         #pragma unroll
         for (int i = 0; i < 3; ++i) {
@@ -1349,34 +1390,34 @@ __global__ void grid_to_particle_vdb_line_search_kernel(const size_t n_particles
                         const T* g_v = &g_velocities[target_cell_index * 3];
                         const T* g_D = &g_Dir[target_cell_index * 3];
                         const T alpha = global_line_search ? global_alpha : g_alpha[target_cell_index];
-                        old_v[0] += weight * g_v[0];
-                        old_v[1] += weight * g_v[1];
-                        old_v[2] += weight * g_v[2];
-                        new_v[0] += weight * (g_v[0] - alpha * g_D[0]);
-                        new_v[1] += weight * (g_v[1] - alpha * g_D[1]);
-                        new_v[2] += weight * (g_v[2] - alpha * g_D[2]);
-                        global_Dir[0] += weight * g_D[0];
-                        global_Dir[1] += weight * g_D[1];
-                        global_Dir[2] += weight * g_D[2];
+                        v_p_current[0] += weight * g_v[0];
+                        v_p_current[1] += weight * g_v[1];
+                        v_p_current[2] += weight * g_v[2];
+                        v_p_next[0] += weight * (g_v[0] + alpha * g_D[0]);
+                        v_p_next[1] += weight * (g_v[1] + alpha * g_D[1]);
+                        v_p_next[2] += weight * (g_v[2] + alpha * g_D[2]);
+                        vp_search_dir_W[0] += weight * g_D[0];
+                        vp_search_dir_W[1] += weight * g_D[1];
+                        vp_search_dir_W[2] += weight * g_D[2];
                     } else {
                         if (get_color_mask(base[0] + i, base[1] + j, base[2] + k) == g_color_mask) {
                             const T* g_v = &g_velocities[target_cell_index * 3];
                             const T* g_D = &g_Dir[target_cell_index * 3];
                             const T alpha = g_alpha[target_cell_index];
-                            old_v[0] += weight * g_v[0];
-                            old_v[1] += weight * g_v[1];
-                            old_v[2] += weight * g_v[2];
-                            new_v[0] += weight * (g_v[0] - alpha * g_D[0]);
-                            new_v[1] += weight * (g_v[1] - alpha * g_D[1]);
-                            new_v[2] += weight * (g_v[2] - alpha * g_D[2]);
+                            v_p_current[0] += weight * g_v[0];
+                            v_p_current[1] += weight * g_v[1];
+                            v_p_current[2] += weight * g_v[2];
+                            v_p_next[0] += weight * (g_v[0] + alpha * g_D[0]);
+                            v_p_next[1] += weight * (g_v[1] + alpha * g_D[1]);
+                            v_p_next[2] += weight * (g_v[2] + alpha * g_D[2]);
                         } else {
                             const T* g_v = &g_velocities[target_cell_index * 3];
-                            old_v[0] += weight * g_v[0];
-                            old_v[1] += weight * g_v[1];
-                            old_v[2] += weight * g_v[2];
-                            new_v[0] += weight * g_v[0];
-                            new_v[1] += weight * g_v[1];
-                            new_v[2] += weight * g_v[2];
+                            v_p_current[0] += weight * g_v[0];
+                            v_p_current[1] += weight * g_v[1];
+                            v_p_current[2] += weight * g_v[2];
+                            v_p_next[0] += weight * g_v[0];
+                            v_p_next[1] += weight * g_v[1];
+                            v_p_next[2] += weight * g_v[2];
                         }
                     }
                 }
@@ -1384,9 +1425,9 @@ __global__ void grid_to_particle_vdb_line_search_kernel(const size_t n_particles
         }
 
         const T mass = volumes[contact_mpm_id[idx]] * config::DENSITY<T>;
-        const T* particle_v0 = &velocities[contact_mpm_id[idx] * 3];
+        const T* v_p_n = &velocities[contact_mpm_id[idx] * 3];
 
-        T nhat_W[3] = {-contact_normal[idx * 3 + 0], -contact_normal[idx * 3 + 1], -contact_normal[idx * 3 + 2]};
+        T nhat_W[3] = {contact_normal[idx * 3 + 0], contact_normal[idx * 3 + 1], contact_normal[idx * 3 + 2]};
         T phi0 = -contact_dist[idx];
 #ifdef DEBUG
         if (phi0 < 0) {
@@ -1394,21 +1435,21 @@ __global__ void grid_to_particle_vdb_line_search_kernel(const size_t n_particles
         }
 #endif
 
-        T v0_rel[3] = {
-            particle_v0[0] - contact_rigid_v[idx * 3 + 0],
-            particle_v0[1] - contact_rigid_v[idx * 3 + 1],
-            particle_v0[2] - contact_rigid_v[idx * 3 + 2]
+        T vn_rel_W[3] = {
+            v_p_n[0] - contact_rigid_v[idx * 3 + 0],
+            v_p_n[1] - contact_rigid_v[idx * 3 + 1],
+            v_p_n[2] - contact_rigid_v[idx * 3 + 2]
         };
-        T v_old_rel[3] = {
-            old_v[0] - contact_rigid_v[idx * 3 + 0],
-            old_v[1] - contact_rigid_v[idx * 3 + 1],
-            old_v[2] - contact_rigid_v[idx * 3 + 2]
+        T v_current_rel_W[3] = {
+            v_p_current[0] - contact_rigid_v[idx * 3 + 0],
+            v_p_current[1] - contact_rigid_v[idx * 3 + 1],
+            v_p_current[2] - contact_rigid_v[idx * 3 + 2]
         };
 
-        T v_new_rel[3] = {
-            new_v[0] - contact_rigid_v[idx * 3 + 0],
-            new_v[1] - contact_rigid_v[idx * 3 + 1],
-            new_v[2] - contact_rigid_v[idx * 3 + 2]
+        T v_next_rel_W[3] = {
+            v_p_next[0] - contact_rigid_v[idx * 3 + 0],
+            v_p_next[1] - contact_rigid_v[idx * 3 + 1],
+            v_p_next[2] - contact_rigid_v[idx * 3 + 2]
         };
 
         constexpr int kZAxis = 2;
@@ -1416,21 +1457,43 @@ __global__ void grid_to_particle_vdb_line_search_kernel(const size_t n_particles
         make_from_one_unit_vector(nhat_W, kZAxis, R_WC);
         transpose<3, 3, T>(R_WC, R_CW);
 
-        T v0[3], old_v_local[3], new_v_local[3]; // in the contact local coordinate
-        matmul<3, 3, 1, T>(R_WC, v0_rel, v0);
-        matmul<3, 3, 1, T>(R_WC, v_old_rel, old_v_local);
-        matmul<3, 3, 1, T>(R_WC, v_new_rel, new_v_local);
-        T v_hat = min(phi0 / dt, T(1.) / damping); // Eq. 
+        T vn_C[3], v_current_C[3], v_next_C[3]; // in the contact local coordinate
+        matmul<3, 3, 1, T>(R_CW, vn_rel_W, vn_C);
+        matmul<3, 3, 1, T>(R_CW, v_current_rel_W, v_current_C);
+        matmul<3, 3, 1, T>(R_CW, v_next_rel_W, v_next_C);
 
-        auto l = [&](const T* v) {
+        // lc(v_p(v_i))
+        auto lc = [&](const T* v, const T* v0) {
+            // frictional component (Lagged Model)
+            // lt(v_t) = μ * γn0 * ||v_t||_s
             const T yn0 = max(stiffness * dt * phi0 * (T(1.) - damping * v0[kZAxis]), T(0.));
             const T lt = friction_mu * yn0 * (sqrt(v[0] * v[0] + v[1] * v[1] + config::epsv<T> * config::epsv<T>) - config::epsv<T>); // Eq. 33
-            const T f0 = stiffness * phi0;
-            const T vn = min(v_hat, v[kZAxis]); // Eq. 16
-            const T ln_a = stiffness * damping * dt * dt;
-            const T ln_b = -(stiffness * dt * (dt + damping * phi0));
-            const T ln_c = stiffness * dt * phi0;
-            const T ln = -(T(1. / 3.) * ln_a * vn * vn * vn + T(1. / 2.) * ln_b * vn * vn + ln_c * vn); // Eq.7
+
+            // normal component (Compliant Contact)
+
+            // vˆ = min(−ϕ0 / δt, 1 / d),
+            T v_hat = min(phi0 / dt, T(1.) / damping);
+
+            // N(vn) = N+(min(vn, vˆ); f0)
+            const T min_vn_v_hat = min(v_hat, v[kZAxis]);
+
+            // N+(vn; ϕ0) = δt k [−vn (ϕ0 + 1/2 δt vn) + d vn²/2 (ϕ0 + 2/3 δt vn)]
+            //            = δt k [−ϕ0 vn  - 1/2 δt vn² + 1/2 d ϕ0 vn² + 1/3 d δt vn³]
+            //            = δt k [1/3 d δt vn³ + 1/2 (d ϕ0 - δt) vn² - ϕ0 vn]
+            //            = ln_A vn³ + ln_B vn² + ln_C vn
+            // where N_A = 1/3 δt² k d,
+            //       N_B = 1/2 δt k (d ϕ0 - δt) 
+            //       N_C = δt k * (-ϕ0)
+            const T N_A = T(1. / 3.) * dt * dt * stiffness * damping;
+            const T N_B = T(1. / 2.) * dt * stiffness * (-damping * phi0 - dt);
+            const T N_C = dt * stiffness * phi0;
+            const T N_vn = N_A * min_vn_v_hat * min_vn_v_hat * min_vn_v_hat 
+                       + N_B * min_vn_v_hat * min_vn_v_hat 
+                       + N_C * min_vn_v_hat;
+            
+            // ln(vn) = −N(vn),
+            const T ln = -N_vn; 
+
             return lt + ln;
         };
 
@@ -1442,31 +1505,31 @@ __global__ void grid_to_particle_vdb_line_search_kernel(const size_t n_particles
             }
         }
         if (global_line_search) {
-            atomicAdd(g_E1, mass * l(new_v_local));
+            atomicAdd(g_E1, lc(v_next_C, vn_C));
             if constexpr (SOLVE_DF_DDF) {
-                T C_Hess[9], C_Grad[3]; // hess and grad in the contact local coordinate
-                compute_contact_grad_and_hess(phi0, dt, stiffness, damping, friction_mu, v0, new_v_local, C_Hess, C_Grad);
-                T R_WC_g_D[3];
-                matmul<3, 3, 1, T>(R_WC, global_Dir, R_WC_g_D);
-                atomicAdd(g_dE1, mass * dot<3>(C_Grad, R_WC_g_D));
+                T lc_Hess_C[9], lc_Grad_C[3]; // hess and grad in the contact local coordinate
+                compute_contact_grad_and_hess(phi0, dt, stiffness, damping, friction_mu, vn_C, v_next_C, lc_Hess_C, lc_Grad_C);
+                T global_dir_C[3];
+                matmul<3, 3, 1, T>(R_CW, vp_search_dir_W, global_dir_C);
+                atomicAdd(g_dE1, dot<3>(lc_Grad_C, global_dir_C));
                 T tmp[3];
-                matmul<1, 3, 3, T>(R_WC_g_D, C_Hess, tmp);
-                atomicAdd(g_d2E1, mass * dot<3>(tmp, R_WC_g_D));
+                matmul<1, 3, 3, T>(global_dir_C, lc_Hess_C, tmp);
+                atomicAdd(g_d2E1, dot<3>(tmp, global_dir_C));
             }
         } else {
-            if (JACOBI) {
+            if constexpr (JACOBI) {
                 printf("ERROR, JACOBI CANNOT USE LOCAL LINE-SEARCH!!!!!!!!!!!!!!!!!!!!!!!\n");
             }
-            atomicAdd(&g_E1[color_index], mass * l(new_v_local));
+            atomicAdd(&g_E1[color_index], lc(v_next_C, vn_C));
         }
         if (eval_E0) {
             if (global_line_search) {
-                atomicAdd(g_E0, mass * l(old_v_local));
+                atomicAdd(g_E0, lc(v_current_C, vn_C));
             } else {
-                if (JACOBI) {
+                if constexpr (JACOBI) {
                     printf("ERROR, JACOBI CANNOT USE LOCAL LINE-SEARCH!!!!!!!!!!!!!!!!!!!!!!!\n");
                 }
-                atomicAdd(&g_E0[color_index], mass * l(old_v_local));
+                atomicAdd(&g_E0[color_index], lc(v_current_C, vn_C));
             }
         }
     }
@@ -1499,22 +1562,24 @@ __global__ void update_grid_contact_alpha_kernel(
             const T mass = g_masses[cell_idx];
             const T alpha = g_alpha[cell_idx];
             const T* Dir = &g_Dir[cell_idx * 3];
-            T old_v_rel[3] = {
+            T v_current_rel[3] = {
                 g_vel[0] - v_star[0],
                 g_vel[1] - v_star[1],
                 g_vel[2] - v_star[2]
             };
-            T new_v_rel[3] = {
-                g_vel[0] - alpha * Dir[0] - v_star[0],
-                g_vel[1] - alpha * Dir[1] - v_star[1],
-                g_vel[2] - alpha * Dir[2] - v_star[2]
+            T v_next_rel[3] = {
+                g_vel[0] + alpha * Dir[0] - v_star[0],
+                g_vel[1] + alpha * Dir[1] - v_star[1],
+                g_vel[2] + alpha * Dir[2] - v_star[2]
             };
-            T E0 = g_E0[cell_idx] + T(0.5) * mass * norm_sqr<3>(old_v_rel);
-            T E1 = g_E1[cell_idx] + T(0.5) * mass * norm_sqr<3>(new_v_rel);
+
+            // (1/2) * ||v_i - v_i^*||_M^2
+            T E0 = g_E0[cell_idx] + T(0.5) * mass * norm_sqr<3>(v_current_rel);
+            T E1 = g_E1[cell_idx] + T(0.5) * mass * norm_sqr<3>(v_next_rel);
             if (E1 <= E0 || !enable_line_search) {
-                g_vel[0] -= alpha * Dir[0];
-                g_vel[1] -= alpha * Dir[1];
-                g_vel[2] -= alpha * Dir[2];
+                g_vel[0] += alpha * Dir[0];
+                g_vel[1] += alpha * Dir[1];
+                g_vel[2] += alpha * Dir[2];
                 g_alpha[cell_idx] = T(-1.);
                 atomicAdd(solved_grid_DoFs, 1U);
             } else {
@@ -1522,9 +1587,9 @@ __global__ void update_grid_contact_alpha_kernel(
                 g_E1[cell_idx] = T(0.);
                 if (g_alpha[cell_idx] < 1e-4) {
                     printf("Tiny Alpha!!!!!!!!!!! color=%u idx=%u E0=%.10f E1=%.10f\n", g_color_mask, cell_idx, E0, E1);
-                    g_vel[0] -= alpha * Dir[0];
-                    g_vel[1] -= alpha * Dir[1];
-                    g_vel[2] -= alpha * Dir[2];
+                    g_vel[0] += alpha * Dir[0];
+                    g_vel[1] += alpha * Dir[1];
+                    g_vel[2] += alpha * Dir[2];
                     g_alpha[cell_idx] = T(-1.);
                     atomicAdd(solved_grid_DoFs, 1U);
                 }
@@ -1559,15 +1624,15 @@ __global__ void update_global_energy_grid_kernel(
             const T* v_star = &g_v_star[cell_idx * 3];
             const T mass = g_masses[cell_idx];
             const T* Dir = &g_Dir[cell_idx * 3];
-            T old_v_rel[3] = {
+            T v_current_rel[3] = {
                 g_vel[0] - v_star[0],
                 g_vel[1] - v_star[1],
                 g_vel[2] - v_star[2]
             };
-            T new_v_rel[3] = {
-                g_vel[0] - global_alpha * Dir[0] - v_star[0],
-                g_vel[1] - global_alpha * Dir[1] - v_star[1],
-                g_vel[2] - global_alpha * Dir[2] - v_star[2]
+            T v_next_rel[3] = {
+                g_vel[0] + global_alpha * Dir[0] - v_star[0],
+                g_vel[1] + global_alpha * Dir[1] - v_star[1],
+                g_vel[2] + global_alpha * Dir[2] - v_star[2]
             };
 
             if constexpr(SOLVE_DF_DDF) {
@@ -1577,11 +1642,13 @@ __global__ void update_global_energy_grid_kernel(
                 }
             }
             if (eval_E0) {
-                atomicAdd(global_E0, T(0.5) * mass * norm_sqr<3>(old_v_rel));
+                atomicAdd(global_E0, T(0.5) * mass * norm_sqr<3>(v_current_rel));
             }
-            atomicAdd(global_E1, T(0.5) * mass * norm_sqr<3>(new_v_rel));
+
+            // (1/2) * ||v_i - v_i^*||_M^2
+            atomicAdd(global_E1, T(0.5) * mass * norm_sqr<3>(v_next_rel));
             if constexpr(SOLVE_DF_DDF) {
-                atomicAdd(global_dE1, -mass * dot<3>(new_v_rel, Dir));
+                atomicAdd(global_dE1,  mass * dot<3>(v_next_rel, Dir));
                 atomicAdd(global_d2E1, mass * norm_sqr<3>(Dir));
             }
         }
@@ -1606,9 +1673,9 @@ __global__ void apply_global_line_search_grid_kernel(
             (get_color_mask(xyz.x, xyz.y, xyz.z) == g_color_mask || JACOBI)) {
             T* g_vel = &g_momentum[cell_idx * 3];
             const T* Dir = &g_Dir[cell_idx * 3];
-            g_vel[0] -= global_alpha * Dir[0];
-            g_vel[1] -= global_alpha * Dir[1];
-            g_vel[2] -= global_alpha * Dir[2];
+            g_vel[0] += global_alpha * Dir[0];
+            g_vel[1] += global_alpha * Dir[1];
+            g_vel[2] += global_alpha * Dir[2];
         }
     }
 }
@@ -1617,7 +1684,7 @@ template<typename T>
 __global__ void apply_contact_impulse_to_rigid_bodies(
     const size_t n_contacts,
     const T* contact_pos,
-    const T* contact_vel0,
+    const T* contact_vel_star,
     const T* contact_vel,
     const T* volumes,
     const uint32_t* contact_mpm_id,
@@ -1628,9 +1695,9 @@ __global__ void apply_contact_impulse_to_rigid_bodies(
     uint32_t idx = threadIdx.x + blockDim.x * blockIdx.x;
     if (idx < n_contacts) {
         T dv[3] = {
-            contact_vel[idx * 3 + 0] - contact_vel0[idx * 3 + 0],
-            contact_vel[idx * 3 + 1] - contact_vel0[idx * 3 + 1],
-            contact_vel[idx * 3 + 2] - contact_vel0[idx * 3 + 2]
+            contact_vel[idx * 3 + 0] - contact_vel_star[idx * 3 + 0],
+            contact_vel[idx * 3 + 1] - contact_vel_star[idx * 3 + 1],
+            contact_vel[idx * 3 + 2] - contact_vel_star[idx * 3 + 2]
         };
         T m = volumes[contact_mpm_id[idx]] * config::DENSITY<T>;
         // We negate the sign of the grid node's momentum change to get

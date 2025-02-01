@@ -613,18 +613,18 @@ inline __host__ __device__ void make_from_one_unit_vector(const T u_A[3], int ax
     T r = T(1.) / mag_a_x_u;
     T s = -r * u_A[i];
 
-    J[axis_index * 3 + 0] = u_A[0];
-    J[axis_index * 3 + 1] = u_A[1];
-    J[axis_index * 3 + 2] = u_A[2];
+    J[0 * 3 + axis_index] = u_A[0];
+    J[1 * 3 + axis_index] = u_A[1];
+    J[2 * 3 + axis_index] = u_A[2];
 
     T v[3] = {0., 0., 0.};
     v[j] = -r * u_A[k];
     v[k] = r * u_A[j];
 
     int v_index = (axis_index + 1) % 3;
-    J[v_index * 3 + i] = 0;
-    J[v_index * 3 + j] = v[j];
-    J[v_index * 3 + k] = v[k];
+    J[i * 3 + v_index] = 0;
+    J[j * 3 + v_index] = v[j];
+    J[k * 3 + v_index] = v[k];
 
     T w[3];
     w[i] = mag_a_x_u;
@@ -632,9 +632,49 @@ inline __host__ __device__ void make_from_one_unit_vector(const T u_A[3], int ax
     w[k] = s * u_A[k];
 
     int w_index = (axis_index + 2) % 3;
-    J[w_index * 3 + 0] = w[0];
-    J[w_index * 3 + 1] = w[1];
-    J[w_index * 3 + 2] = w[2];
+    J[0 * 3 + w_index] = w[0];
+    J[1 * 3 + w_index] = w[1];
+    J[2 * 3 + w_index] = w[2];
+}
+
+template <class T>
+inline __host__ __device__ bool cholesky_solve3(const T* H, const T* b, T* x) {
+    T L[9];
+    for (int i = 0; i < 9; ++i) L[i] = 0;
+
+    // H = L * L^T
+    for (int i = 0; i < 3; ++i) {
+        for (int j = 0; j <= i; ++j) {
+            T sum = H[i * 3 + j];
+            for (int k = 0; k < j; ++k)
+                sum -= L[i * 3 + k] * L[j * 3 + k];
+
+            if (i == j) {
+                if (sum <= 0) return false; // H is not SPD
+                L[i * 3 + j] = sqrt(sum);
+            } else {
+                L[i * 3 + j] = sum / L[j * 3 + j];
+            }
+        }
+    }
+
+    // L * y = b
+    T y[3];
+    for (int i = 0; i < 3; ++i) {
+        T sum = b[i];
+        for (int j = 0; j < i; ++j)
+            sum -= L[i * 3 + j] * y[j];
+        y[i] = sum / L[i * 3 + i];
+    }
+
+    for (int i = 2; i >= 0; --i) {
+        T sum = y[i];
+        for (int j = i + 1; j < 3; ++j)
+            sum -= L[j * 3 + i] * x[j];
+        x[i] = sum / L[i * 3 + i];
+    }
+
+    return true;
 }
 
 
