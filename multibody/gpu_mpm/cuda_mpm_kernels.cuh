@@ -1468,10 +1468,10 @@ __global__ void grid_to_particle_vdb_line_search_kernel(const size_t n_particles
         matmul<3, 3, 1, T>(R_CW, v_next_rel_W, v_next_C);
 
         // lc(v_p(v_i))
-        auto lc = [&](const T* v) {
+        auto lc = [&](const T* v, const T* v0) {
             // frictional component (Lagged Model)
             // lt(v_t) = μ * γn0 * ||v_t||_s
-            const T yn0 = max(stiffness * dt * phi0 * (T(1.) - damping * vn_C[kZAxis]), T(0.));
+            const T yn0 = max(stiffness * dt * phi0 * (T(1.) - damping * v0[kZAxis]), T(0.));
             const T lt = friction_mu * yn0 * (sqrt(v[0] * v[0] + v[1] * v[1] + config::epsv<T> * config::epsv<T>) - config::epsv<T>); // Eq. 33
 
             // normal component (Compliant Contact)
@@ -1510,7 +1510,7 @@ __global__ void grid_to_particle_vdb_line_search_kernel(const size_t n_particles
             }
         }
         if (global_line_search) {
-            atomicAdd(g_E1, lc(v_next_C));
+            atomicAdd(g_E1, lc(v_next_C, vn_C));
             if constexpr (SOLVE_DF_DDF) {
                 T lc_Hess_C[9], lc_Grad_C[3]; // hess and grad in the contact local coordinate
                 compute_contact_grad_and_hess(phi0, dt, stiffness, damping, friction_mu, vn_C, v_next_C, lc_Hess_C, lc_Grad_C);
@@ -1525,16 +1525,16 @@ __global__ void grid_to_particle_vdb_line_search_kernel(const size_t n_particles
             if constexpr (JACOBI) {
                 printf("ERROR, JACOBI CANNOT USE LOCAL LINE-SEARCH!!!!!!!!!!!!!!!!!!!!!!!\n");
             }
-            atomicAdd(&g_E1[color_index], lc(v_next_C));
+            atomicAdd(&g_E1[color_index], lc(v_next_C, vn_C));
         }
         if (eval_E0) {
             if (global_line_search) {
-                atomicAdd(g_E0, lc(v_current_C));
+                atomicAdd(g_E0, lc(v_current_C, vn_C));
             } else {
                 if constexpr (JACOBI) {
                     printf("ERROR, JACOBI CANNOT USE LOCAL LINE-SEARCH!!!!!!!!!!!!!!!!!!!!!!!\n");
                 }
-                atomicAdd(&g_E0[color_index], lc(v_current_C));
+                atomicAdd(&g_E0[color_index], lc(v_current_C, vn_C));
             }
         }
     }
