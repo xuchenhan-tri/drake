@@ -1466,23 +1466,39 @@ __global__ void grid_to_particle_vdb_line_search_kernel(const size_t n_particles
         matmul<3, 3, 1, T>(R_CW, vn_rel_W, vn_C);
         matmul<3, 3, 1, T>(R_CW, v_current_rel_W, v_current_C);
         matmul<3, 3, 1, T>(R_CW, v_next_rel_W, v_next_C);
-        T v_hat = min(phi0 / dt, T(1.) / damping); // Eq. 
 
-        // ℓ_c(v_p(v_i))
+        // lc(v_p(v_i))
         auto lc = [&](const T* v) {
-            // ℓ_t(v_t) = μ * γ_n0 * ||v_t||_s
+            // frictional component (Lagged Model)
+            // lt(v_t) = μ * γn0 * ||v_t||_s
             const T yn0 = max(stiffness * dt * phi0 * (T(1.) - damping * vn_C[kZAxis]), T(0.));
             const T lt = friction_mu * yn0 * (sqrt(v[0] * v[0] + v[1] * v[1] + config::epsv<T> * config::epsv<T>) - config::epsv<T>); // Eq. 33
-            const T f0 = stiffness * phi0;
-            // N(vn) = N +(min(vn, vˆ); f0)
-            // N⁺(v_n; f₀) = δt * (v_n * f₀ + 1/2 * Δf) 
-            //               - (d / 2) * v_n² * (f₀ + 2/3 * Δf)
-            // with ∆f = −δt k vn
-            const T vn = min(v_hat, v[kZAxis]); // Eq. 16
-            const T ln_a = stiffness * damping * dt * dt;
-            const T ln_b = -(stiffness * dt * (dt + damping * phi0));
-            const T ln_c = stiffness * dt * phi0;
-            const T ln = -(T(1. / 3.) * ln_a * vn * vn * vn + T(1. / 2.) * ln_b * vn * vn + ln_c * vn); // Eq.7
+
+            // normal component (Compliant Contact)
+
+            // vˆ = min(−ϕ0 / δt, 1 / d),
+            T v_hat = min(phi0 / dt, T(1.) / damping);
+
+            // N(vn) = N+(min(vn, vˆ); f0)
+            const T min_vn_v_hat = min(v_hat, v[kZAxis]);
+
+            // N+(vn; ϕ0) = δt k [−vn (ϕ0 + 1/2 δt vn) + d vn²/2 (ϕ0 + 2/3 δt vn)]
+            //            = δt k [−ϕ0 vn  - 1/2 δt vn² + 1/2 d ϕ0 vn² + 1/3 d δt vn³]
+            //            = δt k [1/3 d δt vn³ + 1/2 (d ϕ0 - δt) vn² - ϕ0 vn]
+            //            = ln_A vn³ + ln_B vn² + ln_C vn
+            // where N_A = 1/3 δt² k d,
+            //       N_B = 1/2 δt k (d ϕ0 - δt) 
+            //       N_C = δt k * (-ϕ0)
+            const T N_A = T(1. / 3.) * dt * dt * stiffness * damping;
+            const T N_B = T(1. / 2.) * dt * stiffness * (-damping * phi0 - dt);
+            const T N_C = dt * stiffness * phi0;
+            const T N_vn = N_A * min_vn_v_hat * min_vn_v_hat * min_vn_v_hat 
+                       + N_B * min_vn_v_hat * min_vn_v_hat 
+                       + N_C * min_vn_v_hat;
+            
+            // ln(vn) = −N(vn),
+            const T ln = -N_vn; 
+
             return lt + ln;
         };
 
