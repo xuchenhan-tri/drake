@@ -858,14 +858,9 @@ __global__ void grid_to_particle_kernel(const size_t n_particles,
                     T weight = weights[threadIdx.x][i][0] * weights[threadIdx.x][j][1] * weights[threadIdx.x][k][2];
 
                     if constexpr (CONTACT_TRANSFER) {
-                        const T &g_m = g_masses[target_cell_index];
-                        if (g_m > 0) {
-                            new_v[0] += weight * g_v[0];
-                            new_v[1] += weight * g_v[1];
-                            new_v[2] += weight * g_v[2];
-                        } else {
-                            printf("IMPOSSIBLE g_m=%lf\n", g_m);
-                        }
+                        new_v[0] += weight * g_v[0];
+                        new_v[1] += weight * g_v[1];
+                        new_v[2] += weight * g_v[2];
                     } else {
                         new_v[0] += weight * g_v[0];
                         new_v[1] += weight * g_v[1];
