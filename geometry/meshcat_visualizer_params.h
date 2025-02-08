@@ -90,7 +90,13 @@ struct MeshcatVisualizerParams {
    `include_unspecified_accepting` is true. */
   bool include_unspecified_accepting{true};
 
-  bool show_mpm{false};
+  // NOTE (changyu): to show MPM model
+  enum class ShowMpmOpt {
+    kClothMpm,
+    kParticleMpm,
+    kNone
+  };
+  ShowMpmOpt show_mpm{ShowMpmOpt::kNone};
 };
 
 }  // namespace geometry

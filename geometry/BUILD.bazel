@@ -139,6 +139,9 @@ drake_cc_library(
         "//lcm:interface",
         "//systems/framework:context",
         "//systems/framework:leaf_system",
+        "//perception:point_cloud",
+        "//perception:point_cloud_to_lcm",
+        "//lcmtypes:point_cloud",
     ],
     deps = [
         "//lcm:drake_lcm",

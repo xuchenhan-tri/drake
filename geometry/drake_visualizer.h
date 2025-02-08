@@ -11,6 +11,9 @@
 #include "drake/geometry/geometry_version.h"
 #include "drake/geometry/query_object.h"
 #include "drake/lcm/drake_lcm_interface.h"
+#include "drake/lcmt_point_cloud.hpp"
+#include "drake/perception/point_cloud.h"
+#include "drake/perception/point_cloud_to_lcm.h"
 #include "drake/systems/framework/diagram_builder.h"
 #include "drake/systems/framework/event_status.h"
 #include "drake/systems/framework/input_port.h"
@@ -267,12 +270,29 @@ class DrakeVisualizer final : public systems::LeafSystem<T> {
       const std::vector<internal::DynamicFrameData>& dynamic_frames,
       double time, lcm::DrakeLcmInterface* lcm);
 
-  /* Dispatches a "deformable geometries" message that defines the topology and
-   configuration of all deformable geometries at a given time. */
+  // NOTE (changyu): draw cloth-MPM
   static void SendMpmMessage(
       const multibody::gmpm::MpmPortData<multibody::gmpm::config::GpuT>& mpm_object, const DrakeVisualizerParams& params,
       double time, lcm::DrakeLcmInterface* lcm);
   
+  // NOTE (changyu): draw particle-MPM
+  static void SendParticleMpmMessage(
+      const multibody::gmpm::MpmPortData<multibody::gmpm::config::GpuT>& mpm_object, const DrakeVisualizerParams& params,
+      double time, lcm::DrakeLcmInterface* lcm);
+  
+  static lcmt_point_cloud ConvertPointCloudToMessage(
+      const perception::PointCloud& cloud, double time,
+      const std::string& frame_name = "world") {
+    const perception::PointCloudToLcm dut(frame_name);
+    auto context = dut.CreateDefaultContext();
+    context->SetTime(time);
+    dut.get_input_port().FixValue(context.get(),
+                                  Value<perception::PointCloud>(cloud));
+    const lcmt_point_cloud output =
+        dut.get_output_port().Eval<lcmt_point_cloud>(*context);
+    return output;
+  }
+
   // NOTE (changyu): send a "mpm object" message that defines the topology and
   // configuration of MPM particles at a given time.
   static void SendDeformableGeometriesMessage(

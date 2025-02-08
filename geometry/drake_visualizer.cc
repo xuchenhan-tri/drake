@@ -559,10 +559,15 @@ EventStatus DrakeVisualizer<T>::SendGeometryMessage(
                                EvalDynamicFrameData(context),
                                ExtractDoubleOrThrow(context.get_time()), lcm_);
   
-  if (params_.show_mpm) {
+  if (params_.show_mpm == DrakeVisualizerParams::ShowMpmOpt::kClothMpm) {
     const auto& mpm_object = 
         mpm_input_port().template Eval<multibody::gmpm::MpmPortData<multibody::gmpm::config::GpuT>>(context);
     SendMpmMessage(
+        mpm_object, params_, ExtractDoubleOrThrow(context.get_time()), lcm_);
+  } else if (params_.show_mpm == DrakeVisualizerParams::ShowMpmOpt::kParticleMpm) {
+    const auto& mpm_object = 
+        mpm_input_port().template Eval<multibody::gmpm::MpmPortData<multibody::gmpm::config::GpuT>>(context);
+    SendParticleMpmMessage(
         mpm_object, params_, ExtractDoubleOrThrow(context.get_time()), lcm_);
   } else {
     SendDeformableGeometriesMessage(
@@ -762,6 +767,25 @@ void DrakeVisualizer<T>::SendMpmMessage(
           params.default_color));
   message.num_geom = 1;
   std::string channel = MakeLcmChannelNameForRole("DRAKE_VIEWER_DEFORMABLE", params);
+  lcm::Publish(lcm, channel, message, time);
+}
+
+template <typename T>
+void DrakeVisualizer<T>::SendParticleMpmMessage(
+    const multibody::gmpm::MpmPortData<multibody::gmpm::config::GpuT>& mpm_object, const DrakeVisualizerParams& params,
+    double time, lcm::DrakeLcmInterface* lcm) {
+  perception::PointCloud pcd(mpm_object.pos.size());
+  for (size_t i = 0; i < mpm_object.pos.size(); ++i) {
+    pcd.mutable_xyz(i) = mpm_object.pos[i].template cast<float>();
+  }
+
+  // cloud.mutable_rgbs() = (255.0 * (m2.array() + 0.0) / 2.0).cast<uint8_t>(); // if do not do this, color is black
+  lcmt_point_cloud message = ConvertPointCloudToMessage(pcd, time);
+  /* Note: the channel name must be "DRAKE_POINT_CLOUD.**" otherwise it would not be 
+  recognized by meldis. This is due to a special setting of handle in meldis. Here 
+  we just keep meldis unchanged, and set our channel name accordingly.*/
+  std::string channel = MakeLcmChannelNameForRole("DRAKE_POINT_CLOUD",
+                                                  params);
   lcm::Publish(lcm, channel, message, time);
 }
 
