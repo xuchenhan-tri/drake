@@ -107,8 +107,8 @@ namespace config {
 	// for three-clothes demo, SDF_FRICTION=0.3
 	// for other demos, SDF_FRICTION=1.0
 	template<class T> constexpr T SDF_FRICTION;
-	template<> constexpr float SDF_FRICTION<float> = 0.3f;
-	template<> constexpr double SDF_FRICTION<double> = 0.3;
+	template<> constexpr float SDF_FRICTION<float> = 0.8f;
+	template<> constexpr double SDF_FRICTION<double> = 0.8;
 
 	// Lame parameters
 	template<class T> constexpr T MU = YOUNGS_MODULUS<T> / (T(2.) * (T(1.) + POISSON_RATIO<T>));
@@ -131,12 +131,12 @@ namespace config {
 	template<> constexpr double PARTICLE_YIELD_STRESS<double> = 6e3;
 
 	template<class T> constexpr T PARTICLE_YOUNGS_MODULUS;
-	template<> constexpr float PARTICLE_YOUNGS_MODULUS<float> = 2e5f;
-	template<> constexpr double PARTICLE_YOUNGS_MODULUS<double> = 2e5;
+	template<> constexpr float PARTICLE_YOUNGS_MODULUS<float> = 1e5f;
+	template<> constexpr double PARTICLE_YOUNGS_MODULUS<double> = 1e5;
 
 	template<class T> constexpr T PARTICLE_POISSON_RATIO;
-	template<> constexpr float PARTICLE_POISSON_RATIO<float> = .3f;
-	template<> constexpr double PARTICLE_POISSON_RATIO<double> = .3;
+	template<> constexpr float PARTICLE_POISSON_RATIO<float> = .2f;
+	template<> constexpr double PARTICLE_POISSON_RATIO<double> = .2;
 	template<class T> constexpr T PARTICLE_MU = PARTICLE_YOUNGS_MODULUS<T> / (T(2.) * (T(1.) + PARTICLE_POISSON_RATIO<T>));
 	template<class T> constexpr T PARTICLE_LAMBDA = PARTICLE_YOUNGS_MODULUS<T> * PARTICLE_POISSON_RATIO<T> / ((T(1.) + PARTICLE_POISSON_RATIO<T>) * (T(1.) - T(2.) * PARTICLE_POISSON_RATIO<T>));
 };

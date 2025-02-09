@@ -35,7 +35,7 @@ DEFINE_int32(res, 5000, "MPM Particle Number.");
 DEFINE_double(realtime_rate, 1.0, "Desired real time rate.");
 DEFINE_double(time_step, 1e-2,
               "Discrete time step for the system [s]. Must be positive.");
-DEFINE_double(substep, 2e-4,
+DEFINE_double(substep, 1e-4,
               "Discrete time step for the substepping scheme [s]. Must be positive.");
 DEFINE_string(contact_approximation, "sap",
               "Type of convex contact approximation. See "
@@ -250,7 +250,7 @@ int do_main() {
     /* Set up a ground. */
     ProximityProperties rigid_proximity_props;
     /* Set the friction coefficient close to that of rubber against rubber. */
-    const CoulombFriction<double> surface_friction(0.0, 0.0);
+    const CoulombFriction<double> surface_friction(1.0, 1.0);
     AddContactMaterial({}, {}, surface_friction, &rigid_proximity_props);
     rigid_proximity_props.AddProperty(geometry::internal::kHydroGroup,
                                       geometry::internal::kRezHint, 0.01);
