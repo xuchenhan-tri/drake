@@ -32,9 +32,9 @@ struct MpmConfigParams {
 template<typename T>
 struct CpuMpmModel {
     CpuMpmModel() = default;
-    std::vector<Vec3<T>> cloth_pos;
-    std::vector<Vec3<T>> cloth_vel;
-    std::vector<int> cloth_indices;
+    std::vector<Vec3<T>> pos;
+    std::vector<Vec3<T>> vel;
+    std::vector<int> indices;
 
     MpmConfigParams<T> config;
 };

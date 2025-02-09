@@ -82,14 +82,38 @@ class DeformableModel final : public multibody::PhysicalModel<T> {
       const auto & T2GpuT = [](const Vector3<T>& vec) -> Vector3<GpuT> {
         return vec.template cast<GpuT>();
       };
-      const auto &verts_offset = cpu_mpm_model_->cloth_pos.size();
-      cpu_mpm_model_->cloth_pos.resize(verts_offset + pos.size());
-      std::transform(pos.begin(), pos.end(), cpu_mpm_model_->cloth_pos.begin() + verts_offset, T2GpuT);
-      cpu_mpm_model_->cloth_vel.resize(verts_offset + vel.size());
-      std::transform(vel.begin(), vel.end(), cpu_mpm_model_->cloth_vel.begin() + verts_offset, T2GpuT);
+      const auto &verts_offset = cpu_mpm_model_->pos.size();
+      cpu_mpm_model_->pos.resize(verts_offset + pos.size());
+      std::transform(pos.begin(), pos.end(), cpu_mpm_model_->pos.begin() + verts_offset, T2GpuT);
+      cpu_mpm_model_->vel.resize(verts_offset + vel.size());
+      std::transform(vel.begin(), vel.end(), cpu_mpm_model_->vel.begin() + verts_offset, T2GpuT);
       for (const auto &v : indices) {
-        cpu_mpm_model_->cloth_indices.push_back(v + verts_offset);
+        cpu_mpm_model_->indices.push_back(v + verts_offset);
       }
+    }
+  }
+
+  void RegisterMpmParticle(
+    const std::vector<Vector3<T>>& pos,
+    const std::vector<Vector3<T>>& vel
+  ) {
+    this->ThrowIfSystemResourcesDeclared(__func__);
+    ThrowIfNotDouble(__func__);
+    if constexpr (std::is_same_v<T, double>) {
+      using GpuT = gmpm::config::GpuT;
+      if (!ExistsMpmModel()) {
+        cpu_mpm_model_ = std::make_unique<gmpm::CpuMpmModel<GpuT>>();
+      }
+      
+      // cast T => GpuT
+      const auto & T2GpuT = [](const Vector3<T>& vec) -> Vector3<GpuT> {
+        return vec.template cast<GpuT>();
+      };
+      const auto &verts_offset = cpu_mpm_model_->pos.size();
+      cpu_mpm_model_->pos.resize(verts_offset + pos.size());
+      std::transform(pos.begin(), pos.end(), cpu_mpm_model_->pos.begin() + verts_offset, T2GpuT);
+      cpu_mpm_model_->vel.resize(verts_offset + vel.size());
+      std::transform(vel.begin(), vel.end(), cpu_mpm_model_->vel.begin() + verts_offset, T2GpuT);
     }
   }
 

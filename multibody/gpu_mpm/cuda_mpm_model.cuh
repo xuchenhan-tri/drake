@@ -44,6 +44,7 @@ public:
     const size_t& n_faces() const { return n_faces_; }
     const size_t& n_particles() const { return n_particles_; }
     const uint32_t& current_particle_buffer_id() const { return current_particle_buffer_id_; }
+    const bool& is_particle_mpm() const { return is_particle_mpm_; }
 
     T* current_positions() { return particle_buffer_[current_particle_buffer_id_].d_positions; }
     const T* current_positions() const { return particle_buffer_[current_particle_buffer_id_].d_positions; }
@@ -145,6 +146,10 @@ public:
     void AddQRCloth(const std::vector<Vec3<T>> &pos, 
                            const std::vector<Vec3<T>> &vel,
                            const std::vector<int> &indices);
+    
+    // NOTE (changyu): support particle MPM
+    void AddParticleMpm(const std::vector<Vec3<T>> &pos, 
+                           const std::vector<Vec3<T>> &vel);
 
     // NOTE (changyu): finalize system configuration and initialize GPU MPM state, 
     // all gpu memory allocation should be done here to avoid re-allocation.    
@@ -169,6 +174,8 @@ public:
     int total_contact_iteration_count = 0;
 
 private:
+
+    bool is_particle_mpm_ = false;
 
     // Particles state device ptrs
     size_t n_verts_ = 0;

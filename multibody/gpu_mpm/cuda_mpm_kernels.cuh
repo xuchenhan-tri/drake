@@ -11,6 +11,30 @@ namespace multibody {
 namespace gmpm {
 
 template<typename T>
+__global__ void initialize_particle_state_kernel(
+    const size_t n_particles,
+    T *volumes,
+    T *deformation_gradients) {
+    uint32_t idx = threadIdx.x + blockDim.x * blockIdx.x;
+    if (idx < n_particles) {
+        volumes[idx] = config::G_DX<T> * config::G_DX<T> * config::G_DX<T>;
+
+        T *F = &deformation_gradients[idx * 9];
+        F[0] = T(1.);
+        F[1] = T(0.);
+        F[2] = T(0.);
+
+        F[3] = T(0.);
+        F[4] = T(1.);
+        F[5] = T(0.);
+
+        F[6] = T(0.);
+        F[7] = T(0.);
+        F[8] = T(1.);
+    }
+}
+
+template<typename T>
 __global__ void initialize_fem_state_kernel(
     const size_t n_faces,
     const int *indices,
@@ -299,6 +323,65 @@ __global__ void calc_fem_state_and_force_kernel(
             atomicAdd(&forces[v0 * 3 + i], -G[i * 3 + 0]);
             atomicAdd(&forces[v1 * 3 + i], -G[i * 3 + 1]);
             atomicAdd(&forces[v2 * 3 + i], -G[i * 3 + 2]);
+        }
+    }
+}
+
+template<typename T>
+__global__ void calc_particle_state_and_force_kernel(
+    const size_t n_particles,
+    const T* volumes,
+    const T* affine_matrices,
+    T* deformation_gradients,
+    T* taus,
+    const T dt) {
+    uint32_t idx = threadIdx.x + blockDim.x * blockIdx.x;
+    if (idx < n_particles) {
+        T* F = &deformation_gradients[idx * 9];
+        const T* C = &affine_matrices[idx * 9];
+        
+        float new_F[9];
+        new_F[0] = (T(1.) + dt * C[0]) * F[0] + dt * C[1] * F[3] + dt * C[2] * F[6];
+        new_F[1] = (T(1.) + dt * C[0]) * F[1] + dt * C[1] * F[4] + dt * C[2] * F[7];
+        new_F[2] = (T(1.) + dt * C[0]) * F[2] + dt * C[1] * F[5] + dt * C[2] * F[8];
+
+        new_F[3] = dt * C[3] * F[0] + (T(1.) + dt * C[4]) * F[3] + dt * C[5] * F[6];
+        new_F[4] = dt * C[3] * F[1] + (T(1.) + dt * C[4]) * F[4] + dt * C[5] * F[7];
+        new_F[5] = dt * C[3] * F[2] + (T(1.) + dt * C[4]) * F[5] + dt * C[5] * F[8];
+
+        new_F[6] = dt * C[6] * F[0] + dt * C[7] * F[3] + (T(1.) + dt * C[8]) * F[6];
+        new_F[7] = dt * C[6] * F[1] + dt * C[7] * F[4] + (T(1.) + dt * C[8]) * F[7];
+        new_F[8] = dt * C[6] * F[2] + dt * C[7] * F[5] + (T(1.) + dt * C[8]) * F[8];
+
+        #pragma unroll
+        for (int i = 0; i < 9; ++i) {
+            F[i] = new_F[i];
+        }
+
+        // NOTE, TODO (changyu): currently svd only supports float, all set float here
+        T U[9], sigma[9], V[9];
+        ssvd3x3<T>(new_F, U, sigma, V);
+        
+        // TODO (changyu): many register used here. Most of them could be reused to optimize performance.
+        T J = determinant3(new_F);
+        T *stress = &taus[idx * 9];
+        T R[9];
+        matmulT<3, 3, 3, T>(U, V, R);
+        
+        T *two_mu_F_minus_R = R;
+        #pragma unroll
+        for (int i = 0; i < 9; ++i) {
+            two_mu_F_minus_R[i] = T(2.) * config::PARTICLE_MU<T> * (new_F[i] - R[i]);
+        }
+        matmulT<3, 3, 3, T>(two_mu_F_minus_R, new_F, stress);
+        #pragma unroll
+        for (int i = 0; i < 3; ++i) {
+            stress[i * 3 + i] += config::PARTICLE_LAMBDA<T> * J * (J - T(1.));
+        }
+
+        #pragma unroll
+        for (int i = 0; i < 9; ++i) {
+            stress[i] *= volumes[idx];
         }
     }
 }

@@ -77,6 +77,17 @@ namespace config {
 	template<> constexpr float POISSON_RATIO<float> = .3f;
 	template<> constexpr double POISSON_RATIO<double> = .3;
 
+	// Particle Lame parameters
+	template<class T> constexpr T PARTICLE_YOUNGS_MODULUS;
+	template<> constexpr float PARTICLE_YOUNGS_MODULUS<float> = 100000.f;
+	template<> constexpr double PARTICLE_YOUNGS_MODULUS<double> = 100000.;
+
+	template<class T> constexpr T PARTICLE_POISSON_RATIO;
+	template<> constexpr float PARTICLE_POISSON_RATIO<float> = .3f;
+	template<> constexpr double PARTICLE_POISSON_RATIO<double> = .3;
+	template<class T> constexpr T PARTICLE_MU = PARTICLE_YOUNGS_MODULUS<T> / (T(2.) * (T(1.) + PARTICLE_POISSON_RATIO<T>));
+	template<class T> constexpr T PARTICLE_LAMBDA = PARTICLE_YOUNGS_MODULUS<T> * PARTICLE_POISSON_RATIO<T> / ((T(1.) + PARTICLE_POISSON_RATIO<T>) * (T(1.) - T(2.) * PARTICLE_POISSON_RATIO<T>));
+
 	template<class T> constexpr T DENSITY;
 	template<> constexpr float DENSITY<float> = 2000.f;
 	template<> constexpr double DENSITY<double> = 2000.;
