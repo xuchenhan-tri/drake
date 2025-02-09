@@ -192,9 +192,10 @@ class IiwaController : public drake::systems::LeafSystem<double> {
       dX.setZero();  // hold
     } else if (context.get_time() <= 1.9) {
       if (is_left_) {
-        dX(4) = 0.0025;  // split
+        // NOTE (changyu): adjusted, original 0.0025
+        dX(4) = 0.0015;  // split
       } else {
-        dX(4) = -0.0025;  // split
+        dX(4) = -0.0015;  // split
       }
     } else if (context.get_time() <= 2.0) {
       dX.setZero();  // hold
