@@ -224,7 +224,7 @@ void MeshcatVisualizer<T>::SetMpmParticles(
     current_frame = std::round(context.get_time() / params_.publish_period);
     current_path = params_.prefix +"/mpm_object_visual/" + std::to_string(current_frame);
     time = context.get_time();
-    meshcat_->SetObject(current_path, pcd, 0.002, rgba);
+    meshcat_->SetObject(current_path, pcd, 0.005, rgba);
     meshcat_->SetProperty(current_path, "visible", false, 0);
     meshcat_->SetProperty(current_path, "visible", true, time);
     if (current_frame >= 1) {
