@@ -677,6 +677,30 @@ inline __host__ __device__ bool cholesky_solve3(const T* H, const T* b, T* x) {
     return true;
 }
 
+template<typename T>
+__device__ __host__
+inline void project_to_skewed_cylinder(T radius, T* point) {
+  // the disc parallel to the cylinder that passes the point will center at
+  T c = (point[0] + point[1] + point[2]) / T(3.);
+  T center[3] = {c, c, c};
+
+  T c2p[3] = {
+    point[0] - center[0],
+    point[1] - center[1],
+    point[2] - center[2]
+  };
+
+  T distance = norm<3>(c2p);
+
+  if (distance <= radius) {
+    return;
+  } else {
+    point[0] = center[0] + c2p[0] * radius / distance;
+    point[1] = center[1] + c2p[1] * radius / distance;
+    point[2] = center[2] + c2p[2] * radius / distance;
+  }
+}
+
 
 template<int n, int m, typename T>
 __device__ __host__

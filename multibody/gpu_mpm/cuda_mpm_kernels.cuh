@@ -327,7 +327,7 @@ __global__ void calc_fem_state_and_force_kernel(
     }
 }
 
-template<typename T>
+template<typename T, bool PLASTICITY=true>
 __global__ void calc_particle_state_and_force_kernel(
     const size_t n_particles,
     const T* volumes,
@@ -361,9 +361,59 @@ __global__ void calc_particle_state_and_force_kernel(
         // NOTE, TODO (changyu): currently svd only supports float, all set float here
         T U[9], sigma[9], V[9];
         ssvd3x3<T>(new_F, U, sigma, V);
+
+        if constexpr(PLASTICITY) {
+            T b_trial[3] = {
+                sigma[0] * sigma[0],
+                sigma[4] * sigma[4],
+                sigma[8] * sigma[8]
+            };
+
+            T epsilon[3] = {
+                log(sigma[0]),
+                log(sigma[1]),
+                log(sigma[2])
+            };
+
+            T trace_epsilon = epsilon[0] + epsilon[1] + epsilon[2];
+            T epsilon_hat[3] = {
+                epsilon[0] - (trace_epsilon / T(3.)),
+                epsilon[1] - (trace_epsilon / T(3.)),
+                epsilon[2] - (trace_epsilon / T(3.))
+            };
+            T s_trial[3] = {
+                T(2.) * config::PARTICLE_MU<T> * epsilon_hat[0],
+                T(2.) * config::PARTICLE_MU<T> * epsilon_hat[1],
+                T(2.) * config::PARTICLE_MU<T> * epsilon_hat[2],
+            };
+            T s_trial_norm = norm<3>(s_trial) + T(1e-8);
+            T y = s_trial_norm - sqrt(T(2./3.)) * config::PARTICLE_YIELD_STRESS<T>;
+            if (y > 0) {
+                T mu_hat = config::PARTICLE_MU<T> * (b_trial[0] + b_trial[1] + b_trial[2]) / T(3.);
+                T s_new_norm = s_trial_norm - y;
+                T s_new[3] = {
+                    (s_new_norm / s_trial_norm) * s_trial[0],
+                    (s_new_norm / s_trial_norm) * s_trial[1],
+                    (s_new_norm / s_trial_norm) * s_trial[2]
+                };
+                T H[3] = {
+                    s_new[0] / (T(2.) * config::PARTICLE_MU<T>) + trace_epsilon / T(3.),
+                    s_new[1] / (T(2.) * config::PARTICLE_MU<T>) + trace_epsilon / T(3.),
+                    s_new[2] / (T(2.) * config::PARTICLE_MU<T>) + trace_epsilon / T(3.)
+                };
+
+                sigma[0 * 3 + 0] = exp(H[0]);
+                sigma[1 * 3 + 1] = exp(H[1]);
+                sigma[2 * 3 + 2] = exp(H[2]);
+            }
+
+            T tmp[9];
+            matmul<3, 3, 3, T>(U, sigma, tmp);
+            matmulT<3, 3, 3, T>(tmp, V, F);
+        }
         
         // TODO (changyu): many register used here. Most of them could be reused to optimize performance.
-        T J = determinant3(new_F);
+        T J = determinant3(F);
         T *stress = &taus[idx * 9];
         T R[9];
         matmulT<3, 3, 3, T>(U, V, R);
@@ -371,9 +421,9 @@ __global__ void calc_particle_state_and_force_kernel(
         T *two_mu_F_minus_R = R;
         #pragma unroll
         for (int i = 0; i < 9; ++i) {
-            two_mu_F_minus_R[i] = T(2.) * config::PARTICLE_MU<T> * (new_F[i] - R[i]);
+            two_mu_F_minus_R[i] = T(2.) * config::PARTICLE_MU<T> * (F[i] - R[i]);
         }
-        matmulT<3, 3, 3, T>(two_mu_F_minus_R, new_F, stress);
+        matmulT<3, 3, 3, T>(two_mu_F_minus_R, F, stress);
         #pragma unroll
         for (int i = 0; i < 3; ++i) {
             stress[i * 3 + i] += config::PARTICLE_LAMBDA<T> * J * (J - T(1.));

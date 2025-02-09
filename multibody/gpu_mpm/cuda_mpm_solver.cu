@@ -445,7 +445,7 @@ void GpuMpmSolver<T>::UpdateContact(GpuMpmState<T> *state, const int frame, cons
                     }
 
                     // Exit if f(root) is close to zero.
-                    if (abs(std::get<1>(f_root)) < f_tolerance) {
+                    if (abs(std::get<1>(f_root)) < f_tolerance || line_search_cnt > 50) {
                         global_line_search_satisfied = true;
                     }
 

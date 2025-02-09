@@ -77,20 +77,9 @@ namespace config {
 	template<> constexpr float POISSON_RATIO<float> = .3f;
 	template<> constexpr double POISSON_RATIO<double> = .3;
 
-	// Particle Lame parameters
-	template<class T> constexpr T PARTICLE_YOUNGS_MODULUS;
-	template<> constexpr float PARTICLE_YOUNGS_MODULUS<float> = 100000.f;
-	template<> constexpr double PARTICLE_YOUNGS_MODULUS<double> = 100000.;
-
-	template<class T> constexpr T PARTICLE_POISSON_RATIO;
-	template<> constexpr float PARTICLE_POISSON_RATIO<float> = .3f;
-	template<> constexpr double PARTICLE_POISSON_RATIO<double> = .3;
-	template<class T> constexpr T PARTICLE_MU = PARTICLE_YOUNGS_MODULUS<T> / (T(2.) * (T(1.) + PARTICLE_POISSON_RATIO<T>));
-	template<class T> constexpr T PARTICLE_LAMBDA = PARTICLE_YOUNGS_MODULUS<T> * PARTICLE_POISSON_RATIO<T> / ((T(1.) + PARTICLE_POISSON_RATIO<T>) * (T(1.) - T(2.) * PARTICLE_POISSON_RATIO<T>));
-
 	template<class T> constexpr T DENSITY;
-	template<> constexpr float DENSITY<float> = 2000.f;
-	template<> constexpr double DENSITY<double> = 2000.;
+	template<> constexpr float DENSITY<float> = 1000.f;
+	template<> constexpr double DENSITY<double> = 1000.;
 
 	template<class T> constexpr T GAMMA;
 	template<> constexpr float GAMMA<float> = 0.f;
@@ -135,6 +124,21 @@ namespace config {
 	template<class T> constexpr T epsv;
 	template<> constexpr float epsv<float> = 1e-3f;
 	template<> constexpr double epsv<double> = 1e-3;
+
+	// Particle parameters
+	template<class T> constexpr T PARTICLE_YIELD_STRESS;
+	template<> constexpr float PARTICLE_YIELD_STRESS<float> = 6e3f;
+	template<> constexpr double PARTICLE_YIELD_STRESS<double> = 6e3;
+
+	template<class T> constexpr T PARTICLE_YOUNGS_MODULUS;
+	template<> constexpr float PARTICLE_YOUNGS_MODULUS<float> = 2e5f;
+	template<> constexpr double PARTICLE_YOUNGS_MODULUS<double> = 2e5;
+
+	template<class T> constexpr T PARTICLE_POISSON_RATIO;
+	template<> constexpr float PARTICLE_POISSON_RATIO<float> = .3f;
+	template<> constexpr double PARTICLE_POISSON_RATIO<double> = .3;
+	template<class T> constexpr T PARTICLE_MU = PARTICLE_YOUNGS_MODULUS<T> / (T(2.) * (T(1.) + PARTICLE_POISSON_RATIO<T>));
+	template<class T> constexpr T PARTICLE_LAMBDA = PARTICLE_YOUNGS_MODULUS<T> * PARTICLE_POISSON_RATIO<T> / ((T(1.) + PARTICLE_POISSON_RATIO<T>) * (T(1.) - T(2.) * PARTICLE_POISSON_RATIO<T>));
 };
 
 }  // namespace gmpm
