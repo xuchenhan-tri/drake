@@ -29,7 +29,7 @@
 #include "drake/systems/primitives/multiplexer.h"
 
 DEFINE_bool(write_files, false, "Enable dumping MPM data to files.");
-DEFINE_double(simulation_time, 10.0, "Desired duration of the simulation [s].");
+DEFINE_double(simulation_time, 3.5, "Desired duration of the simulation [s].");
 DEFINE_int32(testcase, 0, "Test Case.");
 DEFINE_int32(res, 5000, "MPM Particle Number.");
 DEFINE_double(realtime_rate, 1.0, "Desired real time rate.");
@@ -279,10 +279,9 @@ int do_main() {
       MultibodyPlant<double>(plant_config.time_step);
   Parser(&right_iiwa_controller_plant).AddModels(iiwa_filename);
 
-  std::string hand_filename = PackageMap{}.ResolveUrl("package://drake_models/"
-            "wsg_50_description/sdf/schunk_wsg_50.sdf");
-  auto left_wsg = left_parser.AddModels(hand_filename)[0];
-  auto right_wsg = right_parser.AddModels(hand_filename)[0];
+  std::string hand_filename = "package://drake/examples/multibody/deformable/models/schunk_wsg_50_simon.sdf";
+  auto left_wsg = left_parser.AddModelsFromUrl(hand_filename)[0];
+  auto right_wsg = right_parser.AddModelsFromUrl(hand_filename)[0];
 
   RigidTransformd left_iiwa_position(Eigen::Vector3d(0, 0.58, 0));
   RigidTransformd right_iiwa_position =
@@ -521,7 +520,7 @@ int do_main() {
     simulator.AdvanceTo(FLAGS_simulation_time);
     meshcat->StopRecording();
     meshcat->PublishRecording();
-    std::ofstream htmlFile("output.html");
+    std::ofstream htmlFile("/home/changyu/drake/dual_arm.html");
     htmlFile << meshcat->StaticHtml();
     htmlFile.close();
   } else {

@@ -248,6 +248,7 @@ drake_cc_binary(
         "@drake_models//:allegro_hand_description",
         "@drake_models//:wsg_50_description",
         "@drake_models//:manipulation_station",
+        ":models",
     ],
     test_rule_args = [
         "-simulation_time=0.1",
