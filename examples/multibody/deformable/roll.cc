@@ -304,10 +304,9 @@ int do_main() {
 
   multibody::Parser roller_parser(&plant, "roller");
   auto roller = roller_parser.AddModels(roller_filename)[0];
-  // NOTE (changyu:) something not worked
-//   const RigidTransformd X_WB_ROLLER(Eigen::Vector3d{0.5, 0.5, 0.5});
-//   const Body<double>& roller_body = plant.GetRigidBodyByName("handle", roller);
-//   plant.SetDefaultFreeBodyPose(roller_body, X_WB_ROLLER);
+  const RigidTransformd X_WB_ROLLER = FromXyzRpyDegree(Eigen::Vector3d(-90, 0, 0), Eigen::Vector3d(0.5, 0.5, 0.5 + 0.2));
+  const Body<double>& roller_body = plant.GetRigidBodyByName("handle", roller);
+   plant.SetDefaultFreeBodyPose(roller_body, X_WB_ROLLER);
   unused(roller_filename, roller, compliant_hydro_props);
 
   RigidTransformd left_iiwa_position =
@@ -539,9 +538,6 @@ int do_main() {
                      right_iiwa_initial_joint_values);
   plant.SetPositions(&plant_context, left_wsg, Eigen::Vector2d(-0.03, 0.03));
   plant.SetPositions(&plant_context, right_wsg, Eigen::Vector2d(-0.03, 0.03));
-
-  plant.SetFreeBodyPose(&plant_context, plant.GetBodyByName("handle", roller),
-                        inner_rod_transform);
 
   simulator.Initialize();
   simulator.set_target_realtime_rate(FLAGS_realtime_rate);

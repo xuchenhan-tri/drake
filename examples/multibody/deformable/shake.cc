@@ -278,7 +278,7 @@ int do_main() {
                                "ground_visual", std::move(illustration_props));
 
   double box_width = 0.4 / 4;
-  double ratio = 150.0;
+  double ratio = 10.0;
 
   // a dummy box for lifting in y-direction
   const drake::multibody::UnitInertia<double> unit_inertia_y(0, 0, 0);
