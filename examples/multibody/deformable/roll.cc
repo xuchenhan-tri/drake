@@ -270,7 +270,7 @@ int do_main() {
     rigid_proximity_props.AddProperty(geometry::internal::kHydroGroup,
                                       geometry::internal::kRezHint, 0.01);
     Box ground{10, 10, 10};
-    const RigidTransformd X_WG(Eigen::Vector3d{0, 0, -5});
+    const RigidTransformd X_WG(Eigen::Vector3d{0 + 0.5, 0 + 0.5, -5 + 0.5});
     plant.RegisterCollisionGeometry(plant.world_body(), X_WG, ground,
                                     "ground_collision", rigid_proximity_props);
   }
@@ -304,15 +304,19 @@ int do_main() {
 
   multibody::Parser roller_parser(&plant, "roller");
   auto roller = roller_parser.AddModels(roller_filename)[0];
+  // NOTE (changyu:) something not worked
+//   const RigidTransformd X_WB_ROLLER(Eigen::Vector3d{0.5, 0.5, 0.5});
+//   const Body<double>& roller_body = plant.GetRigidBodyByName("handle", roller);
+//   plant.SetDefaultFreeBodyPose(roller_body, X_WB_ROLLER);
   unused(roller_filename, roller, compliant_hydro_props);
 
   RigidTransformd left_iiwa_position =
-      FromXyzRpyDegree(Eigen::Vector3d(0, 0, -90), Eigen::Vector3d(0, 0.8, 0));
+      FromXyzRpyDegree(Eigen::Vector3d(0, 0, -90), Eigen::Vector3d(0 + 0.5, 0.8 + 0.5, 0 + 0.5));
   RigidTransformd right_iiwa_position =
-      FromXyzRpyDegree(Eigen::Vector3d(0, 0, 90), Eigen::Vector3d(0, -0.8, 0));
+      FromXyzRpyDegree(Eigen::Vector3d(0, 0, 90), Eigen::Vector3d(0 + 0.5, -0.8 + 0.5, 0 + 0.5));
   plant.WeldFrames(plant.world_frame(),
                    plant.GetBodyByName("table_body", table).body_frame(),
-                   RigidTransformd(Eigen::Vector3d(0, 0, 0)));
+                   RigidTransformd(Eigen::Vector3d(0.5, 0.5, 0.5)));
   plant.WeldFrames(plant.world_frame(),
                    plant.GetBodyByName("iiwa_link_0", left_iiwa).body_frame(),
                    left_iiwa_position);
@@ -345,9 +349,9 @@ int do_main() {
 
   std::random_device rd;
   std::mt19937 gen(rd());
-  std::uniform_real_distribution<float> dis_x(0.05 - 0.16, 0.05 + 0.16);
-  std::uniform_real_distribution<float> dis_y(0.0 - 0.06, 0.0 + 0.06);
-  std::uniform_real_distribution<float> dis_z(0.05 - 0.05, 0.05 + 0.05);
+  std::uniform_real_distribution<float> dis_x(0.05 + 0.5 - 0.16, 0.05 + 0.5 + 0.16);
+  std::uniform_real_distribution<float> dis_y(0.0 + 0.5 - 0.06, 0.0 + 0.5 + 0.06);
+  std::uniform_real_distribution<float> dis_z(0.05 + 0.5 - 0.05, 0.05 + 0.5 + 0.05);
   for (int i = 0; i < res; ++i) {
     inital_pos.emplace_back(dis_x(gen), dis_y(gen), dis_z(gen));
     inital_vel.emplace_back(0, 0, 0);
