@@ -192,7 +192,7 @@ class XBoxController : public drake::systems::LeafSystem<double> {
         "XBoxDesiredState", drake::systems::BasicVector<double>(2),
         &XBoxController::CalcDesiredState, {this->time_ticket()});
     is_right_ = is_right;
-    initial_pos_ = initial_pos;
+    initial_pos_ = initial_pos + 0.5;
     box_width_ = box_width;
     target_movement_ = target_movement_ * box_width;
   }
@@ -248,7 +248,7 @@ int do_main() {
   AddRigidHydroelasticProperties(0.01, &rigid_hydro_props);
   /* Set up a ground. */
   Box ground{20, 20, 10};
-  const RigidTransformd X_WG(Eigen::Vector3d{0, 0, -5});
+  const RigidTransformd X_WG(Eigen::Vector3d{0.5, 0.5, -5 + 0.5});
   plant.RegisterCollisionGeometry(plant.world_body(), X_WG, ground,
                                   "ground_collision", rigid_hydro_props);
   IllustrationProperties illustration_props;
@@ -272,9 +272,9 @@ int do_main() {
       "translate_z_joint", plant.world_body(), RigidTransformd(), dummy_z_body,
       std::nullopt, Vector3d::UnitZ());
   plant.GetMutableJointByName<PrismaticJoint>("translate_z_joint")
-      .set_default_translation(box_width / 2.0);
+      .set_default_translation(box_width / 2.0 + 0.5);
   auto dummy_z_box_controller = builder.template AddSystem<DummyZBoxController>(
-      plant, box_width / 2.0, box_width);
+      plant, box_width / 2.0 + 0.5, box_width + 0.5);
   const auto actuator_z_index =
       plant.AddJointActuator("z prismatic joint actuator", prismatic_joint_z)
           .index();
@@ -376,12 +376,12 @@ int do_main() {
   std::uniform_real_distribution<float> dis(-box_width / 2, box_width / 2);
 
   for (int i = 0; i < res / 2; ++i) {
-    inital_pos.emplace_back(dis(gen) -1.0 * box_width, dis(gen), dis(gen) + box_width / 2.0);
+    inital_pos.emplace_back(dis(gen) -1.0 * box_width + 0.5, dis(gen) + 0.5, dis(gen) + box_width / 2.0 + 0.5);
     inital_vel.emplace_back(0, 0, 0);
   }
 
   for (int i = 0; i < res / 2; ++i) {
-    inital_pos.emplace_back(dis(gen) +1.0 * box_width, dis(gen), dis(gen) + box_width / 2.0);
+    inital_pos.emplace_back(dis(gen) +1.0 * box_width + 0.5, dis(gen) + 0.5, dis(gen) + box_width / 2.0 + 0.5);
     inital_vel.emplace_back(0, 0, 0);
   }
 
@@ -451,7 +451,7 @@ int do_main() {
 
   plant.SetFreeBodyPose(
       &plant_context, plant.GetBodyByName("free_box"),
-      math::RigidTransformd{Vector3d(0.0, 0, box_width / 2.0)});
+      math::RigidTransformd{Vector3d(0.5, 0.5, box_width / 2.0 + 0.5)});
 
   simulator.Initialize();
   simulator.set_target_realtime_rate(FLAGS_realtime_rate);
