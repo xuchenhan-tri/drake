@@ -31,7 +31,7 @@
 DEFINE_bool(write_files, false, "Enable dumping MPM data to files.");
 DEFINE_double(simulation_time, 3.5, "Desired duration of the simulation [s].");
 DEFINE_int32(testcase, 0, "Test Case.");
-DEFINE_int32(res, 5000, "MPM Particle Number.");
+DEFINE_double(ppc, 8.0, "MPM Particle-Per-Cell.");
 DEFINE_double(realtime_rate, 1.0, "Desired real time rate.");
 DEFINE_double(time_step, 1e-2,
               "Discrete time step for the system [s]. Must be positive.");
@@ -315,22 +315,10 @@ int do_main() {
 
   // mpm stuff
   DeformableModel<double>& deformable_model = plant.mutable_deformable_model();
-
-  const int res = FLAGS_res;
-  std::vector<Eigen::Vector3d> inital_pos;
-  std::vector<Eigen::Vector3d> inital_vel;
-
-  std::random_device rd;
-  std::mt19937 gen(rd());
-  std::uniform_real_distribution<float> dis_x(0.555 - 0.048, 0.555 + 0.048);
-  std::uniform_real_distribution<float> dis_y(0.29 - 0.16, 0.29 + 0.16);
-  std::uniform_real_distribution<float> dis_z(0.044 - 0.042, 0.044 + 0.042);
-  for (int i = 0; i < res; ++i) {
-    inital_pos.emplace_back(dis_x(gen), dis_y(gen), dis_z(gen));
-    inital_vel.emplace_back(0, 0, 0);
-  }
-
-  deformable_model.RegisterMpmParticle(inital_pos, inital_vel);
+  deformable_model.RegisterMpmParticle(
+    {0.555 - 0.048, 0.29 - 0.16, 0.044 - 0.042}, 
+    {0.555 + 0.048, 0.29 + 0.16, 0.044 + 0.042}, 
+    FLAGS_ppc);
 
   MpmConfigParams mpm_config;
   mpm_config.substep_dt = FLAGS_substep;
