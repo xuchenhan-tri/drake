@@ -535,7 +535,7 @@ int do_main() {
     simulator.AdvanceTo(FLAGS_simulation_time);
     meshcat->StopRecording();
     meshcat->PublishRecording();
-    std::ofstream htmlFile("/home/changyu/drake/roll.html");
+    std::ofstream htmlFile("/home/xuchenhan/drake/roll.html");
     htmlFile << meshcat->StaticHtml();
     htmlFile.close();
   } else {
