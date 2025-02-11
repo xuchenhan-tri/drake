@@ -31,6 +31,14 @@
             <length>0.5</length>
           </cylinder>
         </geometry>
+        <drake:proximity_properties>
+          <drake:mu_dynamic>1.5</drake:mu_dynamic>
+          <drake:mu_static>1.5</drake:mu_static>
+          <drake:mesh_resolution_hint>0.01</drake:mesh_resolution_hint>
+          <drake:hydroelastic_modulus>1e6</drake:hydroelastic_modulus>
+          <drake:hunt_crossley_dissipation>5</drake:hunt_crossley_dissipation>
+          <drake:compliant_hydroelastic/>
+        </drake:proximity_properties>
       </collision>
     </link>
     <link name="roller">
