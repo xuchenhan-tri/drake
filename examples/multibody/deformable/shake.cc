@@ -91,6 +91,26 @@ namespace drake {
 namespace examples {
 namespace {
 
+class DummyYBoxController : public drake::systems::LeafSystem<double> {
+ public:
+  DummyYBoxController(const multibody::MultibodyPlant<double>& plant)
+      : plant_(plant) {
+    this->DeclareVectorOutputPort(
+        "DummyYBoxDesiredState", drake::systems::BasicVector<double>(2),
+        &DummyYBoxController::CalcDesiredState, {this->time_ticket()});
+  }
+  void CalcDesiredState(const Context<double>& context,
+                        drake::systems::BasicVector<double>* output) const {
+    unused(context);
+    unused(output);
+    Vector2<double> state_value;
+    state_value << 0.5, 0;
+    output->set_value(state_value);
+  }
+  private:
+    const multibody::MultibodyPlant<double>& plant_;
+};
+
 class DummyZBoxController : public drake::systems::LeafSystem<double> {
  public:
   DummyZBoxController(const multibody::MultibodyPlant<double>& plant,
@@ -260,6 +280,25 @@ int do_main() {
   double box_width = 0.4 / 4;
   double ratio = 150.0;
 
+  // a dummy box for lifting in y-direction
+  const drake::multibody::UnitInertia<double> unit_inertia_y(0, 0, 0);
+  const SpatialInertia<double> zero_inertia_y =
+      SpatialInertia<double>(0.0, Vector3<double>(0, 0, 0), unit_inertia_y);
+  ModelInstanceIndex dummy_y_instance =
+      plant.AddModelInstance("dummy_y_instance");
+  const RigidBody<double>& dummy_y_body =
+      plant.AddRigidBody("dummy_y_body", dummy_y_instance, zero_inertia_y);
+  const auto& prismatic_joint_y = plant.AddJoint<PrismaticJoint>(
+      "translate_y_joint", plant.world_body(), RigidTransformd(), dummy_y_body,
+      std::nullopt, Vector3d::UnitY());
+  plant.GetMutableJointByName<PrismaticJoint>("translate_y_joint")
+      .set_default_translation(0.5);
+  const auto actuator_y_index =
+      plant.AddJointActuator("y actuator", prismatic_joint_y).index();
+  auto dummy_y_box_controller = builder.template AddSystem<DummyYBoxController>(plant);
+  plant.get_mutable_joint_actuator(actuator_y_index)
+      .set_controller_gains({1e7, 1});
+
   // a dummy box for lifting in z-direction
   const drake::multibody::UnitInertia<double> unit_inertia(0, 0, 0);
   const SpatialInertia<double> zero_inertia =
@@ -269,7 +308,7 @@ int do_main() {
   const RigidBody<double>& dummy_z_body =
       plant.AddRigidBody("dummy_z_body", dummy_z_instance, zero_inertia);
   const auto& prismatic_joint_z = plant.AddJoint<PrismaticJoint>(
-      "translate_z_joint", plant.world_body(), RigidTransformd(), dummy_z_body,
+      "translate_z_joint", dummy_y_body, RigidTransformd(), dummy_z_body,
       std::nullopt, Vector3d::UnitZ());
   plant.GetMutableJointByName<PrismaticJoint>("translate_z_joint")
       .set_default_translation(box_width / 2.0 + 0.5);
@@ -293,7 +332,7 @@ int do_main() {
       "left_translate_x_joint", dummy_z_body, RigidTransformd(), left_box,
       std::nullopt, Vector3d::UnitX());
   plant.GetMutableJointByName<PrismaticJoint>("left_translate_x_joint")
-      .set_default_translation(-(1.5 + 0.5 / 6.0) * box_width);
+      .set_default_translation(-(1.5 + 0.5 / 6.0) * box_width + 0.5);
   const auto left_actuator_x_index =
       plant.AddJointActuator("left x actuator", left_prismatic_joint_x).index();
   double stiffness = (2.0 + ratio) / 0.1 * 3;
@@ -314,7 +353,7 @@ int do_main() {
       "right_translate_x_joint", dummy_z_body, RigidTransformd(), right_box,
       std::nullopt, Vector3d::UnitX());
   plant.GetMutableJointByName<PrismaticJoint>("right_translate_x_joint")
-      .set_default_translation((1.5 + 0.5 / 6.0) * box_width);
+      .set_default_translation((1.5 + 0.5 / 6.0) * box_width + 0.5);
   const auto right_actuator_x_index =
       plant.AddJointActuator("right x actuator", right_prismatic_joint_x)
           .index();
@@ -398,6 +437,9 @@ int do_main() {
 
   /* All rigid and deformable models have been added. Finalize the plant. */
   plant.Finalize();
+
+  builder.Connect(dummy_y_box_controller->get_output_port(),
+                  plant.get_desired_state_input_port(dummy_y_instance));
 
   builder.Connect(dummy_z_box_controller->get_output_port(),
                   plant.get_desired_state_input_port(dummy_z_instance));

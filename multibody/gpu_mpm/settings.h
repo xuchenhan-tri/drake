@@ -77,6 +77,7 @@ namespace config {
 	template<> constexpr float POISSON_RATIO<float> = .3f;
 	template<> constexpr double POISSON_RATIO<double> = .3;
 
+	// shake using 15000
 	template<class T> constexpr T DENSITY;
 	template<> constexpr float DENSITY<float> = 1000.f;
 	template<> constexpr double DENSITY<double> = 1000.;
@@ -126,7 +127,7 @@ namespace config {
 	template<> constexpr double epsv<double> = 1e-3;
 
 	// Particle parameters
-#define PARTICLE_EXAMPLE 1 // dual_arm=0, roll=1
+#define PARTICLE_EXAMPLE 1 // dual_arm=0, roll=1, shake=3
 #if PARTICLE_EXAMPLE == 0
 	template<class T> constexpr T PARTICLE_YIELD_STRESS;
 	template<> constexpr float PARTICLE_YIELD_STRESS<float> = 6e3f;
@@ -147,6 +148,18 @@ namespace config {
 	template<class T> constexpr T PARTICLE_YOUNGS_MODULUS;
 	template<> constexpr float PARTICLE_YOUNGS_MODULUS<float> = 2e4f;
 	template<> constexpr double PARTICLE_YOUNGS_MODULUS<double> = 2e4;
+
+	template<class T> constexpr T PARTICLE_POISSON_RATIO;
+	template<> constexpr float PARTICLE_POISSON_RATIO<float> = .4f;
+	template<> constexpr double PARTICLE_POISSON_RATIO<double> = .4;
+#elif PARTICLE_EXAMPLE == 2
+	template<class T> constexpr T PARTICLE_YIELD_STRESS;
+	template<> constexpr float PARTICLE_YIELD_STRESS<float> = 1e9f;
+	template<> constexpr double PARTICLE_YIELD_STRESS<double> = 1e9;
+
+	template<class T> constexpr T PARTICLE_YOUNGS_MODULUS;
+	template<> constexpr float PARTICLE_YOUNGS_MODULUS<float> = 5e5f;
+	template<> constexpr double PARTICLE_YOUNGS_MODULUS<double> = 5e5;
 
 	template<class T> constexpr T PARTICLE_POISSON_RATIO;
 	template<> constexpr float PARTICLE_POISSON_RATIO<float> = .4f;
