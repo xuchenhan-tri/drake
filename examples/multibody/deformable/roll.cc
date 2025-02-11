@@ -341,10 +341,10 @@ int do_main() {
 
   // mpm stuff
   DeformableModel<double>& deformable_model = plant.mutable_deformable_model();
-
-  double minx[3] = {0.05 + 0.5 - 0.16, 0.0 + 0.5 - 0.06, 0.05 + 0.5 - 0.05};
-  double maxx[3] = {0.05 + 0.5 + 0.16, 0.0 + 0.5 + 0.06, 0.05 + 0.5 + 0.05};
-  deformable_model.RegisterMpmParticle(minx, maxx, FLAGS_ppc);
+  deformable_model.RegisterMpmParticle(
+    {0.05 + 0.5 - 0.16, 0.0 + 0.5 - 0.06, 0.05 + 0.5 - 0.05}, 
+    {0.05 + 0.5 + 0.16, 0.0 + 0.5 + 0.06, 0.05 + 0.5 + 0.05}, 
+    FLAGS_ppc);
 
   MpmConfigParams mpm_config;
   mpm_config.substep_dt = FLAGS_substep;

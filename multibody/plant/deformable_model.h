@@ -5,6 +5,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <array>
 
 #include "drake/common/eigen_types.h"
 #include "drake/common/identifier.h"
@@ -120,8 +121,8 @@ class DeformableModel final : public multibody::PhysicalModel<T> {
   }
 
   void RegisterMpmParticle(
-    const T minx[3],
-    const T maxx[3],
+    const std::array<T, 3> minx,
+    const std::array<T, 3> maxx,
     const T ppc
   ) {
     this->ThrowIfSystemResourcesDeclared(__func__);
