@@ -95,7 +95,8 @@ class DeformableModel final : public multibody::PhysicalModel<T> {
 
   void RegisterMpmParticle(
     const std::vector<Vector3<T>>& pos,
-    const std::vector<Vector3<T>>& vel
+    const std::vector<Vector3<T>>& vel,
+    const T& vol = gmpm::config::G_DX<T> * gmpm::config::G_DX<T> * gmpm::config::G_DX<T>
   ) {
     this->ThrowIfSystemResourcesDeclared(__func__);
     ThrowIfNotDouble(__func__);
@@ -114,6 +115,31 @@ class DeformableModel final : public multibody::PhysicalModel<T> {
       std::transform(pos.begin(), pos.end(), cpu_mpm_model_->pos.begin() + verts_offset, T2GpuT);
       cpu_mpm_model_->vel.resize(verts_offset + vel.size());
       std::transform(vel.begin(), vel.end(), cpu_mpm_model_->vel.begin() + verts_offset, T2GpuT);
+      cpu_mpm_model_->vol.insert(cpu_mpm_model_->vol.end(), pos.size(), GpuT(vol));
+    }
+  }
+
+  void RegisterMpmParticle(
+    const T minx[3],
+    const T maxx[3],
+    const T ppc
+  ) {
+    this->ThrowIfSystemResourcesDeclared(__func__);
+    ThrowIfNotDouble(__func__);
+    if constexpr (std::is_same_v<T, double>) {
+      using GpuT = gmpm::config::GpuT;
+      if (!ExistsMpmModel()) {
+        cpu_mpm_model_ = std::make_unique<gmpm::CpuMpmModel<GpuT>>();
+      }
+
+      GpuT gpuT_minx[3] = {GpuT(minx[0]), GpuT(minx[1]), GpuT(minx[2])};
+      GpuT gpuT_maxx[3] = {GpuT(maxx[0]), GpuT(maxx[1]), GpuT(maxx[2])};
+      const auto &pos = gmpm::sample_particle_mpm_box(gpuT_minx, gpuT_maxx, GpuT(ppc));
+      const GpuT vol = GpuT(maxx[0] - minx[0]) * GpuT(maxx[1] - minx[1]) * GpuT(maxx[2] - minx[2]) / GpuT(pos.size());
+      
+      cpu_mpm_model_->pos.insert(cpu_mpm_model_->pos.end(), pos.begin(), pos.end());
+      cpu_mpm_model_->vel.insert(cpu_mpm_model_->vel.end(), pos.size(), Vector3<GpuT>(0, 0, 0));
+      cpu_mpm_model_->vol.insert(cpu_mpm_model_->vol.end(), pos.size(), vol);
     }
   }
 

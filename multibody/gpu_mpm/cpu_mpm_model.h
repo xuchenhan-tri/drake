@@ -8,6 +8,12 @@
 #include "multibody/gpu_mpm/settings.h"
 #include "multibody/gpu_mpm/cuda_mpm_model.cuh"
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wold-style-cast"
+
+#include "multibody/gpu_mpm/tph_poisson.h"
+#pragma GCC diagnostic pop
+
 namespace drake {
 namespace multibody {
 namespace gmpm {
@@ -25,6 +31,53 @@ struct MpmConfigParams {
     bool exact_line_search {false};
 };
 
+template<typename T = config::GpuT>
+inline std::vector<Vec3<T>> sample_particle_mpm_box(const T minx[3], const T maxx[3], const T ppc) {
+    const tph_poisson_real bounds_min[3] = { 
+        static_cast<tph_poisson_real>(minx[0]), static_cast<tph_poisson_real>(minx[1]), static_cast<tph_poisson_real>(minx[2])
+    };
+    const tph_poisson_real bounds_max[3] = { 
+        static_cast<tph_poisson_real>(maxx[0]), static_cast<tph_poisson_real>(maxx[1]), static_cast<tph_poisson_real>(maxx[2])
+    };
+
+    const tph_poisson_real h = config::G_DX<T>;
+    const tph_poisson_real sample_r = h / (std::cbrt(tph_poisson_real(ppc)) + 1);
+    
+    const tph_poisson_args args = { 
+        .bounds_min = bounds_min,
+        .bounds_max = bounds_max,
+        .seed = UINT64_C(666),
+        .radius = sample_r,
+        .ndims = INT32_C(3),
+        .max_sample_attempts = UINT32_C(30)
+    };
+
+    const tph_poisson_allocator *alloc = NULL;
+    tph_poisson_sampling sampling;
+    memset(&sampling, 0, sizeof(tph_poisson_sampling));
+
+    const int ret = tph_poisson_create(&args, alloc, &sampling);
+    if (ret != TPH_POISSON_SUCCESS) {
+        throw;
+    }
+
+    const tph_poisson_real *samples = tph_poisson_get_samples(&sampling);
+    if (samples == NULL) {
+        throw;
+    }
+
+    std::vector<Vec3<T>> pts;
+    for (int i = 0; i < sampling.nsamples; ++i) {
+        pts.push_back(Vec3<T>(
+            T(samples[i * 3 + 0]),
+            T(samples[i * 3 + 1]),
+            T(samples[i * 3 + 2])
+        ));
+    }
+
+    return pts;
+}
+
 // NOTE(changyu): `CpuMpmModel` is responsive to store the initial config in `DeformableModel`,
 // (mesh topology, particle state, material/solver parameters, etc.),
 // and use them to initialize the `GpuMpmState` when all finalize.
@@ -34,7 +87,8 @@ struct CpuMpmModel {
     CpuMpmModel() = default;
     std::vector<Vec3<T>> pos;
     std::vector<Vec3<T>> vel;
-    std::vector<int> indices;
+    std::vector<T> vol; // only for particle-mpm
+    std::vector<int> indices; // only for cloth-mpm
 
     MpmConfigParams<T> config;
 };

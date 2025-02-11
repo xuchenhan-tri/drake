@@ -13,12 +13,9 @@ namespace gmpm {
 template<typename T>
 __global__ void initialize_particle_state_kernel(
     const size_t n_particles,
-    T *volumes,
     T *deformation_gradients) {
     uint32_t idx = threadIdx.x + blockDim.x * blockIdx.x;
     if (idx < n_particles) {
-        volumes[idx] = config::G_DX<T> * config::G_DX<T> * config::G_DX<T>;
-
         T *F = &deformation_gradients[idx * 9];
         F[0] = T(1.);
         F[1] = T(0.);

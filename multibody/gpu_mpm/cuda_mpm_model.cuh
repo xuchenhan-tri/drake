@@ -149,7 +149,8 @@ public:
     
     // NOTE (changyu): support particle MPM
     void AddParticleMpm(const std::vector<Vec3<T>> &pos, 
-                           const std::vector<Vec3<T>> &vel);
+                           const std::vector<Vec3<T>> &vel,
+                           const std::vector<T> &vol);
 
     // NOTE (changyu): finalize system configuration and initialize GPU MPM state, 
     // all gpu memory allocation should be done here to avoid re-allocation.    
@@ -240,6 +241,7 @@ private:
     // Particles state host ptrs
     std::vector<Vec3<T>> h_positions_;
     std::vector<Vec3<T>> h_velocities_;
+    std::vector<T> h_volumes_;
     std::vector<int> h_indices_;
 
     ExternalSpatialForce<T> h_external_forces_;

@@ -35,7 +35,8 @@ void GpuMpmState<T>::AddQRCloth(const std::vector<Vec3<T>> &pos,
 
 template<typename T>
 void GpuMpmState<T>::AddParticleMpm(const std::vector<Vec3<T>> &pos,
-                                    const std::vector<Vec3<T>> &vel) {
+                                    const std::vector<Vec3<T>> &vel,
+                                    const std::vector<T> &vol) {
     assert(n_faces_ == 0);
     is_particle_mpm_ = true;
 
@@ -43,6 +44,7 @@ void GpuMpmState<T>::AddParticleMpm(const std::vector<Vec3<T>> &pos,
 
     h_positions_.insert(h_positions_.end(), pos.begin(), pos.end());
     h_velocities_.insert(h_velocities_.end(), vel.begin(), vel.end());
+    h_volumes_.insert(h_volumes_.end(), vol.begin(), vol.end());
 
     n_particles_ += verts;
     n_verts_ += verts;
@@ -89,7 +91,11 @@ void GpuMpmState<T>::Finalize() {
                                       h_velocities_.data(), 
                                       sizeof(Vec3<T>) * n_particles_, 
                                       cudaMemcpyHostToDevice));
-            CUDA_SAFE_CALL(cudaMemset(particle_buffer_[i].d_volumes, 0, sizeof(T) * n_particles_));
+            if (is_particle_mpm_) {
+                CUDA_SAFE_CALL(cudaMemcpy(particle_buffer_[i].d_volumes, h_volumes_.data(), sizeof(T) * n_particles_, cudaMemcpyHostToDevice));
+            } else {
+                CUDA_SAFE_CALL(cudaMemset(particle_buffer_[i].d_volumes, 0, sizeof(T) * n_particles_));
+            }
             CUDA_SAFE_CALL(cudaMemset(particle_buffer_[i].d_affine_matrices, 0, sizeof(Mat3<T>) * n_particles_));
         }
     }
@@ -140,7 +146,7 @@ void GpuMpmState<T>::Finalize() {
         CUDA_SAFE_CALL((
             initialize_particle_state_kernel<<<
             (this->n_particles() + config::DEFAULT_CUDA_BLOCK_SIZE - 1) / config::DEFAULT_CUDA_BLOCK_SIZE, config::DEFAULT_CUDA_BLOCK_SIZE>>>
-            (this->n_particles(), this->current_volumes(), this->deformation_gradients())
+            (this->n_particles(), this->deformation_gradients())
             ));
     } else {
         CUDA_SAFE_CALL((

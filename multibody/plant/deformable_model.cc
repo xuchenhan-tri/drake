@@ -426,7 +426,7 @@ void DeformableModel<T>::DoDeclareSystemResources() {
     if (cpu_mpm_model_->indices.size() > 0) {
       mpm_state.AddQRCloth(cpu_mpm_model_->pos, cpu_mpm_model_->vel, cpu_mpm_model_->indices);
     } else {
-      mpm_state.AddParticleMpm(cpu_mpm_model_->pos, cpu_mpm_model_->vel);
+      mpm_state.AddParticleMpm(cpu_mpm_model_->pos, cpu_mpm_model_->vel, cpu_mpm_model_->vol);
     }
     mpm_state.Finalize();
     gpu_mpm_state_index_ = this->DeclareAbstractState(Value<gmpm::GpuMpmState<gmpm::config::GpuT>>(mpm_state));
