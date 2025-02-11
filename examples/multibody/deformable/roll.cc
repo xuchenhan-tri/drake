@@ -256,9 +256,8 @@ int do_main() {
                      &compliant_hydro_props);
   AddCompliantHydroelasticProperties(0.01, 1e6, &compliant_hydro_props);
 
-  RigidTransformd inner_rod_transform = FromXyzRpyDegree(
-      Vector3<double>(90, 0, 0), Vector3<double>(0.0, 0, 0.18));
-  unused(inner_rod_transform);
+  RigidTransformd X_ZR = FromXyzRpyDegree(
+       Vector3<double>(90, 0, 0), Vector3<double>(0.0, 0, 0.18));
 
   bool use_mpm_ground = false;
   if (!use_mpm_ground) {
@@ -304,9 +303,10 @@ int do_main() {
 
   multibody::Parser roller_parser(&plant, "roller");
   auto roller = roller_parser.AddModels(roller_filename)[0];
-  const RigidTransformd X_WB_ROLLER = FromXyzRpyDegree(Eigen::Vector3d(-90, 0, 0), Eigen::Vector3d(0.5, 0.5, 0.5 + 0.2));
+  const RigidTransformd X_WZ = RigidTransformd(Vector3d(0.5, 0.5, 0.5));
+  const RigidTransformd X_WR = X_WZ * X_ZR;
   const Body<double>& roller_body = plant.GetRigidBodyByName("handle", roller);
-   plant.SetDefaultFreeBodyPose(roller_body, X_WB_ROLLER);
+  plant.SetDefaultFreeBodyPose(roller_body, X_WR);
   unused(roller_filename, roller, compliant_hydro_props);
 
   RigidTransformd left_iiwa_position =
