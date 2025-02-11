@@ -177,15 +177,15 @@ class IiwaController : public drake::systems::LeafSystem<double> {
       double angle = (context.get_time() - 4.2) / rotation_time * 3.14159 / 6.0;
       double R = 0.22;
       if (is_left_) {
-        double desired_x = R * std::sin(angle);
-        double desired_y = R * std::cos(angle);
+        double desired_x = R * std::sin(angle) + 0.5;
+        double desired_y = R * std::cos(angle) + 0.5;
         dX(3) = desired_x - current_state_values(3);
         dX(4) = desired_y - current_state_values(4);
         double desired_z = -angle;
         dX(2) = desired_z - current_state_values(2);
       } else {
-        double desired_x = -R * std::sin(angle);
-        double desired_y = -R * std::cos(angle);
+        double desired_x = -R * std::sin(angle) + 0.5;
+        double desired_y = -R * std::cos(angle) + 0.5;
         dX(3) = desired_x - current_state_values(3);
         dX(4) = desired_y - current_state_values(4);
         double desired_z = 3.14 - angle;
