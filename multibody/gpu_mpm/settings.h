@@ -127,7 +127,7 @@ namespace config {
 	template<> constexpr double epsv<double> = 1e-3;
 
 	// Particle parameters
-#define PARTICLE_EXAMPLE 1 // dual_arm=0, roll=1, shake=3
+#define PARTICLE_EXAMPLE 1 // dual_arm=0, roll=1, shake=2
 #if PARTICLE_EXAMPLE == 0
 	template<class T> constexpr T PARTICLE_YIELD_STRESS;
 	template<> constexpr float PARTICLE_YIELD_STRESS<float> = 6e3f;
