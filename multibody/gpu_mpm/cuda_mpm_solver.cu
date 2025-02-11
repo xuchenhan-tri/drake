@@ -241,7 +241,8 @@ void GpuMpmSolver<T>::UpdateContact(GpuMpmState<T> *state, const int frame, cons
     
     const int max_newton_iterations = 2000;
     constexpr bool use_jacobi = true;
-    const T kTol = 1e-4;
+    const T kRelTol = 1e-4;
+    const T kAbsTol = 1e-4;
 
     bool enable_line_search = true;
     const T jacobi_relax_coeff = 0.3;
@@ -279,7 +280,8 @@ void GpuMpmSolver<T>::UpdateContact(GpuMpmState<T> *state, const int frame, cons
         state->grid_masses(), state->grid_momentum(), dt)
         ));
 
-    while (norm_dir > kTol && count < max_newton_iterations) {
+    T norm_dir_initial = 0.001;
+    while (norm_dir > kAbsTol && norm_dir / norm_dir_initial > kRelTol && count < max_newton_iterations) {
         long long before_ts = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
         CUDA_SAFE_CALL(cudaMemset(norm_dir_d, 0, sizeof(T)));
         CUDA_SAFE_CALL(cudaMemset(global_E0_d, 0, sizeof(T)));
@@ -575,6 +577,9 @@ void GpuMpmSolver<T>::UpdateContact(GpuMpmState<T> *state, const int frame, cons
         CUDA_SAFE_CALL(cudaDeviceSynchronize());
         CUDA_SAFE_CALL(cudaMemcpy(&norm_dir, norm_dir_d, sizeof(T), cudaMemcpyDeviceToHost));
         norm_dir = sqrt(norm_dir) / grid_DoFs;
+        if (count == 0) {
+            norm_dir_initial = norm_dir;
+        }
         count += 1;
         // throw;
         long long after_ts = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
