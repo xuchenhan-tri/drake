@@ -35,12 +35,8 @@ DEFINE_double(ppc, 0.001, "MPM Particle-Per-Cell.");
 DEFINE_double(realtime_rate, 1.0, "Desired real time rate.");
 DEFINE_double(time_step, 1e-2,
               "Discrete time step for the system [s]. Must be positive.");
-DEFINE_double(substep, 1e-4,
+DEFINE_double(substep, 5e-4,
               "Discrete time step for the substepping scheme [s]. Must be positive.");
-DEFINE_string(contact_approximation, "sap",
-              "Type of convex contact approximation. See "
-              "multibody::DiscreteContactApproximation for details. Options "
-              "are: 'sap', 'lagged', and 'similar'.");
 
 DEFINE_double(stiffness, 1e3, "Contact Stiffness.");
 DEFINE_double(friction, 1.0, "Contact Friction.");
