@@ -113,54 +113,44 @@ void GpuMpmSolver<T>::ParticleToGrid(GpuMpmState<T> *state, const T& dt) const {
 }
 
 template<typename T>
-void GpuMpmSolver<T>::UpdateGrid(GpuMpmState<T> *state, int mpm_bc) const {
-    // NOTE (changyu): we gather the grid block that are really touched
-    CUDA_SAFE_CALL(cudaMemset(state->grid_touched_cnt(), 0, sizeof(uint32_t)));
-    CUDA_SAFE_CALL((
-        gather_touched_grid_kernel<T, config::DEFAULT_CUDA_BLOCK_SIZE><<<
-        (config::G_GRID_VOLUME + config::DEFAULT_CUDA_BLOCK_SIZE - 1) / config::DEFAULT_CUDA_BLOCK_SIZE, config::DEFAULT_CUDA_BLOCK_SIZE>>>
-        (state->grid_touched_flags(), state->grid_touched_ids(), state->grid_touched_cnt(), state->grid_masses())
-        ));
+void GpuMpmSolver<T>::UpdateGrid(GpuMpmState<T> *state, int mpm_bc, bool enforce_bc_only) const {
+    if (!enforce_bc_only) {
+        // NOTE (changyu): we gather the grid block that are really touched
+        CUDA_SAFE_CALL(cudaMemset(state->grid_touched_cnt(), 0, sizeof(uint32_t)));
+        CUDA_SAFE_CALL((
+            gather_touched_grid_kernel<T, config::DEFAULT_CUDA_BLOCK_SIZE><<<
+            (config::G_GRID_VOLUME + config::DEFAULT_CUDA_BLOCK_SIZE - 1) / config::DEFAULT_CUDA_BLOCK_SIZE, config::DEFAULT_CUDA_BLOCK_SIZE>>>
+            (state->grid_touched_flags(), state->grid_touched_ids(), state->grid_touched_cnt(), state->grid_masses())
+            ));
+    }
 
     const uint32_t &touched_blocks_cnt = state->grid_touched_cnt_host();
     const uint32_t &touched_cells_cnt = touched_blocks_cnt * config::G_BLOCK_VOLUME;
 
-    if (mpm_bc == 0) {
-        CUDA_SAFE_CALL((
-            update_grid_kernel<T, 0><<<
-            (touched_cells_cnt + config::DEFAULT_CUDA_BLOCK_SIZE - 1) / config::DEFAULT_CUDA_BLOCK_SIZE, config::DEFAULT_CUDA_BLOCK_SIZE>>>
-            (touched_cells_cnt, state->grid_touched_ids(), state->grid_masses(), state->grid_momentum(), state->grid_v_star())
-            ));
-    } else if (mpm_bc == 1) {
-        CUDA_SAFE_CALL((
-            update_grid_kernel<T, 1><<<
-            (touched_cells_cnt + config::DEFAULT_CUDA_BLOCK_SIZE - 1) / config::DEFAULT_CUDA_BLOCK_SIZE, config::DEFAULT_CUDA_BLOCK_SIZE>>>
-            (touched_cells_cnt, state->grid_touched_ids(), state->grid_masses(), state->grid_momentum(), state->grid_v_star())
-            ));
-    } else if (mpm_bc == 2) {
-        CUDA_SAFE_CALL((
-            update_grid_kernel<T, 2><<<
-            (touched_cells_cnt + config::DEFAULT_CUDA_BLOCK_SIZE - 1) / config::DEFAULT_CUDA_BLOCK_SIZE, config::DEFAULT_CUDA_BLOCK_SIZE>>>
-            (touched_cells_cnt, state->grid_touched_ids(), state->grid_masses(), state->grid_momentum(), state->grid_v_star())
-            ));
-    } else if (mpm_bc == 3) {
-        CUDA_SAFE_CALL((
-            update_grid_kernel<T, 3><<<
-            (touched_cells_cnt + config::DEFAULT_CUDA_BLOCK_SIZE - 1) / config::DEFAULT_CUDA_BLOCK_SIZE, config::DEFAULT_CUDA_BLOCK_SIZE>>>
-            (touched_cells_cnt, state->grid_touched_ids(), state->grid_masses(), state->grid_momentum(), state->grid_v_star())
-            ));
-    } else if (mpm_bc == 111) {
-        CUDA_SAFE_CALL((
-            update_grid_kernel<T, 111><<<
-            (touched_cells_cnt + config::DEFAULT_CUDA_BLOCK_SIZE - 1) / config::DEFAULT_CUDA_BLOCK_SIZE, config::DEFAULT_CUDA_BLOCK_SIZE>>>
-            (touched_cells_cnt, state->grid_touched_ids(), state->grid_masses(), state->grid_momentum(), state->grid_v_star())
-            ));
-    } else {
-        CUDA_SAFE_CALL((
-            update_grid_kernel<T, -1><<<
-            (touched_cells_cnt + config::DEFAULT_CUDA_BLOCK_SIZE - 1) / config::DEFAULT_CUDA_BLOCK_SIZE, config::DEFAULT_CUDA_BLOCK_SIZE>>>
-            (touched_cells_cnt, state->grid_touched_ids(), state->grid_masses(), state->grid_momentum(), state->grid_v_star())
-            ));
+    #define GRID_OP_WITH_BC(MPM_BC, ENFORCE_BC_ONLY) \
+    else if (mpm_bc == MPM_BC) { \
+        CUDA_SAFE_CALL(( \
+            update_grid_kernel<T, MPM_BC, ENFORCE_BC_ONLY><<< \
+            (touched_cells_cnt + config::DEFAULT_CUDA_BLOCK_SIZE - 1) / config::DEFAULT_CUDA_BLOCK_SIZE, config::DEFAULT_CUDA_BLOCK_SIZE \
+            >>>(touched_cells_cnt, state->grid_touched_ids(), state->grid_masses(), state->grid_momentum(), state->grid_v_star()) \
+        )); \
+    }
+    
+    if (enforce_bc_only) {
+        if (false) {}
+        GRID_OP_WITH_BC(1, true)
+        GRID_OP_WITH_BC(2, true)
+        GRID_OP_WITH_BC(3, true)
+        GRID_OP_WITH_BC(111, true)
+        GRID_OP_WITH_BC(-1, true)
+    }
+    else {
+        if (false) {}
+        GRID_OP_WITH_BC(1, false)
+        GRID_OP_WITH_BC(2, false)
+        GRID_OP_WITH_BC(3, false)
+        GRID_OP_WITH_BC(111, false)
+        GRID_OP_WITH_BC(-1, false)
     }
 }
 

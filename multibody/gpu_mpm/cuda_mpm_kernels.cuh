@@ -769,7 +769,7 @@ __global__ void clean_grid_contact_kernel(
     }
 }
 
-template<typename T, int MPM_BOUNDARY_CONDITION=-1>
+template<typename T, int MPM_BOUNDARY_CONDITION=-1, bool ENFORCE_BC_ONLY=false>
 __global__ void update_grid_kernel(
     const uint32_t touched_cells_cnt,
     uint32_t* g_touched_ids,
@@ -782,10 +782,13 @@ __global__ void update_grid_kernel(
         uint32_t cell_idx = (block_idx << (config::G_BLOCK_BITS * 3)) | (idx & config::G_BLOCK_VOLUME_MASK);
         if (g_masses[cell_idx] > T(0.)) {
             T *g_vel = &g_momentum[cell_idx * 3];
-            // printf("m=%lf mv=(%lf %lf %lf)\n", g_masses[cell_idx], g_vel[0], g_vel[1], g_vel[2]);
-            g_vel[0] /= g_masses[cell_idx];
-            g_vel[1] /= g_masses[cell_idx];
-            g_vel[2] /= g_masses[cell_idx];
+
+            if constexpr (!ENFORCE_BC_ONLY) {
+                // printf("m=%lf mv=(%lf %lf %lf)\n", g_masses[cell_idx], g_vel[0], g_vel[1], g_vel[2]);
+                g_vel[0] /= g_masses[cell_idx];
+                g_vel[1] /= g_masses[cell_idx];
+                g_vel[2] /= g_masses[cell_idx];
+            }
 
             // apply boundary condition
             const int boundary_condition = config::G_BOUNDARY_CONDITION;
@@ -943,9 +946,11 @@ __global__ void update_grid_kernel(
                 }
             }
 
-            g_v_star[cell_idx * 3 + 0] = g_vel[0];
-            g_v_star[cell_idx * 3 + 1] = g_vel[1];
-            g_v_star[cell_idx * 3 + 2] = g_vel[2];
+            if constexpr (!ENFORCE_BC_ONLY) {
+                g_v_star[cell_idx * 3 + 0] = g_vel[0];
+                g_v_star[cell_idx * 3 + 1] = g_vel[1];
+                g_v_star[cell_idx * 3 + 2] = g_vel[2];
+            }
         }
     }
 }
