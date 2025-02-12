@@ -41,7 +41,7 @@ DEFINE_bool(write_files, false, "Enable dumping MPM data to files.");
 DEFINE_double(simulation_time, 5.0, "Desired duration of the simulation [s].");
 DEFINE_int32(res, 5000, "MPM Particle Number.");
 DEFINE_double(realtime_rate, 1.0, "Desired real time rate.");
-DEFINE_double(time_step, 1e-2,
+DEFINE_double(time_step, 1e-3,
               "Discrete time step for the system [s]. Must be positive.");
 DEFINE_double(substep, 1e-4,
               "Discrete time step for the substepping scheme [s]. Must be positive.");
@@ -50,7 +50,7 @@ DEFINE_string(contact_approximation, "sap",
               "multibody::DiscreteContactApproximation for details. Options "
               "are: 'sap', 'lagged', and 'similar'.");
 
-DEFINE_double(stiffness, 1e6, "Contact Stiffness.");
+DEFINE_double(stiffness, 1e4, "Contact Stiffness.");
 DEFINE_double(friction, 1.0, "Contact Friction.");
 DEFINE_double(damping, 1.0,
     "Hunt and Crossley damping for the deformable body, only used when "
