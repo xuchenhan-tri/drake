@@ -46,7 +46,7 @@ namespace config {
 	template<> constexpr double GRID_BLOCK_SPACING<double> = 1.;
 
 	constexpr int BLOCK_BITS			 = 2; // BLOCK 4x4x4
-	constexpr int DOMAIN_BITS			 = 7; // GRID  128x128x128
+	constexpr int DOMAIN_BITS			 = 5; // GRID  128x128x128
 	template<class T> constexpr T DXINV	 = (GRID_BLOCK_SPACING<T> * (1 << DOMAIN_BITS));
 
 	constexpr int G_DOMAIN_BITS			 = DOMAIN_BITS;
@@ -108,8 +108,8 @@ namespace config {
 	// for three-clothes demo, SDF_FRICTION=0.3
 	// for other demos, SDF_FRICTION=1.0
 	template<class T> constexpr T SDF_FRICTION;
-	template<> constexpr float SDF_FRICTION<float> = 0.8f;
-	template<> constexpr double SDF_FRICTION<double> = 0.8;
+	template<> constexpr float SDF_FRICTION<float> = 1.0f;
+	template<> constexpr double SDF_FRICTION<double> = 1.0;
 
 	// Lame parameters
 	template<class T> constexpr T MU = YOUNGS_MODULUS<T> / (T(2.) * (T(1.) + POISSON_RATIO<T>));
