@@ -149,6 +149,12 @@ void GpuMpmSolver<T>::UpdateGrid(GpuMpmState<T> *state, int mpm_bc) const {
             (touched_cells_cnt + config::DEFAULT_CUDA_BLOCK_SIZE - 1) / config::DEFAULT_CUDA_BLOCK_SIZE, config::DEFAULT_CUDA_BLOCK_SIZE>>>
             (touched_cells_cnt, state->grid_touched_ids(), state->grid_masses(), state->grid_momentum(), state->grid_v_star())
             ));
+    } else if (mpm_bc == 111) {
+        CUDA_SAFE_CALL((
+            update_grid_kernel<T, 111><<<
+            (touched_cells_cnt + config::DEFAULT_CUDA_BLOCK_SIZE - 1) / config::DEFAULT_CUDA_BLOCK_SIZE, config::DEFAULT_CUDA_BLOCK_SIZE>>>
+            (touched_cells_cnt, state->grid_touched_ids(), state->grid_masses(), state->grid_momentum(), state->grid_v_star())
+            ));
     } else {
         CUDA_SAFE_CALL((
             update_grid_kernel<T, -1><<<

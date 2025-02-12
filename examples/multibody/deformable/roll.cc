@@ -31,7 +31,7 @@
 DEFINE_bool(write_files, false, "Enable dumping MPM data to files.");
 DEFINE_double(simulation_time, 10.0, "Desired duration of the simulation [s].");
 DEFINE_int32(testcase, 0, "Test Case.");
-DEFINE_double(ppc, 0.001, "MPM Particle-Per-Cell.");
+DEFINE_double(ppc, 8.0, "MPM Particle-Per-Cell.");
 DEFINE_double(realtime_rate, 1.0, "Desired real time rate.");
 DEFINE_double(time_step, 1e-2,
               "Discrete time step for the system [s]. Must be positive.");
@@ -255,7 +255,7 @@ int do_main() {
   RigidTransformd X_ZR = FromXyzRpyDegree(
        Vector3<double>(90, 0, 0), Vector3<double>(0.0, 0, 0.18));
 
-  bool use_mpm_ground = false;
+  bool use_mpm_ground = true;
   if (!use_mpm_ground) {
     /* Set up a ground. */
     ProximityProperties rigid_proximity_props;
@@ -271,8 +271,13 @@ int do_main() {
   }
 
   multibody::Parser ground_parser(&plant, "ground");
-  auto table = ground_parser.AddModels(PackageMap{}.ResolveUrl(
-            "package://drake_models/manipulation_station/table_wide.sdf"))[0];
+
+  // NOTE (changyu): disable collision for it, only need visual
+//   auto table = ground_parser.AddModels(PackageMap{}.ResolveUrl(
+//             "package://drake_models/manipulation_station/table_wide.sdf"))[0];
+//     plant.WeldFrames(plant.world_frame(),
+//                     plant.GetBodyByName("table_body", table).body_frame(),
+//                     RigidTransformd(Eigen::Vector3d(0.5, 0.5, 0.5)));
 
   // plant.mutable_gravity_field().set_gravity_vector(Eigen::Vector3d::Zero());
   multibody::Parser left_parser(&plant, "left");
@@ -310,9 +315,6 @@ int do_main() {
   RigidTransformd right_iiwa_position =
       FromXyzRpyDegree(Eigen::Vector3d(0, 0, 90), Eigen::Vector3d(0 + 0.5, -0.8 + 0.5, 0 + 0.5));
   plant.WeldFrames(plant.world_frame(),
-                   plant.GetBodyByName("table_body", table).body_frame(),
-                   RigidTransformd(Eigen::Vector3d(0.5, 0.5, 0.5)));
-  plant.WeldFrames(plant.world_frame(),
                    plant.GetBodyByName("iiwa_link_0", left_iiwa).body_frame(),
                    left_iiwa_position);
   plant.WeldFrames(plant.world_frame(),
@@ -349,6 +351,9 @@ int do_main() {
   mpm_config.contact_damping = FLAGS_damping;
   mpm_config.contact_friction_mu = FLAGS_friction;
   mpm_config.exact_line_search = FLAGS_exact_line_search;
+  if (use_mpm_ground) {
+    mpm_config.mpm_bc = 111;
+  }
   deformable_model.SetMpmConfig(std::move(mpm_config));
 
   double Kp = 1e6;
@@ -531,7 +536,7 @@ int do_main() {
     simulator.AdvanceTo(FLAGS_simulation_time);
     meshcat->StopRecording();
     meshcat->PublishRecording();
-    std::ofstream htmlFile("/home/xuchenhan/drake/roll.html");
+    std::ofstream htmlFile("/home/changyu/drake/roll.html");
     htmlFile << meshcat->StaticHtml();
     htmlFile.close();
   } else {
