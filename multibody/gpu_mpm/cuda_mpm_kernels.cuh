@@ -368,8 +368,8 @@ __global__ void calc_particle_state_and_force_kernel(
 
             T epsilon[3] = {
                 log(sigma[0]),
-                log(sigma[1]),
-                log(sigma[2])
+                log(sigma[4]),
+                log(sigma[8])
             };
 
             T trace_epsilon = epsilon[0] + epsilon[1] + epsilon[2];
