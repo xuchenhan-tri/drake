@@ -275,6 +275,10 @@ int do_main() {
       "drake/examples/multibody/deformable/"
       "models/table_wide.sdf");
   auto table = ground_parser.AddModels(table_file)[0];
+  plant.WeldFrames(plant.world_frame(),
+                   plant.GetBodyByName("table_body", table).body_frame(),
+                    RigidTransformd(Eigen::Vector3d(0.5, 0.5, 0.5)));
+
 
   // plant.mutable_gravity_field().set_gravity_vector(Eigen::Vector3d::Zero());
   multibody::Parser left_parser(&plant, "left");
