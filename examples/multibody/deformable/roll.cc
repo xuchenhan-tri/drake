@@ -271,13 +271,10 @@ int do_main() {
   }
 
   multibody::Parser ground_parser(&plant, "ground");
-
-  // NOTE (changyu): disable collision for it, only need visual
-//   auto table = ground_parser.AddModels(PackageMap{}.ResolveUrl(
-//             "package://drake_models/manipulation_station/table_wide.sdf"))[0];
-//     plant.WeldFrames(plant.world_frame(),
-//                     plant.GetBodyByName("table_body", table).body_frame(),
-//                     RigidTransformd(Eigen::Vector3d(0.5, 0.5, 0.5)));
+  const std::string table_file = FindResourceOrThrow(
+      "drake/examples/multibody/deformable/"
+      "models/table_wide.sdf");
+  auto table = ground_parser.AddModels(table_file)[0];
 
   // plant.mutable_gravity_field().set_gravity_vector(Eigen::Vector3d::Zero());
   multibody::Parser left_parser(&plant, "left");
