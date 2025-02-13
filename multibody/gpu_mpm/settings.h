@@ -34,7 +34,7 @@ template<typename T> using Vec2 = Eigen::Vector<T, 2>;
 template<typename T> using Mat2 = Eigen::Matrix<T, 2, 2>;
 
 namespace config {
-	using GpuT = float;
+	using GpuT = double;
 
     // cuda device
     constexpr int G_DEVICE_COUNT = 1;
@@ -123,8 +123,8 @@ namespace config {
 	template<> constexpr double GRAVITY<double> = -9.8;
 
 	template<class T> constexpr T epsv;
-	template<> constexpr float epsv<float> = 1e-3f;
-	template<> constexpr double epsv<double> = 1e-3;
+	template<> constexpr float epsv<float> = 1e-4f;
+	template<> constexpr double epsv<double> = 1e-4;
 
 	// Particle parameters
 #define PARTICLE_EXAMPLE 1 // dual_arm=0, roll=1, shake=2
