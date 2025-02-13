@@ -234,19 +234,25 @@ void GpuMpmSolver<T>::UpdateContact(GpuMpmState<T> *state, const int frame, cons
         (n_contacts + config::DEFAULT_CUDA_BLOCK_SIZE - 1) / config::DEFAULT_CUDA_BLOCK_SIZE, config::DEFAULT_CUDA_BLOCK_SIZE>>>
         (n_contacts, state->contact_pos(), state->contact_sort_keys(), state->contact_sort_ids())
         ));
-    
+
+    // If we don't converge in 2000 iterations, we probably will never converge anyway...    
     const int max_newton_iterations = 2000;
     constexpr bool use_jacobi = true;
     const T kRelTol = 1e-4;
-    const T kAbsTol = 1e-4;
+    // Set the absolute tolerance close to machine epsilon so that we almost always exit based on the relative tolerance.
+    const T kAbsTol = 16 * std::numeric_limits<T>::epsilon();
 
     bool enable_line_search = true;
     const T jacobi_relax_coeff = 0.3;
     const bool global_line_search = use_jacobi;
     int count = 0;
 
+    // norm_dir is the l2 norm of the search direction.
+    // norm_impulse is the sum of the l2 norm of the genelized impulse and generalized momentum.
     T norm_dir = 1e10;
+    T norm_impulse = 1e10;
     T *norm_dir_d = nullptr;
+    T *norm_impulse_d = nullptr;
     T global_E0 = T(0.);
     T *global_E0_d = nullptr;
     T global_E1 = T(0.);
@@ -260,6 +266,7 @@ void GpuMpmSolver<T>::UpdateContact(GpuMpmState<T> *state, const int frame, cons
     uint32_t solved_grid_DoFs = 0;
     uint32_t *solved_grid_DoFs_d = nullptr;
     CUDA_SAFE_CALL(cudaMalloc(&norm_dir_d, sizeof(T)));
+    CUDA_SAFE_CALL(cudaMalloc(&norm_impulse_d, sizeof(T)));
     CUDA_SAFE_CALL(cudaMalloc(&total_grid_DoFs_d, sizeof(uint32_t)));
     CUDA_SAFE_CALL(cudaMalloc(&solved_grid_DoFs_d, sizeof(uint32_t)));
     CUDA_SAFE_CALL(cudaMalloc(&global_E0_d, sizeof(T)));
@@ -276,10 +283,14 @@ void GpuMpmSolver<T>::UpdateContact(GpuMpmState<T> *state, const int frame, cons
         state->grid_masses(), state->grid_momentum(), dt)
         ));
 
-    T norm_dir_initial = 0.001;
-    while (norm_dir > kAbsTol && norm_dir / norm_dir_initial > kRelTol && count < max_newton_iterations) {
+    // Choose an arbitrary small number as the initial norm so that we can enter the loop.
+    // `norm_dir_initial` and `norm_impulse_initial` will be set to the initial norm values after the first iteration.
+    T norm_dir_initial = 1e-8;
+    T norm_impulse_initial = 1e-8;
+    while (norm_dir > (kAbsTol + kRelTol * norm_impulse_initial) && count < max_newton_iterations) {
         long long before_ts = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
         CUDA_SAFE_CALL(cudaMemset(norm_dir_d, 0, sizeof(T)));
+        CUDA_SAFE_CALL(cudaMemset(norm_impulse_d, 0, sizeof(T)));
         CUDA_SAFE_CALL(cudaMemset(global_E0_d, 0, sizeof(T)));
         CUDA_SAFE_CALL(cudaMemset(global_E1_d, 0, sizeof(T)));
         grid_DoFs = 0;
@@ -319,7 +330,7 @@ void GpuMpmSolver<T>::UpdateContact(GpuMpmState<T> *state, const int frame, cons
                 (touched_cells_cnt, state->grid_touched_ids(), state->grid_masses(),
                 state->grid_v_star(), state->grid_Hess(), state->grid_Grad(), state->grid_momentum(), state->grid_Dir(),
                 state->grid_alpha(), state->grid_E0(), state->grid_E1(),
-                norm_dir_d, total_grid_DoFs_d, color_mask, jacobi_relax_coeff)
+                norm_dir_d, norm_impulse_d, total_grid_DoFs_d, color_mask, jacobi_relax_coeff)
                 ));
             CUDA_SAFE_CALL(cudaDeviceSynchronize());
             CUDA_SAFE_CALL(cudaMemcpy(&total_grid_DoFs, total_grid_DoFs_d, sizeof(uint32_t), cudaMemcpyDeviceToHost));
@@ -386,7 +397,7 @@ void GpuMpmSolver<T>::UpdateContact(GpuMpmState<T> *state, const int frame, cons
             // is robust with small changes in performances (about 30%). We then choose a
             // safe tolerance far enough from the lower limit (close to machine epsilon)
             // and the upper limit (close to an inexact method).
-            const T f_tolerance = T(1e-8);
+            const T f_tolerance = std::numeric_limits<T>::epsilon();
             // NOTE (changyu): for exact line search, take jacobi_relax_coeff as alpha_guess
             const T x_tolerance = f_tolerance * jacobi_relax_coeff; // alpha_tolerance = f_tolerance * alpha_guess;
             T global_alpha = T(1.);
@@ -443,7 +454,7 @@ void GpuMpmSolver<T>::UpdateContact(GpuMpmState<T> *state, const int frame, cons
                     }
 
                     // Exit if f(root) is close to zero.
-                    if (abs(std::get<1>(f_root)) < f_tolerance || line_search_cnt > 50) {
+                    if (abs(std::get<1>(f_root)) < f_tolerance) {
                         global_line_search_satisfied = true;
                     }
 
@@ -572,9 +583,12 @@ void GpuMpmSolver<T>::UpdateContact(GpuMpmState<T> *state, const int frame, cons
 
         CUDA_SAFE_CALL(cudaDeviceSynchronize());
         CUDA_SAFE_CALL(cudaMemcpy(&norm_dir, norm_dir_d, sizeof(T), cudaMemcpyDeviceToHost));
-        norm_dir = sqrt(norm_dir) / grid_DoFs;
+        CUDA_SAFE_CALL(cudaMemcpy(&norm_impulse, norm_impulse_d, sizeof(T), cudaMemcpyDeviceToHost));
+        norm_dir = sqrt(norm_dir);
+        norm_impulse = sqrt(norm_impulse);
         if (count == 0) {
             norm_dir_initial = norm_dir;
+            norm_impulse_initial = norm_impulse;
         }
         count += 1;
         // throw;
@@ -584,11 +598,15 @@ void GpuMpmSolver<T>::UpdateContact(GpuMpmState<T> *state, const int frame, cons
     }
     // throw;
     std::cout << "Iteration count :" <<  count 
-              << ", tol: " << norm_dir 
+              << ", residual: " << norm_dir 
+              << ", relative tol: " << kRelTol * norm_impulse_initial
               << ", n_contacts " << n_contacts 
               << ", grid_DoFs " << grid_DoFs 
               << ", line_search_cnt_aver " << static_cast<T>(std::accumulate(s_line_search_cnts.begin(), s_line_search_cnts.end(), 0)) / s_line_search_cnts.size()
               << std::endl;
+    if (count == max_newton_iterations) {
+        std::cout << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!Newton iterations did not converge!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
+    }
     CUDA_SAFE_CALL(cudaFree(norm_dir_d));
     CUDA_SAFE_CALL(cudaFree(total_grid_DoFs_d));
     CUDA_SAFE_CALL(cudaFree(solved_grid_DoFs_d));

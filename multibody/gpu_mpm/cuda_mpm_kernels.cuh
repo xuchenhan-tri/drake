@@ -356,8 +356,16 @@ __global__ void calc_particle_state_and_force_kernel(
         }
 
         // NOTE, TODO (changyu): currently svd only supports float, all set float here
+        float Uf[9], sigmaf[9], Vf[9];
+        ssvd3x3<float>(new_F, Uf, sigmaf, Vf);
+         
         T U[9], sigma[9], V[9];
-        ssvd3x3<T>(new_F, U, sigma, V);
+        #pragma unroll
+        for (int i = 0; i < 9; ++i) {
+            U[i] = Uf[i];
+            sigma[i] = sigmaf[i];
+            V[i] = Vf[i];
+        }
 
         if constexpr(PLASTICITY) {
             T b_trial[3] = {
@@ -1416,6 +1424,7 @@ __global__ void update_grid_contact_coordinate_descent_kernel(
     T* g_E0,
     T* g_E1,
     T* norm_dir,
+    T* norm_impulse,
     uint32_t* total_grid_DoFs,
     const uint32_t g_color_mask,
     const T jacobi_relax_coeff) {
@@ -1430,11 +1439,30 @@ __global__ void update_grid_contact_coordinate_descent_kernel(
             T* local_Hess = &g_Hess[cell_idx * 9];
             T* local_Grad = &g_Grad[cell_idx * 3];
             T* local_Dir = &g_Dir[cell_idx * 3];
+            T sqrt_mass = sqrt(mass);
 
             // M + J^T * G * J
             local_Hess[0] += mass;
             local_Hess[4] += mass;
             local_Hess[8] += mass;
+
+            // TODO(xuchenhan-tri): We only need to compute the norm of the scaled impulse and momentum
+            //  at the first iteration.
+            // We scale the impulse and momentum by the square root of the mass following the original SAP paper.
+            T scaled_impulse[3] = {
+                -local_Grad[0] / sqrt_mass,
+                -local_Grad[1] / sqrt_mass,
+                -local_Grad[2] / sqrt_mass
+            };
+            T scaled_momentum[3] = {
+                sqrt_mass * g_vel[0],
+                sqrt_mass * g_vel[1],
+                sqrt_mass * g_vel[2]
+            };
+            // Instead of taking the max between the impulse scale and the momentum scale, we sum them.
+            // This is differs from the result from using max by at most a factor of 2.
+            T  momentum_scale = norm_sqr<3>(&scaled_momentum[0]) + norm_sqr<3>(&scaled_impulse[0]);
+            atomicAdd(norm_impulse, momentum_scale);
 
             // M (v - v*) - J^T * γ
             local_Grad[0] += mass * (g_vel[0] - g_v_star[cell_idx * 3 + 0]);
@@ -1448,6 +1476,12 @@ __global__ void update_grid_contact_coordinate_descent_kernel(
                 -local_Grad[2]
             };
 
+            T scaled_grad[3] = {
+                local_Grad[0] / sqrt_mass,
+                local_Grad[1] / sqrt_mass,
+                local_Grad[2] / sqrt_mass
+            };
+
             // Optimization problem for minimizing ℓ(v_i):
             // min_{v_i} ℓ(v_i) = (1/2) * ||v_i - v_i^*||_M^2 + ℓ_c(v_p(v_i))
             // M * (v_{n+1}^i - v_i^*) = J^T * γ(v_p(v_{n+1}^i))
@@ -1457,7 +1491,7 @@ __global__ void update_grid_contact_coordinate_descent_kernel(
             cholesky_solve3(local_Hess, negative_local_Grad, local_Dir);
 
             // stop criterion
-            atomicAdd(norm_dir, norm_sqr<3>(local_Dir));
+            atomicAdd(norm_dir, norm_sqr<3>(&scaled_grad[0]));
             atomicAdd(total_grid_DoFs, 1U);
 
             // NOTE(changyu): enable it to add relaxation factor
