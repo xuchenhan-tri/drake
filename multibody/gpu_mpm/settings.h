@@ -77,10 +77,11 @@ namespace config {
 	template<> constexpr float POISSON_RATIO<float> = .3f;
 	template<> constexpr double POISSON_RATIO<double> = .3;
 
-	// shake using 15000
+	// shake use 100
+	// roll use 1000
 	template<class T> constexpr T DENSITY;
-	template<> constexpr float DENSITY<float> = 1000.f;
-	template<> constexpr double DENSITY<double> = 1000.;
+	template<> constexpr float DENSITY<float> = 100.f;
+	template<> constexpr double DENSITY<double> = 100.;
 
 	template<class T> constexpr T GAMMA;
 	template<> constexpr float GAMMA<float> = 0.f;
@@ -123,11 +124,11 @@ namespace config {
 	template<> constexpr double GRAVITY<double> = -9.8;
 
 	template<class T> constexpr T epsv;
-	template<> constexpr float epsv<float> = 1e-4f;
-	template<> constexpr double epsv<double> = 1e-4;
+	template<> constexpr float epsv<float> = 1e-3f;
+	template<> constexpr double epsv<double> = 1e-3;
 
 	// Particle parameters
-#define PARTICLE_EXAMPLE 1 // dual_arm=0, roll=1, shake=2
+#define PARTICLE_EXAMPLE 2 // dual_arm=0, roll=1, shake=2
 #if PARTICLE_EXAMPLE == 0
 	template<class T> constexpr T PARTICLE_YIELD_STRESS;
 	template<> constexpr float PARTICLE_YIELD_STRESS<float> = 6e3f;
