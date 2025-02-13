@@ -2392,17 +2392,12 @@ void MultibodyPlant<T>::AddAppliedExternalSpatialForces(
       const RigidBody<T>& body = get_body(body_index);
       const auto body_mobod_index = body.mobod_index();
 
-      // Get the pose for this body in the world frame.
-      // const RigidTransform<T>& X_WB = EvalBodyPoseInWorld(context, body);
-
-      // Get the position vector from the body origin (Bo) to the point of
-      // force application (Bq), expressed in the world frame (W).
-      // const Vector3<T> p_BoBq_W = X_WB.rotation() * mpm_rigid_forces.p_BoBq_B[i].template cast<T>();
-
-      // Shift the spatial force from Bq to Bo.
+      // The MpmModel always report the spatial force on the rigid body such
+      // that the point of application is at the body's origin, and the
+      // expressed in frame is the world frame. So we can directly add
+      // to the external forces list without transform.
       F_BBo_W_array[body_mobod_index] += SpatialForce<T>(
         mpm_state.external_forces_host().F_Bq_W_tau[i].template cast<T>(), 
-        //mpm_state.external_forces_host().F_Bq_W_f[i].template cast<T>()).Shift(-p_BoBq_W);
         mpm_state.external_forces_host().F_Bq_W_f[i].template cast<T>());
     }
   }
