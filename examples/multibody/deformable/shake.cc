@@ -27,12 +27,8 @@
 #include "drake/systems/framework/diagram_builder.h"
 
 DEFINE_double(E, 5e5, "Young's modulus of the deformable body [Pa].");
-DEFINE_double(rho, 100, "density.");
+DEFINE_double(rho, 15000, "density of the rigid box.");
 DEFINE_double(nu, 0.4, "Poisson's ratio of the deformable body, unitless.");
-DEFINE_double(density, 1e3,
-              "Mass density of the deformable body [kg/m³]. We observe that "
-              "density above 2400 kg/m³ makes the torus too heavy to be picked "
-              "up by the suction gripper.");
 DEFINE_double(beta, 0.01,
               "Stiffness damping coefficient for the deformable body [1/s].");
 DEFINE_double(hydro_modulus, 1e8, "Hydroelastic modulus [Pa].");
@@ -52,7 +48,7 @@ DEFINE_string(contact_approximation, "sap",
 
 DEFINE_double(stiffness, 1e4, "Contact Stiffness.");
 DEFINE_double(friction, 1.0, "Contact Friction.");
-DEFINE_double(damping, 1.0,
+DEFINE_double(damping, 100.0,
     "Hunt and Crossley damping for the deformable body, only used when "
     "'contact_approximation' is set to 'lagged' or 'similar' [s/m].");
 DEFINE_bool(exact_line_search, true, "Enable exact_line_search for contact solving.");
@@ -241,7 +237,7 @@ class XBoxController : public drake::systems::LeafSystem<double> {
   bool is_right_;
   double move_start_ = 0.0;
   double move_duration_ = 0.4;
-  double target_movement_ = 1.0;
+  double target_movement_ = 0.5;
   double box_width_;
 };
 
@@ -336,6 +332,7 @@ int do_main() {
   const auto left_actuator_x_index =
       plant.AddJointActuator("left x actuator", left_prismatic_joint_x).index();
   double stiffness = (2.0 + ratio) / 0.1 * 3;
+  stiffness = 1e7;
   plant.get_mutable_joint_actuator(left_actuator_x_index)
       .set_controller_gains({stiffness, 1});
   auto left_box_controller = builder.template AddSystem<XBoxController>(
@@ -367,7 +364,7 @@ int do_main() {
   ModelInstanceIndex free_body_model_instance =
       plant.AddModelInstance("free_body_instance");
   const SpatialInertia<double> free_body_box_spatial =
-      SpatialInertia<double>::SolidBoxWithDensity(FLAGS_rho * ratio, box_width,
+      SpatialInertia<double>::SolidBoxWithDensity(FLAGS_rho, box_width,
                                                   box_width, box_width);
   const RigidBody<double>& free_box = plant.AddRigidBody(
       "free_box", free_body_model_instance, free_body_box_spatial);
@@ -424,7 +421,17 @@ int do_main() {
     inital_vel.emplace_back(0, 0, 0);
   }
 
-  deformable_model.RegisterMpmParticle(inital_pos, inital_vel);
+//   deformable_model.RegisterMpmParticle(inital_pos, inital_vel);
+
+const int ppc = 8;
+    deformable_model.RegisterMpmParticle(
+    {0.5 -box_width * 1.5 , 0.5  -box_width * 0.5, 0.5 + 0.0}, 
+    {0.5 -box_width * 0.5 , 0.5 + box_width * 0.5, 0.5 + box_width}, 
+    ppc);
+    deformable_model.RegisterMpmParticle(
+    {0.5 +box_width * 0.5 , 0.5  -box_width * 0.5, 0.5 + 0.0}, 
+    {0.5 +box_width * 1.5 , 0.5 + box_width * 0.5, 0.5 + box_width}, 
+    ppc);
 
   MpmConfigParams mpm_config;
   mpm_config.substep_dt = FLAGS_substep;
