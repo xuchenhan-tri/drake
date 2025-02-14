@@ -47,11 +47,13 @@ MeshcatVisualizer<T>::MeshcatVisualizer(std::shared_ptr<Meshcat> meshcat,
   query_object_input_port_ =
       this->DeclareAbstractInputPort("query_object", Value<QueryObject<T>>())
           .get_index();
-  
-  // NOTE (changyu): in DrakeVisualizer, there is no knowledge of multibody::gmpm::config::GpuT,
-  // Restrictly using float here.
-  mpm_input_port_ = this->DeclareAbstractInputPort("mpm", 
-    Value<multibody::gmpm::MpmPortData<multibody::gmpm::config::GpuT>>()).get_index();
+
+  // NOTE (changyu): in DrakeVisualizer, there is no knowledge of
+  // multibody::gmpm::config::GpuT, Restrictly using float here.
+  mpm_input_port_ = this->DeclareAbstractInputPort(
+                            "mpm", Value<multibody::gmpm::MpmPortData<
+                                       multibody::gmpm::config::GpuT>>())
+                        .get_index();
 
   if (params_.enable_alpha_slider) {
     alpha_value_ = params_.initial_alpha_slider_value;
@@ -137,12 +139,19 @@ systems::EventStatus MeshcatVisualizer<T>::UpdateMeshcat(
                           params_.visible_by_default);
   }
   if (params_.show_mpm == MeshcatVisualizerParams::ShowMpmOpt::kClothMpm) {
-    const auto& mpm_object = 
-        mpm_input_port().template Eval<multibody::gmpm::MpmPortData<multibody::gmpm::config::GpuT>>(context);
+    const auto& mpm_object =
+        mpm_input_port()
+            .template Eval<
+                multibody::gmpm::MpmPortData<multibody::gmpm::config::GpuT>>(
+                context);
     SetMpmObjects(context, mpm_object);
-  } else if (params_.show_mpm == MeshcatVisualizerParams::ShowMpmOpt::kParticleMpm) {
-    const auto& mpm_object = 
-        mpm_input_port().template Eval<multibody::gmpm::MpmPortData<multibody::gmpm::config::GpuT>>(context);
+  } else if (params_.show_mpm ==
+             MeshcatVisualizerParams::ShowMpmOpt::kParticleMpm) {
+    const auto& mpm_object =
+        mpm_input_port()
+            .template Eval<
+                multibody::gmpm::MpmPortData<multibody::gmpm::config::GpuT>>(
+                context);
     SetMpmParticles(context, mpm_object);
   }
   if (!version_.has_value() ||
@@ -170,46 +179,64 @@ systems::EventStatus MeshcatVisualizer<T>::UpdateMeshcat(
 
 template <typename T>
 void MeshcatVisualizer<T>::SetMpmObjects(
-  const systems::Context<T>& context,
-  const multibody::gmpm::MpmPortData<multibody::gmpm::config::GpuT> & mpm_object) const {
+    const systems::Context<T>& context,
+    const multibody::gmpm::MpmPortData<multibody::gmpm::config::GpuT>&
+        mpm_object) const {
   if constexpr (std::is_same_v<T, double>) {
     std::vector<SurfaceTriangle> triangles;
     std::vector<Vector3<T>> vertices;
-    for (const auto &p : mpm_object.pos) {
+    for (const auto& p : mpm_object.pos) {
       vertices.push_back(p.template cast<T>());
     }
     for (size_t t = 0; t < mpm_object.indices.size() / 3; ++t) {
-      triangles.push_back(SurfaceTriangle(
-        mpm_object.indices[t * 3 + 0],
-        mpm_object.indices[t * 3 + 1],
-        mpm_object.indices[t * 3 + 2]
-      ));
+      triangles.push_back(SurfaceTriangle(mpm_object.indices[t * 3 + 0],
+                                          mpm_object.indices[t * 3 + 1],
+                                          mpm_object.indices[t * 3 + 2]));
     }
-    const TriangleSurfaceMesh<double> mesh(std::move(triangles), std::move(vertices));
+    const TriangleSurfaceMesh<double> mesh(std::move(triangles),
+                                           std::move(vertices));
     const Rgba rgba = params_.default_color;
 
     std::string current_path;
     int current_frame = 0;
     double time = 0;
     current_frame = std::round(context.get_time() / params_.publish_period);
-    current_path = params_.prefix +"/mpm_object_visual/" + std::to_string(current_frame);
     time = context.get_time();
-    meshcat_->SetObject(current_path, mesh, rgba);
-    meshcat_->SetProperty(current_path, "visible", false, 0);
-    meshcat_->SetProperty(current_path, "visible", true, time);
-    if (current_frame >= 1) {
-      std::string prev_path = params_.prefix +"/mpm_object_visual/" + std::to_string(current_frame - 1);
-      meshcat_->SetProperty(prev_path, "visible", false, time);
+    {
+      current_path = params_.prefix + "/mpm_object_visual/" +
+                     std::to_string(current_frame);
+      meshcat_->SetObject(current_path, mesh, rgba);
+      meshcat_->SetProperty(current_path, "visible", false, 0);
+      meshcat_->SetProperty(current_path, "visible", true, time);
+      if (current_frame >= 1) {
+        std::string prev_path = params_.prefix + "/mpm_object_visual/" +
+                                std::to_string(current_frame - 1);
+        meshcat_->SetProperty(prev_path, "visible", false, time);
+      }
+    }
+    {
+      current_path = params_.prefix + "/mpm_object_visual/" +
+                     std::to_string(current_frame) + "_wireframe";
+      meshcat_->SetObject(current_path, mesh, Rgba{0.0, 0.0, 0.0, 1.0},
+                          /*wireframe=*/true);
+      meshcat_->SetProperty(current_path, "visible", false, 0);
+      meshcat_->SetProperty(current_path, "visible", true, time);
+      if (current_frame >= 1) {
+        std::string prev_path = params_.prefix + "/mpm_object_visual/" +
+                                std::to_string(current_frame - 1) + "_wireframe";
+        meshcat_->SetProperty(prev_path, "visible", false, time);
+      }
+
     }
   }
 }
 
 template <typename T>
 void MeshcatVisualizer<T>::SetMpmParticles(
-  const systems::Context<T>& context,
-  const multibody::gmpm::MpmPortData<multibody::gmpm::config::GpuT> & mpm_object) const {
+    const systems::Context<T>& context,
+    const multibody::gmpm::MpmPortData<multibody::gmpm::config::GpuT>&
+        mpm_object) const {
   if constexpr (std::is_same_v<T, double>) {
-    
     perception::PointCloud pcd(mpm_object.pos.size());
 
     for (size_t i = 0; i < mpm_object.pos.size(); ++i) {
@@ -222,13 +249,15 @@ void MeshcatVisualizer<T>::SetMpmParticles(
     int current_frame = 0;
     double time = 0;
     current_frame = std::round(context.get_time() / params_.publish_period);
-    current_path = params_.prefix +"/mpm_object_visual/" + std::to_string(current_frame);
+    current_path =
+        params_.prefix + "/mpm_object_visual/" + std::to_string(current_frame);
     time = context.get_time();
     meshcat_->SetObject(current_path, pcd, 0.005, rgba);
     meshcat_->SetProperty(current_path, "visible", false, 0);
     meshcat_->SetProperty(current_path, "visible", true, time);
     if (current_frame >= 1) {
-      std::string prev_path = params_.prefix +"/mpm_object_visual/" + std::to_string(current_frame - 1);
+      std::string prev_path = params_.prefix + "/mpm_object_visual/" +
+                              std::to_string(current_frame - 1);
       meshcat_->SetProperty(prev_path, "visible", false, time);
     }
   }
@@ -310,8 +339,7 @@ void MeshcatVisualizer<T>::SetObjects(
 
       // Proximity role favors convex hulls if available.
       if (const PolygonSurfaceMesh<double>* hull = nullptr;
-          (!geometry_already_set) &&
-          (params_.role == Role::kProximity) &&
+          (!geometry_already_set) && (params_.role == Role::kProximity) &&
           (hull = inspector.GetConvexHull(geom_id))) {
         // Convert polygonal surface mesh to triangle surface mesh.
         const TriangleSurfaceMesh<double> tri_hull =
