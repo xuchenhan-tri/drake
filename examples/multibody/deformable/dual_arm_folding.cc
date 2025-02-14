@@ -355,7 +355,7 @@ int do_main() {
   // mpm stuff
   DeformableModel<double>& deformable_model = plant.mutable_deformable_model();
   // AddCloth(&deformable_model, FLAGS_res, 0.01, -0.2, 0.25);
-  AddClothFromFile(&deformable_model, "/home/changyu/Desktop/tshirt.obj", 0.05, -0.2, -0.1);
+  AddClothFromFile(&deformable_model, "/home/changyu/Desktop/tshirt.obj", 0.05, -0.2, -0.1, 1.2);
 
   MpmConfigParams mpm_config;
   mpm_config.substep_dt = FLAGS_substep;
