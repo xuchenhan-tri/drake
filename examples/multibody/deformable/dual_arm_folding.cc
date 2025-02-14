@@ -36,7 +36,7 @@ DEFINE_double(res, 50, "Cloth Res");
 DEFINE_double(realtime_rate, 1.0, "Desired real time rate.");
 DEFINE_double(time_step, 1e-2,
               "Discrete time step for the system [s]. Must be positive.");
-DEFINE_double(substep, 1e-3,
+DEFINE_double(substep, 5e-4,
               "Discrete time step for the substepping scheme [s]. Must be positive.");
 DEFINE_string(contact_approximation, "sap",
               "Type of convex contact approximation. See "
