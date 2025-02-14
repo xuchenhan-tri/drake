@@ -158,14 +158,14 @@ class HandPoseController : public drake::systems::LeafSystem<double> {
     } else if (context.get_time() < 3.5) {
         output->set_value(open_state_);
     }else if (context.get_time() < 4.0) {
-      // gripper gripping from 3.5 to 3.8, then hold until 5.2
+      // gripper gripping from 3.5 to 3.8, then hold until 5.5
       double t = (context.get_time() - 3.5) / (0.3);
       Eigen::VectorXd q_and_v = std::max(1.0 - t, 0.0) * open_state_ +
                                 std::min(t, 1.0) * closed_state_;
       output->set_value(q_and_v);
-    } else if (context.get_time() < 5.7) {
-      // gripper opening from 5.0 to 5.7
-      double t = (context.get_time() - 5.0) / (0.3);
+    } else if (context.get_time() < 6.0) {
+      // gripper opening from 5.5 to 6.0
+      double t = (context.get_time() - 5.5) / (0.5);
       Eigen::VectorXd q_and_v = std::max(1.0 - t, 0.0) * closed_state_ +
                                 std::min(t, 1.0) * open_state_;
       output->set_value(q_and_v);
@@ -243,7 +243,7 @@ class IiwaController : public drake::systems::LeafSystem<double> {
       }
     } else if (context.get_time() <= 3.5) {
         if (is_left_) {
-            dX(5) = -0.0011 * rate;  // down
+            dX(5) = -0.001 * rate;  // down
         }
     } else if (context.get_time() <= 4.0) {
         if (is_left_) {
@@ -253,12 +253,12 @@ class IiwaController : public drake::systems::LeafSystem<double> {
         if (is_left_) {
             dX(5) = +0.004 * rate;  // up
         }
-    } else if (context.get_time() <= 5.0) {
+    } else if (context.get_time() <= 5.5) {
         if (is_left_) {
             dX(4) = +0.004 * rate;  // move
-            dX(5) = -0.003 * rate;  // move
+            dX(5) = -0.002 * rate;  // move
         }
-    } else if (context.get_time() <= 6.0) {
+    } else if (context.get_time() <= 6.5) {
         if (is_left_) {
             dX(5) = +0.005 * rate;  // move
         }
