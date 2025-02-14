@@ -80,8 +80,8 @@ namespace config {
 	// shake use 100
 	// roll use 1000
 	template<class T> constexpr T DENSITY;
-	template<> constexpr float DENSITY<float> = 100.f;
-	template<> constexpr double DENSITY<double> = 100.;
+	template<> constexpr float DENSITY<float> = 1000.f;
+	template<> constexpr double DENSITY<double> = 1000.;
 
 	template<class T> constexpr T GAMMA;
 	template<> constexpr float GAMMA<float> = 0.f;
