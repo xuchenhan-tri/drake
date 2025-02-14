@@ -243,7 +243,7 @@ class IiwaController : public drake::systems::LeafSystem<double> {
       }
     } else if (context.get_time() <= 3.5) {
         if (is_left_) {
-            dX(5) = -0.0011;  // down
+            dX(5) = -0.0011 * rate;  // down
         }
     } else if (context.get_time() <= 4.0) {
         if (is_left_) {
