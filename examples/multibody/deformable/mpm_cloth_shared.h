@@ -98,7 +98,7 @@ using Eigen::VectorXd;
   }
 }
 
-[[maybe_unused]] void AddClothFromFile(DeformableModel<double> *deformable_model, std::string filename) {
+[[maybe_unused]] void AddClothFromFile(DeformableModel<double> *deformable_model, std::string filename, double x_offset, double y_offset, double z_offset) {
   const auto &mesh = ReadObjToTriangleSurfaceMesh(filename);
   std::vector<Eigen::Vector3d> inital_pos;
   std::vector<Eigen::Vector3d> inital_vel;
@@ -109,7 +109,7 @@ using Eigen::VectorXd;
     indices.push_back(mesh.triangles()[i].vertex(2));
   }
   for (int i = 0; i < mesh.num_vertices(); ++i) {
-    inital_pos.emplace_back(mesh.vertices()[i][0], mesh.vertices()[i][2], mesh.vertices()[i][1]); // swap y-axis and z-axis
+    inital_pos.emplace_back(mesh.vertices()[i][0] + x_offset, mesh.vertices()[i][2] + y_offset, mesh.vertices()[i][1] + z_offset); // swap y-axis and z-axis
     inital_vel.emplace_back(0., 0., 0.);
   }
   deformable_model->RegisterMpmCloth(inital_pos, inital_vel, indices);
