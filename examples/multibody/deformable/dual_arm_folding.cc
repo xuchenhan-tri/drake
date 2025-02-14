@@ -43,8 +43,8 @@ DEFINE_string(contact_approximation, "sap",
               "multibody::DiscreteContactApproximation for details. Options "
               "are: 'sap', 'lagged', and 'similar'.");
 
-DEFINE_double(stiffness, 1e3, "Contact Stiffness.");
-DEFINE_double(friction, 1.0, "Contact Friction.");
+DEFINE_double(stiffness, 200.0, "Contact Stiffness.");
+DEFINE_double(friction, 0.5, "Contact Friction.");
 DEFINE_double(damping, 1.0,
     "Hunt and Crossley damping for the deformable body, only used when "
     "'contact_approximation' is set to 'lagged' or 'similar' [s/m].");
@@ -225,7 +225,7 @@ class IiwaController : public drake::systems::LeafSystem<double> {
     dX.setZero();
 
     if ((context.get_time() >= 0.0) && (context.get_time() <= 0.5)) {
-      dX(5) = -0.0053 * rate;  // down
+      dX(5) = -0.0054 * rate;  // down
     } else if (context.get_time() <= 1.0) {
       dX.setZero(); // hold
     } else if (context.get_time() <= 1.5) {
@@ -239,7 +239,7 @@ class IiwaController : public drake::systems::LeafSystem<double> {
         dX(4) = -0.006 * rate;
       } else {
         dX(4) = -0.00175 * rate;
-        dX(3) = 0.0007 * rate;
+        dX(3) = 0.0003 * rate;
       }
     } else if (context.get_time() <= 3.5) {
         if (is_left_) {
@@ -355,7 +355,7 @@ int do_main() {
   // mpm stuff
   DeformableModel<double>& deformable_model = plant.mutable_deformable_model();
   // AddCloth(&deformable_model, FLAGS_res, 0.01, -0.2, 0.25);
-  AddClothFromFile(&deformable_model, "/home/changyu/Desktop/tshirt.obj", 0.05, -0.2, -0.1, 1.2);
+  AddClothFromFile(&deformable_model, "/home/changyu/Desktop/tshirt.obj", 0.05, -0.2, -0.1, 1);
 
   MpmConfigParams mpm_config;
   mpm_config.substep_dt = FLAGS_substep;
