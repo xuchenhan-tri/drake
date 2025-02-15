@@ -153,23 +153,24 @@ class IiwaController : public drake::systems::LeafSystem<double> {
     // fake update:
     VectorX<double> dX = current_state_values;
     dX.setZero();
+    double rate = plant_.time_step() / 0.01;
 
     if (context.get_time() <= 0.3) {
       dX.setZero();  // hold
     } else if (context.get_time() <= 0.5) {
-      dX(5) = -0.005;  // down, 0.3-0.5
+      dX(5) = -0.005 * rate;  // down, 0.3-0.5
     } else if (context.get_time() <= 0.7) {
       dX.setZero();  // hold, 0.5 to 0.7
     } else if (context.get_time() <= 2.0) {
-      dX(3) = 0.0032;  // move, 0.7 to 2.0
+      dX(3) = 0.0032 * rate;  // move, 0.7 to 2.0
     } else if (context.get_time() <= 2.3) {
       dX.setZero();  // hold, 2.0 to 2.3
     } else if (context.get_time() <= 2.6) {
-      dX(5) = 0.005;  // up, 2.3 to 2.6
+      dX(5) = 0.005 * rate;  // up, 2.3 to 2.6
     } else if (context.get_time() <= 2.7) {
       dX.setZero();  // hold, 2.6-2.7
     } else if (context.get_time() <= 4.0) {
-      dX(3) = -0.0032;  // move back, 2.7 - 4.0
+      dX(3) = -0.0032 * rate;  // move back, 2.7 - 4.0
     } else if (context.get_time() <= 4.2) {
       dX.setZero();  // hold, 4.0-4.2
     } else if (context.get_time() <= 4.7) {
@@ -194,31 +195,31 @@ class IiwaController : public drake::systems::LeafSystem<double> {
     } else if (context.get_time() <= 4.8) {
       dX.setZero();  // hold, 4.7-4.8
     } else if (context.get_time() <= 5.1) {
-      dX(5) = -0.005;  // down, 4.8-5.1
+      dX(5) = -0.005 * rate;  // down, 4.8-5.1
     } else if (context.get_time() <= 5.3) {
       dX.setZero();  // hold, 5.1-5.3
     } else if (context.get_time() <= 6.0) {
       // move for 0.7s
-      dX(4) = 0.002 * 0.6;
-      dX(3) = -0.002 / std::tan(3.14159 / 6.0) * 0.6;
+      dX(4) = 0.002 * 0.6 * rate;
+      dX(3) = -0.002 / std::tan(3.14159 / 6.0) * 0.6 * rate;
     } else if (context.get_time() <= 6.2) {
       dX.setZero();  // hold, 6.0-6.2
     } else if (context.get_time() <= 6.5) {
-      dX(5) = 0.005;  // lift, 6.2-6.5
+      dX(5) = 0.005 * rate;  // lift, 6.2-6.5
     } else if (context.get_time() <= 7.0) {
       // move for 0.7s
-      dX(4) = -0.002 * 0.6;
-      dX(3) = 0.002 / std::tan(3.14159 / 6.0) * 0.6;
+      dX(4) = -0.002 * 0.6 * rate;
+      dX(3) = 0.002 / std::tan(3.14159 / 6.0) * 0.6 * rate;
     } else if (context.get_time() <= 7.3) {
-      dX(5) = -0.0065;  // down, 6.2-6.5
+      dX(5) = -0.0065 * rate;  // down, 6.2-6.5
     } else if (context.get_time() <= 7.9) {
       // move for 0.6s
-      dX(4) = -0.002 * 0.6;
-      dX(3) = 0.002 / std::tan(3.14159 / 6.0) * 0.6;
+      dX(4) = -0.002 * 0.6 * rate;
+      dX(3) = 0.002 / std::tan(3.14159 / 6.0) * 0.6 * rate;
     } else if (context.get_time() <= 8.2) {
       dX.setZero();  // hold, 5.1-5.3
     } else if (context.get_time() <= 8.8) {
-      dX(5) = 0.005;  // lift, 6.2-6.5
+      dX(5) = 0.005 * rate;  // lift, 6.2-6.5
     } else if (context.get_time() <= 9.0) {
       dX.setZero();  // hold,
     } 
