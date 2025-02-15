@@ -30,7 +30,7 @@
 #include "drake/examples/multibody/deformable/mpm_cloth_shared.h"
 
 DEFINE_bool(write_files, false, "Enable dumping MPM data to files.");
-DEFINE_double(simulation_time, 6.5, "Desired duration of the simulation [s].");
+DEFINE_double(simulation_time, 11.0, "Desired duration of the simulation [s].");
 DEFINE_int32(testcase, 0, "Test Case.");
 DEFINE_double(res, 50, "Cloth Res");
 DEFINE_double(realtime_rate, 1.0, "Desired real time rate.");
@@ -133,8 +133,11 @@ class HandPoseController : public drake::systems::LeafSystem<double> {
     open_state_(0) = -0.08;
     open_state_(1) = 0.08;
     closed_state_ = Eigen::VectorXd::Zero(4);
-    closed_state_(0) = -0.001;
-    closed_state_(1) = 0.001;
+    closed_state_(0) = -0.002;
+    closed_state_(1) = 0.002;
+    closed_state_2_ = Eigen::VectorXd::Zero(4);
+    closed_state_2_(0) = -0.006;
+    closed_state_2_(1) = 0.006;
     this->DeclareVectorOutputPort(
         "WsgDesiredState", drake::systems::BasicVector<double>(size_),
         &HandPoseController::CalcDesiredState, {this->time_ticket()});
@@ -145,33 +148,57 @@ class HandPoseController : public drake::systems::LeafSystem<double> {
       output->set_value(open_state_);
     } else if (context.get_time() < 2.0) {
       // gripper gripping from 0.5 to 0.8, then hold until 2.2
-      double t = (context.get_time() - 0.5) / (0.3);
+      double t = std::max(std::min((context.get_time() - 0.5) / (0.3), 1.0), 0.0);
       Eigen::VectorXd q_and_v = std::max(1.0 - t, 0.0) * open_state_ +
                                 std::min(t, 1.0) * closed_state_;
       output->set_value(q_and_v);
     } else if (context.get_time() < 2.7) {
       // gripper opening from 2.0 to 2.7
-      double t = (context.get_time() - 2.0) / (0.3);
+      double t = std::max(std::min((context.get_time() - 2.0) / (0.3), 1.0), 0.0);
       Eigen::VectorXd q_and_v = std::max(1.0 - t, 0.0) * closed_state_ +
                                 std::min(t, 1.0) * open_state_;
       output->set_value(q_and_v);
     } else if (context.get_time() < 3.5) {
         output->set_value(open_state_);
-    }else if (context.get_time() < 4.0) {
-      // gripper gripping from 3.5 to 3.8, then hold until 5.5
-      double t = (context.get_time() - 3.5) / (0.3);
+    
+
+    // second
+    } else if (context.get_time() < 4.0) {
+      // gripper gripping from 3.5 to 3.8, then hold until 6.0
+      double t = std::max(std::min((context.get_time() - 3.5) / (0.3), 1.0), 0.0);
+      Eigen::VectorXd q_and_v = std::max(1.0 - t, 0.0) * open_state_ +
+                                std::min(t, 1.0) * closed_state_2_;
+      output->set_value(q_and_v);
+    } else if (context.get_time() < 6.0) {
+      // gripper opening from 6.0 to 6.4
+      double t = std::max(std::min((context.get_time() - 6.0) / (0.4), 1.0), 0.0);
+      Eigen::VectorXd q_and_v = std::max(1.0 - t, 0.0) * closed_state_2_ +
+                                std::min(t, 1.0) * open_state_;
+      output->set_value(q_and_v);
+    } 
+    
+    else if (context.get_time() < 8.0) {
+      output->set_value(open_state_);
+    } 
+    
+    // third
+    else if (context.get_time() < 8.5) {
+      // gripper gripping from 8.5 to 8.8, then hold until 10.0
+      double t = std::max(std::min((context.get_time() - 8.5) / (0.3), 1.0), 0.0);
       Eigen::VectorXd q_and_v = std::max(1.0 - t, 0.0) * open_state_ +
                                 std::min(t, 1.0) * closed_state_;
       output->set_value(q_and_v);
-    } else if (context.get_time() < 6.0) {
-      // gripper opening from 5.5 to 6.0
-      double t = (context.get_time() - 5.5) / (0.5);
+    } else if (context.get_time() < 12.0) {
+      // gripper opening from 11.0 to 11.4
+      double t = std::max(std::min((context.get_time() - 11.0) / (0.4), 1.0), 0.0);
       Eigen::VectorXd q_and_v = std::max(1.0 - t, 0.0) * closed_state_ +
                                 std::min(t, 1.0) * open_state_;
       output->set_value(q_and_v);
-    } else {
-      output->set_value(open_state_);
     }
+
+    else {
+      output->set_value(open_state_);
+    } 
   }
 
  private:
@@ -182,6 +209,7 @@ class HandPoseController : public drake::systems::LeafSystem<double> {
   double open_start_ = 1.25;
   Eigen::VectorXd open_state_;
   Eigen::VectorXd closed_state_;
+  Eigen::VectorXd closed_state_2_;
 };
 
 class IiwaController : public drake::systems::LeafSystem<double> {
@@ -253,15 +281,41 @@ class IiwaController : public drake::systems::LeafSystem<double> {
         if (is_left_) {
             dX(5) = +0.004 * rate;  // up
         }
-    } else if (context.get_time() <= 5.5) {
+    } else if (context.get_time() <= 5.0) {
+        if (is_left_) {
+          dX(4) = -0.002 * rate;  // recenter the cloth
+        }
+    } else if (context.get_time() <= 6.0) {
         if (is_left_) {
             dX(4) = +0.004 * rate;  // move
-            dX(5) = -0.002 * rate;  // move
+            dX(5) = -0.0019 * rate;  // move
         }
-    } else if (context.get_time() <= 6.5) {
+    } else if (context.get_time() <= 7.0) {
         if (is_left_) {
             dX(5) = +0.005 * rate;  // move
         }
+    } else if (context.get_time() <= 8.0) {
+      // try to unfold
+        if (is_left_) {
+            dX(5) = -0.0051 * rate;  // move
+            dX(4) = -0.0018 * rate;  // move
+        }
+    } else if (context.get_time() <= 8.5) {
+      if (is_left_) {
+          dX.setZero(); // hold
+      }
+    } else if (context.get_time() <= 9.5) {
+      if (is_left_) {
+        dX(5) = +0.003 * rate;  // up
+      }
+    } else if (context.get_time() <= 10.0) {
+      if (is_left_) {
+        dX(4) = -0.004 * rate;  // shake to unfold it
+      }
+    } else if (context.get_time() <= 10.5) {
+      if (is_left_) {
+        dX(4) = -0.004 * rate;  // shake to unfold it
+      }
     }
 
     auto new_value = current_state_values + dX;
