@@ -136,11 +136,11 @@ class HandPoseController : public drake::systems::LeafSystem<double> {
     closed_state_(0) = -0.002;
     closed_state_(1) = 0.002;
     closed_state_2_ = Eigen::VectorXd::Zero(4);
-    closed_state_2_(0) = -0.004;
-    closed_state_2_(1) = 0.004;
+    closed_state_2_(0) = -0.0041;
+    closed_state_2_(1) = 0.0041;
     closed_state_3_ = Eigen::VectorXd::Zero(4);
-    closed_state_3_(0) = -0.003;
-    closed_state_3_(1) = 0.003;
+    closed_state_3_(0) = -0.002;
+    closed_state_3_(1) = 0.002;
     this->DeclareVectorOutputPort(
         "WsgDesiredState", drake::systems::BasicVector<double>(size_),
         &HandPoseController::CalcDesiredState, {this->time_ticket()});
@@ -185,9 +185,9 @@ class HandPoseController : public drake::systems::LeafSystem<double> {
     } 
     
     // third
-    else if (context.get_time() < 8.5) {
-      // gripper gripping from 8.5 to 8.8, then hold until 10.0
-      double t = std::max(std::min((context.get_time() - 8.5) / (0.3), 1.0), 0.0);
+    else if (context.get_time() < 9.0) {
+      // gripper gripping from 8.0 to 8.3, then hold until 10.0
+      double t = std::max(std::min((context.get_time() - 8.0) / (0.3), 1.0), 0.0);
       Eigen::VectorXd q_and_v = std::max(1.0 - t, 0.0) * open_state_ +
                                 std::min(t, 1.0) * closed_state_3_;
       output->set_value(q_and_v);
@@ -275,7 +275,7 @@ class IiwaController : public drake::systems::LeafSystem<double> {
       }
     } else if (context.get_time() <= 3.5) {
         if (is_left_) {
-            dX(5) = -0.001 * rate;  // down
+            dX(5) = -0.00095 * rate;  // down
         }
     } else if (context.get_time() <= 4.0) {
         if (is_left_) {
@@ -301,8 +301,8 @@ class IiwaController : public drake::systems::LeafSystem<double> {
     } else if (context.get_time() <= 8.0) {
       // try to unfold
         if (is_left_) {
-            dX(5) = -std::min(0.0041 * rate, current_state_values(5) - 0.23);  // move
-            dX(4) = -std::min(0.00354 * rate, current_state_values(4) - 0.26); // move, grasp the edge of the cloth
+            dX(5) = -std::min(0.0032 * rate, current_state_values(5) - 0.246);  // move
+            dX(4) = -std::min(0.00454 * rate, current_state_values(4) - 0.253); // move, grasp the edge of the cloth
         }
     } else if (context.get_time() <= 8.5) {
       if (is_left_) {
@@ -310,20 +310,16 @@ class IiwaController : public drake::systems::LeafSystem<double> {
       }
     } else if (context.get_time() <= 9.5) {
       if (is_left_) {
-        dX(5) = +0.004 * rate;  // up
+        dX(5) = +0.0035 * rate;  // up
       }
     } else if (context.get_time() <= 10.0) {
       if (is_left_) {
-        dX(4) = -0.003 * rate;  // shake to unfold it
+        dX(4) = -0.004 * rate;  // shake to unfold it
       }
-    } else if (context.get_time() <= 10.5) {
+    } else if (context.get_time() <= 11.0) {
       if (is_left_) {
         dX(4) = +0.003 * rate;  // shake to unfold it
-      }
-    } else if (context.get_time() <= 11.5) {
-      if (is_left_) {
-        dX(4) = -0.002 * rate;  // shake to unfold it
-        dX(5) = -0.003 * rate;  // put 1-fold cloth on the ground
+        dX(5) = -0.0025 * rate;  // put 1-fold cloth on the ground
       }
     }
 
