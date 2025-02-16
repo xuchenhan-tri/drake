@@ -30,7 +30,7 @@
 #include "drake/examples/multibody/deformable/mpm_cloth_shared.h"
 
 DEFINE_bool(write_files, false, "Enable dumping MPM data to files.");
-DEFINE_double(simulation_time, 11.0, "Desired duration of the simulation [s].");
+DEFINE_double(simulation_time, 13.0, "Desired duration of the simulation [s].");
 DEFINE_int32(testcase, 0, "Test Case.");
 DEFINE_double(res, 50, "Cloth Res");
 DEFINE_double(realtime_rate, 1.0, "Desired real time rate.");
@@ -44,7 +44,7 @@ DEFINE_string(contact_approximation, "sap",
               "are: 'sap', 'lagged', and 'similar'.");
 
 DEFINE_double(stiffness, 200.0, "Contact Stiffness.");
-DEFINE_double(friction, 0.5, "Contact Friction.");
+DEFINE_double(friction, 0.6, "Contact Friction.");
 DEFINE_double(damping, 1.0,
     "Hunt and Crossley damping for the deformable body, only used when "
     "'contact_approximation' is set to 'lagged' or 'similar' [s/m].");
@@ -136,8 +136,11 @@ class HandPoseController : public drake::systems::LeafSystem<double> {
     closed_state_(0) = -0.002;
     closed_state_(1) = 0.002;
     closed_state_2_ = Eigen::VectorXd::Zero(4);
-    closed_state_2_(0) = -0.006;
-    closed_state_2_(1) = 0.006;
+    closed_state_2_(0) = -0.004;
+    closed_state_2_(1) = 0.004;
+    closed_state_3_ = Eigen::VectorXd::Zero(4);
+    closed_state_3_(0) = -0.003;
+    closed_state_3_(1) = 0.003;
     this->DeclareVectorOutputPort(
         "WsgDesiredState", drake::systems::BasicVector<double>(size_),
         &HandPoseController::CalcDesiredState, {this->time_ticket()});
@@ -186,12 +189,12 @@ class HandPoseController : public drake::systems::LeafSystem<double> {
       // gripper gripping from 8.5 to 8.8, then hold until 10.0
       double t = std::max(std::min((context.get_time() - 8.5) / (0.3), 1.0), 0.0);
       Eigen::VectorXd q_and_v = std::max(1.0 - t, 0.0) * open_state_ +
-                                std::min(t, 1.0) * closed_state_;
+                                std::min(t, 1.0) * closed_state_3_;
       output->set_value(q_and_v);
-    } else if (context.get_time() < 12.0) {
-      // gripper opening from 11.0 to 11.4
-      double t = std::max(std::min((context.get_time() - 11.0) / (0.4), 1.0), 0.0);
-      Eigen::VectorXd q_and_v = std::max(1.0 - t, 0.0) * closed_state_ +
+    } else if (context.get_time() < 13.0) {
+      // gripper opening from 11.0 to 11.5
+      double t = std::max(std::min((context.get_time() - 11.0) / (0.5), 1.0), 0.0);
+      Eigen::VectorXd q_and_v = std::max(1.0 - t, 0.0) * closed_state_3_ +
                                 std::min(t, 1.0) * open_state_;
       output->set_value(q_and_v);
     }
@@ -210,6 +213,7 @@ class HandPoseController : public drake::systems::LeafSystem<double> {
   Eigen::VectorXd open_state_;
   Eigen::VectorXd closed_state_;
   Eigen::VectorXd closed_state_2_;
+  Eigen::VectorXd closed_state_3_;
 };
 
 class IiwaController : public drake::systems::LeafSystem<double> {
@@ -292,13 +296,13 @@ class IiwaController : public drake::systems::LeafSystem<double> {
         }
     } else if (context.get_time() <= 7.0) {
         if (is_left_) {
-            dX(5) = +0.005 * rate;  // move
+            dX(5) = +0.003 * rate;  // move
         }
     } else if (context.get_time() <= 8.0) {
       // try to unfold
         if (is_left_) {
-            dX(5) = -0.0051 * rate;  // move
-            dX(4) = -0.0018 * rate;  // move
+            dX(5) = -std::min(0.0041 * rate, current_state_values(5) - 0.23);  // move
+            dX(4) = -std::min(0.00354 * rate, current_state_values(4) - 0.26); // move, grasp the edge of the cloth
         }
     } else if (context.get_time() <= 8.5) {
       if (is_left_) {
@@ -306,15 +310,20 @@ class IiwaController : public drake::systems::LeafSystem<double> {
       }
     } else if (context.get_time() <= 9.5) {
       if (is_left_) {
-        dX(5) = +0.003 * rate;  // up
+        dX(5) = +0.004 * rate;  // up
       }
     } else if (context.get_time() <= 10.0) {
       if (is_left_) {
-        dX(4) = -0.004 * rate;  // shake to unfold it
+        dX(4) = -0.003 * rate;  // shake to unfold it
       }
     } else if (context.get_time() <= 10.5) {
       if (is_left_) {
-        dX(4) = -0.004 * rate;  // shake to unfold it
+        dX(4) = +0.003 * rate;  // shake to unfold it
+      }
+    } else if (context.get_time() <= 11.5) {
+      if (is_left_) {
+        dX(4) = -0.002 * rate;  // shake to unfold it
+        dX(5) = -0.003 * rate;  // put 1-fold cloth on the ground
       }
     }
 
