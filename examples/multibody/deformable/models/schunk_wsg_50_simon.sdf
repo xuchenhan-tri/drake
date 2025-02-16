@@ -31,9 +31,7 @@
         <geometry>
           <box>
             <size>0.146 0.075 0.049521</size>
-          </box>
-        </geometry>
-        <drake:proximity_properties>
+          </box>diffuse
           <drake:mu_dynamic>1.5</drake:mu_dynamic>
           <drake:mu_static>1.5</drake:mu_static>
           <drake:mesh_resolution_hint>1</drake:mesh_resolution_hint>
@@ -62,7 +60,7 @@
       <visual name="visual">
         <geometry>
           <box>
-            <size>0.016 0.095 0.06</size>
+            <size>0.020 0.095 0.06</size>
           </box>
         </geometry>
         <material>
@@ -75,7 +73,7 @@
       <collision name="collision">
         <geometry>
           <box>
-            <size>0.016 0.095 0.06</size>
+            <size>0.020 0.095 0.06</size>
           </box>
         </geometry>
         <drake:proximity_properties>
@@ -104,7 +102,7 @@
       <visual name="visual">
         <geometry>
           <box>
-            <size>0.016 0.095 0.06</size>
+            <size>0.020 0.095 0.06</size>
           </box>
         </geometry>
         <material>
@@ -117,7 +115,7 @@
       <collision name="collision">
         <geometry>
           <box>
-            <size>0.016 0.095 0.06</size>
+            <size>0.020 0.095 0.06</size>
           </box>
         </geometry>
         <drake:proximity_properties>
