@@ -301,8 +301,8 @@ class IiwaController : public drake::systems::LeafSystem<double> {
     } else if (context.get_time() <= 8.0) {
       // try to unfold
         if (is_left_) {
-            dX(5) = -std::min(0.0032 * rate, current_state_values(5) - 0.246);  // move
-            dX(4) = -std::min(0.00454 * rate, current_state_values(4) - 0.253); // move, grasp the edge of the cloth
+            dX(5) = -std::min(0.0032 * rate, current_state_values(5) - 0.2455);  // move
+            dX(4) = -std::min(0.00454 * rate, current_state_values(4) - 0.258); // move, grasp the edge of the cloth
         }
     } else if (context.get_time() <= 8.5) {
       if (is_left_) {
