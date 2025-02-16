@@ -310,15 +310,15 @@ class IiwaController : public drake::systems::LeafSystem<double> {
       }
     } else if (context.get_time() <= 9.5) {
       if (is_left_) {
-        dX(5) = +0.0035 * rate;  // up
+        dX(5) = +0.0032 * rate;  // up
       }
-    } else if (context.get_time() <= 10.0) {
+    } else if (context.get_time() <= 10.2) {
       if (is_left_) {
-        dX(4) = -0.004 * rate;  // shake to unfold it
+        dX(4) = -0.003 * rate;  // shake to unfold it
       }
     } else if (context.get_time() <= 11.0) {
       if (is_left_) {
-        dX(4) = +0.003 * rate;  // shake to unfold it
+        dX(4) = +0.0035 * rate;  // shake to unfold it
         dX(5) = -0.0025 * rate;  // put 1-fold cloth on the ground
       }
     }
