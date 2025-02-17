@@ -31,7 +31,9 @@
         <geometry>
           <box>
             <size>0.146 0.075 0.049521</size>
-          </box>diffuse
+          </box>
+        </geometry>
+        <drake:proximity_properties>
           <drake:mu_dynamic>1.5</drake:mu_dynamic>
           <drake:mu_static>1.5</drake:mu_static>
           <drake:mesh_resolution_hint>1</drake:mesh_resolution_hint>
