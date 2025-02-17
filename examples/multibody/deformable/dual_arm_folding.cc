@@ -173,18 +173,22 @@ class HandPoseController : public drake::systems::LeafSystem<double> {
     
 
     // second
-    } else if (context.get_time() < 4.0 && is_left_) {
-      // gripper gripping from 3.5 to 3.8, then hold until 6.0
-      double t = std::max(std::min((context.get_time() - 3.5) / (0.3), 1.0), 0.0);
-      Eigen::VectorXd q_and_v = std::max(1.0 - t, 0.0) * open_state_ +
-                                std::min(t, 1.0) * closed_state_2_;
-      output->set_value(q_and_v);
-    } else if (context.get_time() < 6.0 && is_left_) {
-      // gripper opening from 6.0 to 6.4
-      double t = std::max(std::min((context.get_time() - 6.0) / (0.4), 1.0), 0.0);
-      Eigen::VectorXd q_and_v = std::max(1.0 - t, 0.0) * closed_state_2_ +
-                                std::min(t, 1.0) * open_state_;
-      output->set_value(q_and_v);
+    } else if (context.get_time() < 4.0) {
+      if (is_left_) {
+        // gripper gripping from 3.5 to 3.8, then hold until 6.0
+        double t = std::max(std::min((context.get_time() - 3.5) / (0.3), 1.0), 0.0);
+        Eigen::VectorXd q_and_v = std::max(1.0 - t, 0.0) * open_state_ +
+                                  std::min(t, 1.0) * closed_state_2_;
+        output->set_value(q_and_v);
+      }
+    } else if (context.get_time() < 6.0) {
+      if (is_left_) {
+        // gripper opening from 6.0 to 6.4
+        double t = std::max(std::min((context.get_time() - 6.0) / (0.4), 1.0), 0.0);
+        Eigen::VectorXd q_and_v = std::max(1.0 - t, 0.0) * closed_state_2_ +
+                                  std::min(t, 1.0) * open_state_;
+        output->set_value(q_and_v);
+      }
     } 
     
     else if (context.get_time() < 8.0 && is_left_) {
@@ -193,17 +197,21 @@ class HandPoseController : public drake::systems::LeafSystem<double> {
     
     // third
     else if (context.get_time() < 9.0) {
-      // gripper gripping from 8.0 to 8.5, then hold until 10.0
-      double t = std::max(std::min((context.get_time() - 8.0) / (0.5), 1.0), 0.0);
-      Eigen::VectorXd q_and_v = std::max(1.0 - t, 0.0) * open_state_ +
-                                std::min(t, 1.0) * closed_state_3_;
-      output->set_value(q_and_v);
-    } else if (context.get_time() < 13.0 && is_left_) {
-      // gripper opening from 11.0 to 11.5
-      double t = std::max(std::min((context.get_time() - 11.0) / (0.5), 1.0), 0.0);
-      Eigen::VectorXd q_and_v = std::max(1.0 - t, 0.0) * closed_state_3_ +
-                                std::min(t, 1.0) * open_state_;
-      output->set_value(q_and_v);
+      if (is_left_) {
+        // gripper gripping from 8.0 to 8.5, then hold until 10.0
+        double t = std::max(std::min((context.get_time() - 8.0) / (0.5), 1.0), 0.0);
+        Eigen::VectorXd q_and_v = std::max(1.0 - t, 0.0) * open_state_ +
+                                  std::min(t, 1.0) * closed_state_3_;
+        output->set_value(q_and_v);
+      }
+    } else if (context.get_time() < 13.0) {
+      if (is_left_) {
+        // gripper opening from 11.0 to 11.5
+        double t = std::max(std::min((context.get_time() - 11.0) / (0.5), 1.0), 0.0);
+        Eigen::VectorXd q_and_v = std::max(1.0 - t, 0.0) * closed_state_3_ +
+                                  std::min(t, 1.0) * open_state_;
+        output->set_value(q_and_v);
+      }
     }
 
     // fourth
