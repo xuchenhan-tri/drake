@@ -29,6 +29,7 @@ struct MpmConfigParams {
     int contact_query_frequency{1};
     int mpm_bc{-1};
     bool exact_line_search {false};
+    bool ignore_face_contact{false};
 };
 
 template<typename T = config::GpuT>

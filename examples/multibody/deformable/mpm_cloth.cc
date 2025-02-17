@@ -53,7 +53,7 @@ DEFINE_string(contact_approximation, "sap",
 // The area of a particle is about 1e-2m * 1e-2m. So C*Area = 1e5 * 1e-4 = 1e1 = 10 Pa*m = 10 N/m
 
 // NOTE (changyu): here we choose k=100 for smaller amount of penetration (0.01mm or 1e-5m).
-DEFINE_double(stiffness, 10.0, "Contact Stiffness.");
+DEFINE_double(stiffness, 100.0, "Contact Stiffness.");
 DEFINE_double(friction, 0.0, "Contact Friction.");
 DEFINE_double(damping, 1e-5,
     "Hunt and Crossley damping for the deformable body, only used when "
@@ -239,6 +239,7 @@ int do_main() {
   mpm_config.contact_damping = FLAGS_damping;
   mpm_config.contact_friction_mu = FLAGS_friction;
   mpm_config.exact_line_search = FLAGS_exact_line_search;
+  mpm_config.ignore_face_contact = true;
   deformable_model.SetMpmConfig(std::move(mpm_config));
 
   /* All rigid and deformable models have been added. Finalize the plant. */

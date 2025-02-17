@@ -119,7 +119,8 @@ class DeformableDriver : public ScalarConvertibleComponent<T> {
   
   void CalcMpmContactPairs(
       const systems::Context<T>& context, gmpm::GpuMpmState<gmpm::config::GpuT> *mpm_state,
-      gmpm::MpmParticleContactPairs<gmpm::config::GpuT>* result) const {
+      gmpm::MpmParticleContactPairs<gmpm::config::GpuT>* result,
+      const bool ignore_face_contact) const {
     using GpuT = gmpm::config::GpuT;
     DRAKE_ASSERT(result != nullptr);
     long long before_ts = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
@@ -135,7 +136,7 @@ class DeformableDriver : public ScalarConvertibleComponent<T> {
 #if defined(_OPENMP)
 #pragma omp parallel for num_threads(16)
 #endif
-    for (size_t p = 0; p < mpm_state->n_particles(); ++p) {
+    for (size_t p = ignore_face_contact ? mpm_state->n_faces() : 0; p < mpm_state->n_particles(); ++p) {
       // compute the distance of this particle with each geometry in file
       // NOTE (changyu): when access attributes in GpuMpmState,
       // always remember it is type GpuT and should be casted to type T explicitly.
@@ -247,7 +248,7 @@ class DeformableDriver : public ScalarConvertibleComponent<T> {
         mpm_solver_.UpdateGrid(&mutable_mpm_state, deformable_model_->cpu_mpm_model().config.mpm_bc);
 
         // NOTE (changyu): update contact information at each substep for weak coupling scheme
-        CalcMpmContactPairs(context, &mutable_mpm_state, &mpm_contact_pairs);
+        CalcMpmContactPairs(context, &mutable_mpm_state, &mpm_contact_pairs, deformable_model_->cpu_mpm_model().config.ignore_face_contact);
         mpm_solver_.CopyContactPairs(&mutable_mpm_state, mpm_contact_pairs);
         mpm_solver_.UpdateContact(&mutable_mpm_state, current_frame, substep, ddt, 
           deformable_model_->cpu_mpm_model().config.contact_friction_mu,
