@@ -30,7 +30,7 @@
 
 DEFINE_bool(write_files, false, "Enable dumping MPM data to files.");
 DEFINE_double(simulation_time, 9.0, "Desired duration of the simulation [s].");
-DEFINE_int32(res, 60, "Cloth Resolution.");
+DEFINE_int32(res, 70, "Cloth Resolution.");
 DEFINE_double(realtime_rate, 1.0, "Desired real time rate.");
 DEFINE_double(time_step, 1e-2,
               "Discrete time step for the system [s]. Must be positive.");
@@ -252,7 +252,6 @@ class IiwaController : public drake::systems::LeafSystem<double> {
      } else if (t < 6.5) {
         // hold
      } else if (t < 7.0) {
-      dX(5) -= 0.0038 * rate; // move down 
       dX(4) += 0.0084 * rate; // move right
       dX(4) += 0.004 * rate; // move extra 20cm to get right up of the blue box
       dX(3) += 0.0015 * rate; // move outward
@@ -280,10 +279,10 @@ class BaggingGripperController : public systems::LeafSystem<double> {
   static constexpr double gripper_z = 0.02;
   static constexpr double gripper_density = 10000.0;
  
-  static constexpr double l_x = 0.34;
-  static constexpr double h_x = 0.66;
-  static constexpr double l_z = 0.29-2e-4;
-  static constexpr double h_z = 0.31+2e-4;
+  static constexpr double l_x = 0.34 - 0.025;
+  static constexpr double h_x = 0.66 + 0.025;
+  static constexpr double l_z = 0.29-1.5e-4;
+  static constexpr double h_z = 0.31+1.5e-4;
  
   static constexpr double initial_free_duration = 0.25;
   static constexpr double initial_loose_duration = 0.25;
