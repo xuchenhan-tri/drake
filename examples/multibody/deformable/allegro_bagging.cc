@@ -251,10 +251,10 @@ class IiwaController : public drake::systems::LeafSystem<double> {
         dX(3) -= 0.0007 * rate; // move inward
      } else if (t < 6.5) {
         // hold
-     } else if (t < 7.0) {
-      dX(4) += 0.0084 * rate; // move right
-      dX(4) += 0.004 * rate; // move extra 20cm to get right up of the blue box
-      dX(3) += 0.0015 * rate; // move outward
+     } else if (t < 8.5) {
+      dX(4) += 0.0084 * rate / 4.0; // move right
+      dX(4) += 0.004 * rate / 4.0; // move extra 20cm to get right up of the blue box
+      dX(3) += 0.0015 * rate / 4.0; // move outward
      } else {
       dX.setZero();
      }
@@ -609,7 +609,7 @@ plant.RegisterCollisionGeometry(free_box2, RigidTransformd::Identity(),
   const auto& gripper_instance = BaggingGripperController::AddGripperInstance(&plant, rigid_proximity_props);
 
   double Kp = 1000000.0;
-  double Kd = 2 * std::sqrt(Kp);
+  double Kd = 5.0 * std::sqrt(Kp);
 
   drake::multibody::PdControllerGains gain(Kp, Kd);
   for (int i = 0; i < plant.num_actuators(); ++i) {
