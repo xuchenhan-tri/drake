@@ -446,7 +446,7 @@ int do_main() {
   ProximityProperties rigid_proximity_props;
   ProximityProperties ground_proximity_props;
   const CoulombFriction<double> surface_friction(1.0, 1.0);
-  AddCompliantHydroelasticProperties(1.0, 2e5, &rigid_proximity_props);
+  AddCompliantHydroelasticProperties(1.0, 2e6, &rigid_proximity_props);
   AddRigidHydroelasticProperties(1.0, &ground_proximity_props);
   AddContactMaterial({}, {}, surface_friction, &rigid_proximity_props);
   AddContactMaterial({}, {}, surface_friction, &ground_proximity_props);
@@ -469,11 +469,28 @@ int do_main() {
   plant.WeldFrames(plant.world_frame(),
                    plant.GetBodyByName("table_body", table).body_frame(),
                    RigidTransformd(Eigen::Vector3d(0.25, 0.29 + 0.5, 0.01)));
+  
+  // free box
+  const Vector4<double> red(1.0, 0.0, 0.0, 1.0);
+  double box_width = 0.08;
+  ModelInstanceIndex free_body_model_instance =
+      plant.AddModelInstance("free_body_instance");
+  const SpatialInertia<double> free_body_box_spatial =
+      SpatialInertia<double>::SolidBoxWithDensity(300.0, box_width,
+                                                  box_width, box_width);
+  const RigidBody<double>& free_box = plant.AddRigidBody(
+      "free_box", free_body_model_instance, free_body_box_spatial);
+    
+    plant.RegisterVisualGeometry(free_box, RigidTransformd::Identity(),
+    Box(box_width, box_width, box_width),
+    "FreeCubeV", red);
+  plant.RegisterCollisionGeometry(free_box, RigidTransformd::Identity(),
+          Box(box_width, box_width, box_width),
+          "FreeCube", rigid_proximity_props);
 
   MultibodyPlant<double> iiwa_controller_plant =
       MultibodyPlant<double>(plant_config.time_step);
 
-  plant.mutable_gravity_field().set_gravity_vector(Eigen::Vector3d::Zero());
   multibody::Parser parser(&plant);
   const std::string filename = PackageMap{}.ResolveUrl("package://drake_models/iiwa_description/sdf/iiwa7_no_collision.sdf");
   std::vector<drake::multibody::ModelInstanceIndex> instances =
@@ -661,6 +678,11 @@ int do_main() {
   auto& plant_context = plant.GetMyMutableContextFromRoot(&mutable_context);
   //   auto& diff_ik_context =
   //       diff_ik->GetMyMutableContextFromRoot(&mutable_context);
+
+  // set free box initial position
+  plant.SetFreeBodyPose(
+      &plant_context, plant.GetBodyByName("free_box"),
+      math::RigidTransformd{Vector3d(0.6, 1.0, box_width / 2.0 + 0.05)});
 
   plant.SetPositions(&plant_context, iiwa, iiwa_initial_joint_values);
 
