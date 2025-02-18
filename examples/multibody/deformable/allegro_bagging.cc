@@ -29,12 +29,12 @@
 #include "drake/visualization/visualization_config_functions.h"
 
 DEFINE_bool(write_files, false, "Enable dumping MPM data to files.");
-DEFINE_double(simulation_time, 5.0, "Desired duration of the simulation [s].");
+DEFINE_double(simulation_time, 6.0, "Desired duration of the simulation [s].");
 DEFINE_int32(res, 60, "Cloth Resolution.");
 DEFINE_double(realtime_rate, 1.0, "Desired real time rate.");
-DEFINE_double(time_step, 1e-3,
+DEFINE_double(time_step, 1e-2,
               "Discrete time step for the system [s]. Must be positive.");
-DEFINE_double(substep, 2e-4,
+DEFINE_double(substep, 5e-4,
               "Discrete time step for the substepping scheme [s]. Must be positive.");
 DEFINE_double(stiffness, 100.0, "Contact Stiffness.");
 DEFINE_double(friction, 1.0, "Contact Friction.");
@@ -240,12 +240,216 @@ class IiwaController : public drake::systems::LeafSystem<double> {
    Eigen::Vector3d rpy_;
 }; 
 
+class BaggingGripperController : public systems::LeafSystem<double> {
+  public:
+   BaggingGripperController() {
+     this->DeclareVectorOutputPort("desired state", BasicVector<double>(48),
+                                    &BaggingGripperController::CalcDesiredState);
+   }
+  
+  static constexpr double gripper_xy = 0.05;
+  static constexpr double gripper_z = 0.02;
+  static constexpr double gripper_density = 10000.0;
+ 
+  static constexpr double l_x = 0.34;
+  static constexpr double h_x = 0.66;
+  static constexpr double l_z = 0.39-2e-4;
+  static constexpr double h_z = 0.41+2e-4;
+ 
+  static constexpr double initial_free_duration = 0.25;
+  static constexpr double initial_loose_duration = 0.25;
+  static constexpr double free_duration = 2.0;
+  static constexpr double bagging_duration = 1.25 - initial_loose_duration;
+  static constexpr double bagging_v = 0.1;
+ 
+  static ModelInstanceIndex AddGripperInstance(MultibodyPlant<double>* plant, ProximityProperties rigid_proximity_props) {
+   IllustrationProperties illustration_props;
+   illustration_props.AddProperty("phong", "diffuse", Vector4d(0.5, 0.5, 0.5, 0.8));
+ 
+   Box gripper_shape(gripper_xy, gripper_xy, gripper_z);
+   const auto &gripper_inertia = SpatialInertia<double>::SolidBoxWithDensity(gripper_density, gripper_xy, gripper_xy, gripper_z);
+ 
+   ModelInstanceIndex gripper_instance = plant->AddModelInstance("gripper_instance");
+ 
+   const auto &add_single_gripper = [&](std::string name, double x, double y, double z) {
+     const RigidBody<double>& x_body = plant->AddRigidBody(name + "_x", gripper_instance, gripper_inertia);
+     const auto& x_joint = plant->AddJoint<PrismaticJoint>(name + "_x", plant->world_body(), 
+           RigidTransformd::Identity(), x_body, std::nullopt, Vector3d::UnitX());
+ 
+     const RigidBody<double>& y_body = plant->AddRigidBody(name + "_y", gripper_instance, gripper_inertia);
+     const auto& y_joint = plant->AddJoint<PrismaticJoint>(name + "_y", x_body, 
+           RigidTransformd::Identity(), y_body, std::nullopt, Vector3d::UnitY());
+ 
+     const RigidBody<double>& z_body = plant->AddRigidBody(name + "_z", gripper_instance, gripper_inertia);
+     const auto& z_joint = plant->AddJoint<PrismaticJoint>(name + "_z", y_body, 
+           RigidTransformd::Identity(), z_body, std::nullopt, Vector3d::UnitZ());
+ 
+     plant->RegisterCollisionGeometry(z_body, RigidTransformd::Identity(), gripper_shape, name + "_collision", rigid_proximity_props);
+     plant->RegisterVisualGeometry   (z_body, RigidTransformd::Identity(), gripper_shape, name + "_visual"   , illustration_props);
+ 
+     const auto x_actuator = plant->AddJointActuator("prismatic" + name + "_x", x_joint).index();
+     const auto y_actuator = plant->AddJointActuator("prismatic" + name + "_y", y_joint).index();
+     const auto z_actuator = plant->AddJointActuator("prismatic" + name + "_z", z_joint).index();
+     plant->GetMutableJointByName<PrismaticJoint>(name + "_x").set_default_translation(x);
+     plant->GetMutableJointByName<PrismaticJoint>(name + "_y").set_default_translation(y);
+     plant->GetMutableJointByName<PrismaticJoint>(name + "_z").set_default_translation(z);
+     plant->get_mutable_joint_actuator(x_actuator).set_controller_gains({1e6, 1});
+     plant->get_mutable_joint_actuator(y_actuator).set_controller_gains({1e6, 1});
+     plant->get_mutable_joint_actuator(z_actuator).set_controller_gains({1e6, 1});
+   };
+ 
+   add_single_gripper("gll_up",  l_x, l_x, h_z);
+   add_single_gripper("glh_up", l_x, h_x, h_z);
+   add_single_gripper("ghl_up",  h_x, l_x,  h_z);
+   add_single_gripper("ghh_up", h_x, h_x, h_z);
+   add_single_gripper("gll_down",  l_x, l_x, l_z);
+   add_single_gripper("glh_down", l_x, h_x, l_z);
+   add_single_gripper("ghl_down",  h_x, l_x,  l_z);
+   add_single_gripper("ghh_down", h_x, h_x, l_z);
+ 
+   return gripper_instance;
+ }
+ 
+  private:
+   void CalcDesiredState(const systems::Context<double>& context,
+                         systems::BasicVector<double>* output) const {
+     const double t = context.get_time();
+ 
+     Vector3d gll_up_p;
+     Vector3d glh_up_p;
+     Vector3d ghl_up_p;
+     Vector3d ghh_up_p;
+     Vector3d gll_down_p;
+     Vector3d glh_down_p;
+     Vector3d ghl_down_p;
+     Vector3d ghh_down_p;
+ 
+     Vector3d gll_up_v;
+     Vector3d glh_up_v;
+     Vector3d ghl_up_v;
+     Vector3d ghh_up_v;
+     Vector3d gll_down_v;
+     Vector3d glh_down_v;
+     Vector3d ghl_down_v;
+     Vector3d ghh_down_v;
+     if (t < initial_free_duration) {
+      gll_up_p = Vector3d(l_x, l_x, h_z);
+      glh_up_p = Vector3d(l_x, h_x, h_z);
+      ghl_up_p = Vector3d(h_x, l_x,  h_z);
+      ghh_up_p = Vector3d(h_x, h_x, h_z);
+      gll_down_p = Vector3d(l_x, l_x, l_z);
+      glh_down_p = Vector3d(l_x, h_x, l_z);
+      ghl_down_p = Vector3d(h_x, l_x,  l_z);
+      ghh_down_p = Vector3d(h_x, h_x, l_z);
+
+      gll_up_v = Vector3d(0, 0, 0);
+      glh_up_v = Vector3d(0, 0, 0);
+      ghl_up_v = Vector3d(0, 0, 0);
+      ghh_up_v = Vector3d(0, 0, 0);
+      gll_down_v = Vector3d(0, 0, 0);
+      glh_down_v = Vector3d(0, 0, 0);
+      ghl_down_v = Vector3d(0, 0, 0);
+      ghh_down_v = Vector3d(0, 0, 0);
+    }
+     else if (t < initial_free_duration + initial_loose_duration) {
+      double dt = t - initial_free_duration;
+      gll_up_p = Vector3d(l_x + dt * bagging_v, l_x + dt * bagging_v, h_z);
+      glh_up_p = Vector3d(l_x + dt * bagging_v, h_x - dt * bagging_v, h_z);
+      ghl_up_p = Vector3d(h_x - dt * bagging_v, l_x + dt * bagging_v,  h_z);
+      ghh_up_p = Vector3d(h_x - dt * bagging_v, h_x - dt * bagging_v, h_z);
+      gll_down_p = Vector3d(l_x + dt * bagging_v, l_x + dt * bagging_v, l_z);
+      glh_down_p = Vector3d(l_x + dt * bagging_v, h_x - dt * bagging_v, l_z);
+      ghl_down_p = Vector3d(h_x - dt * bagging_v, l_x + dt * bagging_v,  l_z);
+      ghh_down_p = Vector3d(h_x - dt * bagging_v, h_x - dt * bagging_v, l_z);
+
+      gll_up_v = Vector3d(+ dt * bagging_v, + dt * bagging_v, 0);
+      glh_up_v = Vector3d(+ dt * bagging_v, - dt * bagging_v, 0);
+      ghl_up_v = Vector3d(- dt * bagging_v, + dt * bagging_v, 0);
+      ghh_up_v = Vector3d(- dt * bagging_v, - dt * bagging_v, 0);
+      gll_down_v = Vector3d(+ dt * bagging_v, + dt * bagging_v, 0);
+      glh_down_v = Vector3d(+ dt * bagging_v, - dt * bagging_v, 0);
+      ghl_down_v = Vector3d(- dt * bagging_v, + dt * bagging_v, 0);
+      ghh_down_v = Vector3d(- dt * bagging_v, - dt * bagging_v, 0);
+    }
+     else if (t < free_duration + initial_loose_duration + initial_free_duration) {
+      double dt = initial_loose_duration;
+      gll_up_p = Vector3d(l_x + dt * bagging_v, l_x + dt * bagging_v, h_z);
+      glh_up_p = Vector3d(l_x + dt * bagging_v, h_x - dt * bagging_v, h_z);
+      ghl_up_p = Vector3d(h_x - dt * bagging_v, l_x + dt * bagging_v,  h_z);
+      ghh_up_p = Vector3d(h_x - dt * bagging_v, h_x - dt * bagging_v, h_z);
+      gll_down_p = Vector3d(l_x + dt * bagging_v, l_x + dt * bagging_v, l_z);
+      glh_down_p = Vector3d(l_x + dt * bagging_v, h_x - dt * bagging_v, l_z);
+      ghl_down_p = Vector3d(h_x - dt * bagging_v, l_x + dt * bagging_v,  l_z);
+      ghh_down_p = Vector3d(h_x - dt * bagging_v, h_x - dt * bagging_v, l_z);
+ 
+       gll_up_v = Vector3d(0, 0, 0);
+       glh_up_v = Vector3d(0, 0, 0);
+       ghl_up_v = Vector3d(0, 0, 0);
+       ghh_up_v = Vector3d(0, 0, 0);
+       gll_down_v = Vector3d(0, 0, 0);
+       glh_down_v = Vector3d(0, 0, 0);
+       ghl_down_v = Vector3d(0, 0, 0);
+       ghh_down_v = Vector3d(0, 0, 0);
+     } else if (t < free_duration + bagging_duration + initial_loose_duration + initial_free_duration) {
+       double dt = (t - free_duration - initial_free_duration);
+       gll_up_p = Vector3d(l_x + dt * bagging_v, l_x + dt * bagging_v, h_z);
+       glh_up_p = Vector3d(l_x + dt * bagging_v, h_x - dt * bagging_v, h_z);
+       ghl_up_p = Vector3d(h_x - dt * bagging_v, l_x + dt * bagging_v,  h_z);
+       ghh_up_p = Vector3d(h_x - dt * bagging_v, h_x - dt * bagging_v, h_z);
+       gll_down_p = Vector3d(l_x + dt * bagging_v, l_x + dt * bagging_v, l_z);
+       glh_down_p = Vector3d(l_x + dt * bagging_v, h_x - dt * bagging_v, l_z);
+       ghl_down_p = Vector3d(h_x - dt * bagging_v, l_x + dt * bagging_v,  l_z);
+       ghh_down_p = Vector3d(h_x - dt * bagging_v, h_x - dt * bagging_v, l_z);
+ 
+       gll_up_v = Vector3d(+ dt * bagging_v, + dt * bagging_v, 0);
+       glh_up_v = Vector3d(+ dt * bagging_v, - dt * bagging_v, 0);
+       ghl_up_v = Vector3d(- dt * bagging_v, + dt * bagging_v, 0);
+       ghh_up_v = Vector3d(- dt * bagging_v, - dt * bagging_v, 0);
+       gll_down_v = Vector3d(+ dt * bagging_v, + dt * bagging_v, 0);
+       glh_down_v = Vector3d(+ dt * bagging_v, - dt * bagging_v, 0);
+       ghl_down_v = Vector3d(- dt * bagging_v, + dt * bagging_v, 0);
+       ghh_down_v = Vector3d(- dt * bagging_v, - dt * bagging_v, 0);
+     } else {
+        double total_dur = initial_loose_duration + bagging_duration;
+       gll_up_p = Vector3d(l_x + total_dur * bagging_v, l_x + total_dur * bagging_v, h_z);
+       glh_up_p = Vector3d(l_x + total_dur * bagging_v, h_x - total_dur * bagging_v, h_z);
+       ghl_up_p = Vector3d(h_x - total_dur * bagging_v, l_x + total_dur * bagging_v,  h_z);
+       ghh_up_p = Vector3d(h_x - total_dur * bagging_v, h_x - total_dur * bagging_v, h_z);
+       gll_down_p = Vector3d(l_x + total_dur * bagging_v, l_x + total_dur * bagging_v, l_z);
+       glh_down_p = Vector3d(l_x + total_dur * bagging_v, h_x - total_dur * bagging_v, l_z);
+       ghl_down_p = Vector3d(h_x - total_dur * bagging_v, l_x + total_dur * bagging_v,  l_z);
+       ghh_down_p = Vector3d(h_x - total_dur * bagging_v, h_x - total_dur * bagging_v, l_z);
+ 
+       gll_up_v = Vector3d(0, 0, 0);
+       glh_up_v = Vector3d(0, 0, 0);
+       ghl_up_v = Vector3d(0, 0, 0);
+       ghh_up_v = Vector3d(0, 0, 0);
+       gll_down_v = Vector3d(0, 0, 0);
+       glh_down_v = Vector3d(0, 0, 0);
+       ghl_down_v = Vector3d(0, 0, 0);
+       ghh_down_v = Vector3d(0, 0, 0);
+     }
+ 
+     output->get_mutable_value() << 
+       gll_up_p, glh_up_p, ghl_up_p, ghh_up_p, gll_down_p, glh_down_p, ghl_down_p, ghh_down_p,
+       gll_up_v, glh_up_v, ghl_up_v, ghh_up_v, gll_down_v, glh_down_v, ghl_down_v, ghh_down_v;
+   }
+};
+
 int do_main() {
   systems::DiagramBuilder<double> builder;
 
   MultibodyPlantConfig plant_config;
   plant_config.time_step = FLAGS_time_step;
   plant_config.discrete_contact_approximation = "lagged";
+
+  ProximityProperties rigid_proximity_props;
+  ProximityProperties ground_proximity_props;
+  const CoulombFriction<double> surface_friction(1.0, 1.0);
+  AddCompliantHydroelasticProperties(1.0, 2e5, &rigid_proximity_props);
+  AddRigidHydroelasticProperties(1.0, &ground_proximity_props);
+  AddContactMaterial({}, {}, surface_friction, &rigid_proximity_props);
+  AddContactMaterial({}, {}, surface_friction, &ground_proximity_props);
 
   auto [plant, scene_graph] = AddMultibodyPlant(plant_config, &builder);
 
@@ -282,7 +486,7 @@ int do_main() {
 
   // mpm stuff
   DeformableModel<double>& deformable_model = plant.mutable_deformable_model();
-  AddCloth(&deformable_model, FLAGS_res, 0.5);
+  AddCloth(&deformable_model, FLAGS_res, 0.4);
 
   MpmConfigParams mpm_config;
   mpm_config.substep_dt = FLAGS_substep;
@@ -295,6 +499,8 @@ int do_main() {
   mpm_config.ignore_face_contact = true;
   mpm_config.mdv_as_impulse = false;
   deformable_model.SetMpmConfig(std::move(mpm_config));
+
+  const auto& gripper_instance = BaggingGripperController::AddGripperInstance(&plant, rigid_proximity_props);
 
   double Kp = 1000000.0;
   double Kd = 2 * std::sqrt(Kp);
@@ -397,6 +603,9 @@ int do_main() {
   builder.Connect(zero_vs->get_output_port(), mux->get_input_port(1));
   builder.Connect(mux->get_output_port(),
                   plant.get_desired_state_input_port(iiwa));
+
+  // bag controller
+  builder.Connect(builder.AddSystem<BaggingGripperController>()->get_output_port(), plant.get_desired_state_input_port(gripper_instance));
 
   /* Add a visualizer that emits LCM messages for visualization. */
   geometry::DrakeVisualizerParams visualize_params;
