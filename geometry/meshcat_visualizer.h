@@ -157,8 +157,11 @@ class MeshcatVisualizer final : public systems::LeafSystem<T> {
   /* Makes calls to Meshcat::SetObject to register geometry in SceneGraph. */
   void SetObjects(const SceneGraphInspector<T>& inspector) const;
 
-  // NOTE (changyu): used for MPM Meshcat visualization.
+  // NOTE (changyu): used for cloth-MPM Meshcat visualization.
   void SetMpmObjects(const systems::Context<T>& context,
+                     const multibody::gmpm::MpmPortData<multibody::gmpm::config::GpuT> & mpm_object) const;
+  // NOTE (changyu): used for particle-MPM Meshcat visualization.
+  void SetMpmParticles(const systems::Context<T>& context,
                      const multibody::gmpm::MpmPortData<multibody::gmpm::config::GpuT> & mpm_object) const;
 
   /* Makes calls to Meshcat::SetTransform to update the poses from SceneGraph.

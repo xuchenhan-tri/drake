@@ -59,7 +59,7 @@ using Eigen::Vector3d;
 using Eigen::Vector4d;
 using Eigen::VectorXd;
 
-[[maybe_unused]] void AddCloth(DeformableModel<double> *deformable_model, int res, double z_axis, double xy_offset=0.0) {
+[[maybe_unused]] void AddCloth(DeformableModel<double> *deformable_model, int res, double z_axis, double xy_offset=0.0, double x_offset=0.0) {
   const double l = 0.007 * res;
   int length = res;
   int width = res;
@@ -75,7 +75,7 @@ using Eigen::VectorXd;
     std::vector<int> indices;
     for (int i = 0; i < length; ++i) {
       for (int j = 0; j < width; ++j) {
-        inital_pos.emplace_back((0.5 - 0.5 * l) + i * dx + xy_offset, (0.5 - 0.5 * l) + j * dx + xy_offset, z_axis);
+        inital_pos.emplace_back((0.5 - 0.5 * l) + i * dx + xy_offset + x_offset, (0.5 - 0.5 * l) + j * dx + xy_offset, z_axis);
         inital_vel.emplace_back(0., 0., 0.);
       }
     }
@@ -98,7 +98,7 @@ using Eigen::VectorXd;
   }
 }
 
-[[maybe_unused]] void AddClothFromFile(DeformableModel<double> *deformable_model, std::string filename) {
+[[maybe_unused]] void AddClothFromFile(DeformableModel<double> *deformable_model, std::string filename, double x_offset=0.0, double y_offset=0.0, double z_offset=0.0, double scale=1.0) {
   const auto &mesh = ReadObjToTriangleSurfaceMesh(filename);
   std::vector<Eigen::Vector3d> inital_pos;
   std::vector<Eigen::Vector3d> inital_vel;
@@ -109,7 +109,9 @@ using Eigen::VectorXd;
     indices.push_back(mesh.triangles()[i].vertex(2));
   }
   for (int i = 0; i < mesh.num_vertices(); ++i) {
-    inital_pos.emplace_back(mesh.vertices()[i][0], mesh.vertices()[i][2], mesh.vertices()[i][1]); // swap y-axis and z-axis
+    inital_pos.emplace_back((mesh.vertices()[i][0] - 0.5) * scale + 0.5 + x_offset, 
+                            (mesh.vertices()[i][2] - 0.5) * scale + 0.5 + y_offset, 
+                            (mesh.vertices()[i][1] - 0.2) * scale + 0.2 + z_offset); // swap y-axis and z-axis
     inital_vel.emplace_back(0., 0., 0.);
   }
   deformable_model->RegisterMpmCloth(inital_pos, inital_vel, indices);

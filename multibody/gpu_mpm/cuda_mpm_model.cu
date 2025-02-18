@@ -16,6 +16,7 @@ template<typename T>
 void GpuMpmState<T>::AddQRCloth(const std::vector<Vec3<T>> &pos,
                                 const std::vector<Vec3<T>> &vel,
                                 const std::vector<int> &indices) {
+    assert(!is_particle_mpm_);
     const auto &verts = pos.size();
     const auto &faces = indices.size() / 3;
     assert(faces * 3  == indices.size());
@@ -30,6 +31,23 @@ void GpuMpmState<T>::AddQRCloth(const std::vector<Vec3<T>> &pos,
     n_particles_ += verts + faces;
     n_verts_ += verts;
     n_faces_ += faces;
+}
+
+template<typename T>
+void GpuMpmState<T>::AddParticleMpm(const std::vector<Vec3<T>> &pos,
+                                    const std::vector<Vec3<T>> &vel,
+                                    const std::vector<T> &vol) {
+    assert(n_faces_ == 0);
+    is_particle_mpm_ = true;
+
+    const auto &verts = pos.size();
+
+    h_positions_.insert(h_positions_.end(), pos.begin(), pos.end());
+    h_velocities_.insert(h_velocities_.end(), vel.begin(), vel.end());
+    h_volumes_.insert(h_volumes_.end(), vol.begin(), vol.end());
+
+    n_particles_ += verts;
+    n_verts_ += verts;
 }
 
 template<typename T>
@@ -73,7 +91,11 @@ void GpuMpmState<T>::Finalize() {
                                       h_velocities_.data(), 
                                       sizeof(Vec3<T>) * n_particles_, 
                                       cudaMemcpyHostToDevice));
-            CUDA_SAFE_CALL(cudaMemset(particle_buffer_[i].d_volumes, 0, sizeof(T) * n_particles_));
+            if (is_particle_mpm_) {
+                CUDA_SAFE_CALL(cudaMemcpy(particle_buffer_[i].d_volumes, h_volumes_.data(), sizeof(T) * n_particles_, cudaMemcpyHostToDevice));
+            } else {
+                CUDA_SAFE_CALL(cudaMemset(particle_buffer_[i].d_volumes, 0, sizeof(T) * n_particles_));
+            }
             CUDA_SAFE_CALL(cudaMemset(particle_buffer_[i].d_affine_matrices, 0, sizeof(Mat3<T>) * n_particles_));
         }
     }
@@ -86,11 +108,18 @@ void GpuMpmState<T>::Finalize() {
     std::iota(initial_index_mappings.begin(), initial_index_mappings.end(), 0);
     CUDA_SAFE_CALL(cudaMemcpy(d_index_mappings_, initial_index_mappings.data(), sizeof(int) * n_particles_, cudaMemcpyHostToDevice));
 
-    // element-based data
-    CUDA_SAFE_CALL(cudaMalloc(&d_deformation_gradients_, sizeof(Mat3<T>) * n_faces_));
-    CUDA_SAFE_CALL(cudaMalloc(&d_Dm_inverses_, sizeof(Mat2<T>) * n_faces_));
-    CUDA_SAFE_CALL(cudaMalloc(&d_indices_, sizeof(int) * n_faces_ * 3));
-    CUDA_SAFE_CALL(cudaMemcpy(d_indices_, h_indices_.data(), sizeof(int) * n_faces_ * 3, cudaMemcpyHostToDevice));
+    if (!is_particle_mpm_) {
+        // element-based data
+        CUDA_SAFE_CALL(cudaMalloc(&d_deformation_gradients_, sizeof(Mat3<T>) * n_faces_));
+        CUDA_SAFE_CALL(cudaMalloc(&d_Dm_inverses_, sizeof(Mat2<T>) * n_faces_));
+        CUDA_SAFE_CALL(cudaMalloc(&d_indices_, sizeof(int) * n_faces_ * 3));
+        CUDA_SAFE_CALL(cudaMemcpy(d_indices_, h_indices_.data(), sizeof(int) * n_faces_ * 3, cudaMemcpyHostToDevice));
+    } else {
+        // particle-based data
+        CUDA_SAFE_CALL(cudaMalloc(&d_deformation_gradients_, sizeof(Mat3<T>) * n_particles_));
+        d_Dm_inverses_ = nullptr;
+        d_indices_     = nullptr;
+    }
 
 
     // device grid buffer allocation
@@ -113,12 +142,20 @@ void GpuMpmState<T>::Finalize() {
     radix_sort(this->next_sort_keys(), this->current_sort_keys(), this->next_sort_ids(), this->current_sort_ids(), sort_buffer_, sort_buffer_size_, static_cast<unsigned int>(n_particles_));
     CUDA_SAFE_CALL(cudaMalloc(&sort_buffer_, sizeof(unsigned int) * sort_buffer_size_));
 
-    CUDA_SAFE_CALL((
-        initialize_fem_state_kernel<<<
-        (this->n_faces() + config::DEFAULT_CUDA_BLOCK_SIZE - 1) / config::DEFAULT_CUDA_BLOCK_SIZE, config::DEFAULT_CUDA_BLOCK_SIZE>>>
-        (this->n_faces(), this->indices(), this->current_positions(), this->current_velocities(), this->current_volumes(),
-         this->deformation_gradients(), this->Dm_inverses())
-        ));
+    if (is_particle_mpm_) {
+        CUDA_SAFE_CALL((
+            initialize_particle_state_kernel<<<
+            (this->n_particles() + config::DEFAULT_CUDA_BLOCK_SIZE - 1) / config::DEFAULT_CUDA_BLOCK_SIZE, config::DEFAULT_CUDA_BLOCK_SIZE>>>
+            (this->n_particles(), this->deformation_gradients())
+            ));
+    } else {
+        CUDA_SAFE_CALL((
+            initialize_fem_state_kernel<<<
+            (this->n_faces() + config::DEFAULT_CUDA_BLOCK_SIZE - 1) / config::DEFAULT_CUDA_BLOCK_SIZE, config::DEFAULT_CUDA_BLOCK_SIZE>>>
+            (this->n_faces(), this->indices(), this->current_positions(), this->current_velocities(), this->current_volumes(),
+            this->deformation_gradients(), this->Dm_inverses())
+            ));
+    }
 }
 
 template<typename T>
@@ -147,14 +184,17 @@ void GpuMpmState<T>::Destroy() {
     CUDA_SAFE_CALL(cudaFree(d_taus_));
     CUDA_SAFE_CALL(cudaFree(d_index_mappings_));
     CUDA_SAFE_CALL(cudaFree(d_deformation_gradients_));
-    CUDA_SAFE_CALL(cudaFree(d_Dm_inverses_));
-    CUDA_SAFE_CALL(cudaFree(d_indices_));
     d_forces_ = nullptr;
     d_taus_ = nullptr;
     d_index_mappings_ = nullptr;
     d_deformation_gradients_ = nullptr;
-    d_Dm_inverses_ = nullptr;
-    d_indices_ = nullptr;
+
+    if (!is_particle_mpm_) {
+        CUDA_SAFE_CALL(cudaFree(d_Dm_inverses_));
+        CUDA_SAFE_CALL(cudaFree(d_indices_));
+        d_Dm_inverses_ = nullptr;
+        d_indices_ = nullptr;
+    }
 
     CUDA_SAFE_CALL(cudaFree(grid_buffer_.d_g_masses));
     CUDA_SAFE_CALL(cudaFree(grid_buffer_.d_g_momentum));
@@ -246,22 +286,36 @@ GpuMpmState<T>::DumpT GpuMpmState<T>::DumpCpuState() const {
     std::vector<Vec3<T>> export_pos;
     std::vector<Vec3<T>> export_original_pos;
     std::vector<int> export_pid;
-    std::vector<int> export_indices;
-    export_pos.resize(n_particles());
-    export_original_pos.resize(n_particles());
-    export_pid.resize(n_particles());
-    export_indices.resize(n_faces() * 3);
-    CUDA_SAFE_CALL(cudaMemcpy(export_pos.data(), current_positions(), sizeof(Vec3<T>) * n_particles(), cudaMemcpyDeviceToHost));
-    CUDA_SAFE_CALL(cudaMemcpy(export_pid.data(), current_pids(), sizeof(int) * n_particles(), cudaMemcpyDeviceToHost));
-    CUDA_SAFE_CALL(cudaMemcpy(export_indices.data(), indices(), sizeof(int) * n_faces() * 3, cudaMemcpyDeviceToHost));
-    for (size_t i = 0; i < n_particles(); ++i) {
-      export_original_pos[export_pid[i]] = export_pos[i];
+
+    if (is_particle_mpm_) {
+        export_pos.resize(n_particles());
+        export_original_pos.resize(n_particles());
+        export_pid.resize(n_particles());
+        CUDA_SAFE_CALL(cudaMemcpy(export_pos.data(), current_positions(), sizeof(Vec3<T>) * n_particles(), cudaMemcpyDeviceToHost));
+        CUDA_SAFE_CALL(cudaMemcpy(export_pid.data(), current_pids(), sizeof(int) * n_particles(), cudaMemcpyDeviceToHost));
+        for (size_t i = 0; i < n_particles(); ++i) {
+            export_original_pos[export_pid[i]] = export_pos[i];
+        }
+        return std::make_tuple(export_pos, std::vector<int>());
+    } else {
+        std::vector<int> export_indices;
+
+        export_pos.resize(n_particles());
+        export_original_pos.resize(n_particles());
+        export_pid.resize(n_particles());
+        export_indices.resize(n_faces() * 3);
+        CUDA_SAFE_CALL(cudaMemcpy(export_pos.data(), current_positions(), sizeof(Vec3<T>) * n_particles(), cudaMemcpyDeviceToHost));
+        CUDA_SAFE_CALL(cudaMemcpy(export_pid.data(), current_pids(), sizeof(int) * n_particles(), cudaMemcpyDeviceToHost));
+        CUDA_SAFE_CALL(cudaMemcpy(export_indices.data(), indices(), sizeof(int) * n_faces() * 3, cudaMemcpyDeviceToHost));
+        for (size_t i = 0; i < n_particles(); ++i) {
+            export_original_pos[export_pid[i]] = export_pos[i];
+        }
+        export_pos = std::vector<Vec3<T>>(export_original_pos.begin() + n_faces(), export_original_pos.end());
+        for (size_t i = 0; i < n_faces() * 3; ++i) {
+            export_indices[i] -= n_faces();
+        }
+        return std::make_tuple(export_pos, export_indices);
     }
-    export_pos = std::vector<Vec3<T>>(export_original_pos.begin() + n_faces(), export_original_pos.end());
-    for (size_t i = 0; i < n_faces() * 3; ++i) {
-      export_indices[i] -= n_faces();
-    }
-    return std::make_tuple(export_pos, export_indices);
 }
 
 template<typename T>

@@ -22,7 +22,7 @@ public:
     void RebuildMapping(GpuMpmState<T> *state, bool sort) const;
     void CalcFemStateAndForce(GpuMpmState<T> *state, const T& dt) const;
     void ParticleToGrid(GpuMpmState<T> *state, const T& dt) const;
-    void UpdateGrid(GpuMpmState<T> *state, int mpm_bc = -1) const;
+    void UpdateGrid(GpuMpmState<T> *state, int mpm_bc = -1, bool enforce_bc_only = false) const;
     void GridToParticle(GpuMpmState<T> *state, const T& dt) const;
     void GpuSync() const;
     void SyncParticleStateToCpu(GpuMpmState<T> *state) const;
@@ -31,7 +31,7 @@ public:
     void UpdateContact(GpuMpmState<T> *state, 
     const int frame, const int substep, const T& dt, 
     const T& friction_mu, const T& stiffness, const T& damping, 
-    const bool bump, const bool exact_line_search) const;
+    const bool bump, const bool exact_line_search, const bool mdv_as_impulse) const;
 };
 
 }  // namespace gmpm

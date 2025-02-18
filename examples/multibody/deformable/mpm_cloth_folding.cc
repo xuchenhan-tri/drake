@@ -235,7 +235,7 @@ int do_main() {
 
   /* Add a visualizer that emits LCM messages for visualization. */
   geometry::DrakeVisualizerParams visualize_params;
-  visualize_params.show_mpm = true;
+  visualize_params.show_mpm = drake::geometry::DrakeVisualizerParams::ShowMpmOpt::kClothMpm;
   auto& visualizer = geometry::DrakeVisualizerd::AddToBuilder(&builder, scene_graph, nullptr, visualize_params);
 
   // NOTE (changyu): MPM shortcut port shuould be explicit connected for visualization.
@@ -245,7 +245,7 @@ int do_main() {
   
   // auto meshcat = std::make_shared<geometry::Meshcat>();
   // auto meshcat_params = drake::geometry::MeshcatVisualizerParams();
-  // meshcat_params.show_mpm = true;
+  // meshcat_params.show_mpm = drake::geometry::MeshcatVisualizerParams::ShowMpmOpt::kClothMpm;
   // auto& meshcat_visualizer = drake::geometry::MeshcatVisualizer<double>::AddToBuilder(
   //     &builder, scene_graph, meshcat, meshcat_params);
   // visualization::ApplyVisualizationConfig(

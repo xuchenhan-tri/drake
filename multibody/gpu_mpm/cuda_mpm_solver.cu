@@ -74,13 +74,21 @@ void GpuMpmSolver<T>::CalcFemStateAndForce(GpuMpmState<T> *state, const T& dt) c
     CUDA_SAFE_CALL(cudaMemset(state->forces(), 0, sizeof(Vec3<T>) * state->n_particles()));
     CUDA_SAFE_CALL(cudaMemset(state->taus(), 0, sizeof(Mat3<T>) * state->n_particles()));
 
-    CUDA_SAFE_CALL((
+    if (state->is_particle_mpm()) {
+        CUDA_SAFE_CALL((
+        calc_particle_state_and_force_kernel<<<
+            (state->n_particles() + config::DEFAULT_CUDA_BLOCK_SIZE - 1) / config::DEFAULT_CUDA_BLOCK_SIZE, config::DEFAULT_CUDA_BLOCK_SIZE>>>
+            (state->n_particles(), state->current_volumes(), state->current_affine_matrices(), state->deformation_gradients(), state->taus(), dt)
+            ));
+    } else {
+        CUDA_SAFE_CALL((
         calc_fem_state_and_force_kernel<<<
-        (state->n_faces() + config::DEFAULT_CUDA_BLOCK_SIZE - 1) / config::DEFAULT_CUDA_BLOCK_SIZE, config::DEFAULT_CUDA_BLOCK_SIZE>>>
-        (state->n_faces(), state->indices(), state->index_mappings(), state->current_volumes(), state->current_affine_matrices(), state->Dm_inverses(),
-         state->current_positions(), state->current_velocities(), state->deformation_gradients(),
-         state->forces(), state->taus(), dt)
-        ));
+            (state->n_faces() + config::DEFAULT_CUDA_BLOCK_SIZE - 1) / config::DEFAULT_CUDA_BLOCK_SIZE, config::DEFAULT_CUDA_BLOCK_SIZE>>>
+            (state->n_faces(), state->indices(), state->index_mappings(), state->current_volumes(), state->current_affine_matrices(), state->Dm_inverses(),
+            state->current_positions(), state->current_velocities(), state->deformation_gradients(),
+            state->forces(), state->taus(), dt)
+            ));
+    }
 }
 
 template<typename T>
@@ -105,48 +113,46 @@ void GpuMpmSolver<T>::ParticleToGrid(GpuMpmState<T> *state, const T& dt) const {
 }
 
 template<typename T>
-void GpuMpmSolver<T>::UpdateGrid(GpuMpmState<T> *state, int mpm_bc) const {
-    // NOTE (changyu): we gather the grid block that are really touched
-    CUDA_SAFE_CALL(cudaMemset(state->grid_touched_cnt(), 0, sizeof(uint32_t)));
-    CUDA_SAFE_CALL((
-        gather_touched_grid_kernel<T, config::DEFAULT_CUDA_BLOCK_SIZE><<<
-        (config::G_GRID_VOLUME + config::DEFAULT_CUDA_BLOCK_SIZE - 1) / config::DEFAULT_CUDA_BLOCK_SIZE, config::DEFAULT_CUDA_BLOCK_SIZE>>>
-        (state->grid_touched_flags(), state->grid_touched_ids(), state->grid_touched_cnt(), state->grid_masses())
-        ));
+void GpuMpmSolver<T>::UpdateGrid(GpuMpmState<T> *state, int mpm_bc, bool enforce_bc_only) const {
+    if (!enforce_bc_only) {
+        // NOTE (changyu): we gather the grid block that are really touched
+        CUDA_SAFE_CALL(cudaMemset(state->grid_touched_cnt(), 0, sizeof(uint32_t)));
+        CUDA_SAFE_CALL((
+            gather_touched_grid_kernel<T, config::DEFAULT_CUDA_BLOCK_SIZE><<<
+            (config::G_GRID_VOLUME + config::DEFAULT_CUDA_BLOCK_SIZE - 1) / config::DEFAULT_CUDA_BLOCK_SIZE, config::DEFAULT_CUDA_BLOCK_SIZE>>>
+            (state->grid_touched_flags(), state->grid_touched_ids(), state->grid_touched_cnt(), state->grid_masses())
+            ));
+    }
 
     const uint32_t &touched_blocks_cnt = state->grid_touched_cnt_host();
     const uint32_t &touched_cells_cnt = touched_blocks_cnt * config::G_BLOCK_VOLUME;
 
-    if (mpm_bc == 0) {
-        CUDA_SAFE_CALL((
-            update_grid_kernel<T, 0><<<
-            (touched_cells_cnt + config::DEFAULT_CUDA_BLOCK_SIZE - 1) / config::DEFAULT_CUDA_BLOCK_SIZE, config::DEFAULT_CUDA_BLOCK_SIZE>>>
-            (touched_cells_cnt, state->grid_touched_ids(), state->grid_masses(), state->grid_momentum(), state->grid_v_star())
-            ));
-    } else if (mpm_bc == 1) {
-        CUDA_SAFE_CALL((
-            update_grid_kernel<T, 1><<<
-            (touched_cells_cnt + config::DEFAULT_CUDA_BLOCK_SIZE - 1) / config::DEFAULT_CUDA_BLOCK_SIZE, config::DEFAULT_CUDA_BLOCK_SIZE>>>
-            (touched_cells_cnt, state->grid_touched_ids(), state->grid_masses(), state->grid_momentum(), state->grid_v_star())
-            ));
-    } else if (mpm_bc == 2) {
-        CUDA_SAFE_CALL((
-            update_grid_kernel<T, 2><<<
-            (touched_cells_cnt + config::DEFAULT_CUDA_BLOCK_SIZE - 1) / config::DEFAULT_CUDA_BLOCK_SIZE, config::DEFAULT_CUDA_BLOCK_SIZE>>>
-            (touched_cells_cnt, state->grid_touched_ids(), state->grid_masses(), state->grid_momentum(), state->grid_v_star())
-            ));
-    } else if (mpm_bc == 3) {
-        CUDA_SAFE_CALL((
-            update_grid_kernel<T, 3><<<
-            (touched_cells_cnt + config::DEFAULT_CUDA_BLOCK_SIZE - 1) / config::DEFAULT_CUDA_BLOCK_SIZE, config::DEFAULT_CUDA_BLOCK_SIZE>>>
-            (touched_cells_cnt, state->grid_touched_ids(), state->grid_masses(), state->grid_momentum(), state->grid_v_star())
-            ));
-    } else {
-        CUDA_SAFE_CALL((
-            update_grid_kernel<T, -1><<<
-            (touched_cells_cnt + config::DEFAULT_CUDA_BLOCK_SIZE - 1) / config::DEFAULT_CUDA_BLOCK_SIZE, config::DEFAULT_CUDA_BLOCK_SIZE>>>
-            (touched_cells_cnt, state->grid_touched_ids(), state->grid_masses(), state->grid_momentum(), state->grid_v_star())
-            ));
+    #define GRID_OP_WITH_BC(MPM_BC, ENFORCE_BC_ONLY) \
+    else if (mpm_bc == MPM_BC) { \
+        CUDA_SAFE_CALL(( \
+            update_grid_kernel<T, MPM_BC, ENFORCE_BC_ONLY><<< \
+            (touched_cells_cnt + config::DEFAULT_CUDA_BLOCK_SIZE - 1) / config::DEFAULT_CUDA_BLOCK_SIZE, config::DEFAULT_CUDA_BLOCK_SIZE \
+            >>>(touched_cells_cnt, state->grid_touched_ids(), state->grid_masses(), state->grid_momentum(), state->grid_v_star()) \
+        )); \
+    }
+    
+    if (enforce_bc_only) {
+        if (false) {}
+        GRID_OP_WITH_BC(1, true)
+        GRID_OP_WITH_BC(2, true)
+        GRID_OP_WITH_BC(3, true)
+        GRID_OP_WITH_BC(111, true)
+        GRID_OP_WITH_BC(222, true)
+        GRID_OP_WITH_BC(-1, true)
+    }
+    else {
+        if (false) {}
+        GRID_OP_WITH_BC(1, false)
+        GRID_OP_WITH_BC(2, false)
+        GRID_OP_WITH_BC(3, false)
+        GRID_OP_WITH_BC(111, false)
+        GRID_OP_WITH_BC(222, false)
+        GRID_OP_WITH_BC(-1, false)
     }
 }
 
@@ -212,7 +218,16 @@ void GpuMpmSolver<T>::CopyContactPairs(GpuMpmState<T> *state, const MpmParticleC
 }
 
 template<typename T>
-void GpuMpmSolver<T>::UpdateContact(GpuMpmState<T> *state, const int frame, const int substep, const T& dt, const T& friction_mu, const T& stiffness, const T& damping, const bool dump, const bool exact_line_search) const {
+void GpuMpmSolver<T>::UpdateContact(GpuMpmState<T> *state, 
+    const int frame, 
+    const int substep, 
+    const T& dt, 
+    const T& friction_mu, 
+    const T& stiffness, 
+    const T& damping, 
+    const bool dump, 
+    const bool exact_line_search,
+    const bool mdv_as_impulse) const {
     const auto &n_contacts = state->num_contacts();
     if (!n_contacts) return;
 
@@ -230,18 +245,25 @@ void GpuMpmSolver<T>::UpdateContact(GpuMpmState<T> *state, const int frame, cons
         (n_contacts + config::DEFAULT_CUDA_BLOCK_SIZE - 1) / config::DEFAULT_CUDA_BLOCK_SIZE, config::DEFAULT_CUDA_BLOCK_SIZE>>>
         (n_contacts, state->contact_pos(), state->contact_sort_keys(), state->contact_sort_ids())
         ));
-    
+
+    // If we don't converge in 2000 iterations, we probably will never converge anyway...    
     const int max_newton_iterations = 2000;
     constexpr bool use_jacobi = true;
-    const T kTol = 1e-4;
+    const T kRelTol = 5e-2;
+    // Set the absolute tolerance close to machine epsilon so that we almost always exit based on the relative tolerance.
+    const T kAbsTol = 16 * std::numeric_limits<T>::epsilon();
 
     bool enable_line_search = true;
     const T jacobi_relax_coeff = 0.3;
     const bool global_line_search = use_jacobi;
     int count = 0;
 
+    // norm_dir is the l2 norm of the search direction.
+    // norm_impulse is the sum of the l2 norm of the genelized impulse and generalized momentum.
     T norm_dir = 1e10;
+    T norm_impulse = 1e10;
     T *norm_dir_d = nullptr;
+    T *norm_impulse_d = nullptr;
     T global_E0 = T(0.);
     T *global_E0_d = nullptr;
     T global_E1 = T(0.);
@@ -255,6 +277,7 @@ void GpuMpmSolver<T>::UpdateContact(GpuMpmState<T> *state, const int frame, cons
     uint32_t solved_grid_DoFs = 0;
     uint32_t *solved_grid_DoFs_d = nullptr;
     CUDA_SAFE_CALL(cudaMalloc(&norm_dir_d, sizeof(T)));
+    CUDA_SAFE_CALL(cudaMalloc(&norm_impulse_d, sizeof(T)));
     CUDA_SAFE_CALL(cudaMalloc(&total_grid_DoFs_d, sizeof(uint32_t)));
     CUDA_SAFE_CALL(cudaMalloc(&solved_grid_DoFs_d, sizeof(uint32_t)));
     CUDA_SAFE_CALL(cudaMalloc(&global_E0_d, sizeof(T)));
@@ -271,9 +294,14 @@ void GpuMpmSolver<T>::UpdateContact(GpuMpmState<T> *state, const int frame, cons
         state->grid_masses(), state->grid_momentum(), dt)
         ));
 
-    while (norm_dir > kTol && count < max_newton_iterations) {
+    // Choose an arbitrary small number as the initial norm so that we can enter the loop.
+    // `norm_dir_initial` and `norm_impulse_initial` will be set to the initial norm values after the first iteration.
+    T norm_dir_initial = 1e-8;
+    T norm_impulse_initial = 1e-8;
+    while (norm_dir > (kAbsTol + kRelTol * norm_impulse_initial) && count < max_newton_iterations) {
         long long before_ts = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
         CUDA_SAFE_CALL(cudaMemset(norm_dir_d, 0, sizeof(T)));
+        CUDA_SAFE_CALL(cudaMemset(norm_impulse_d, 0, sizeof(T)));
         CUDA_SAFE_CALL(cudaMemset(global_E0_d, 0, sizeof(T)));
         CUDA_SAFE_CALL(cudaMemset(global_E1_d, 0, sizeof(T)));
         grid_DoFs = 0;
@@ -313,7 +341,7 @@ void GpuMpmSolver<T>::UpdateContact(GpuMpmState<T> *state, const int frame, cons
                 (touched_cells_cnt, state->grid_touched_ids(), state->grid_masses(),
                 state->grid_v_star(), state->grid_Hess(), state->grid_Grad(), state->grid_momentum(), state->grid_Dir(),
                 state->grid_alpha(), state->grid_E0(), state->grid_E1(),
-                norm_dir_d, total_grid_DoFs_d, color_mask, jacobi_relax_coeff)
+                norm_dir_d, norm_impulse_d, total_grid_DoFs_d, color_mask, jacobi_relax_coeff)
                 ));
             CUDA_SAFE_CALL(cudaDeviceSynchronize());
             CUDA_SAFE_CALL(cudaMemcpy(&total_grid_DoFs, total_grid_DoFs_d, sizeof(uint32_t), cudaMemcpyDeviceToHost));
@@ -380,7 +408,7 @@ void GpuMpmSolver<T>::UpdateContact(GpuMpmState<T> *state, const int frame, cons
             // is robust with small changes in performances (about 30%). We then choose a
             // safe tolerance far enough from the lower limit (close to machine epsilon)
             // and the upper limit (close to an inexact method).
-            const T f_tolerance = T(1e-8);
+            const T f_tolerance = std::numeric_limits<T>::epsilon();
             // NOTE (changyu): for exact line search, take jacobi_relax_coeff as alpha_guess
             const T x_tolerance = f_tolerance * jacobi_relax_coeff; // alpha_tolerance = f_tolerance * alpha_guess;
             T global_alpha = T(1.);
@@ -566,7 +594,13 @@ void GpuMpmSolver<T>::UpdateContact(GpuMpmState<T> *state, const int frame, cons
 
         CUDA_SAFE_CALL(cudaDeviceSynchronize());
         CUDA_SAFE_CALL(cudaMemcpy(&norm_dir, norm_dir_d, sizeof(T), cudaMemcpyDeviceToHost));
-        norm_dir = sqrt(norm_dir) / grid_DoFs;
+        CUDA_SAFE_CALL(cudaMemcpy(&norm_impulse, norm_impulse_d, sizeof(T), cudaMemcpyDeviceToHost));
+        norm_dir = sqrt(norm_dir);
+        norm_impulse = sqrt(norm_impulse);
+        if (count == 0) {
+            norm_dir_initial = norm_dir;
+            norm_impulse_initial = norm_impulse;
+        }
         count += 1;
         // throw;
         long long after_ts = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
@@ -575,11 +609,15 @@ void GpuMpmSolver<T>::UpdateContact(GpuMpmState<T> *state, const int frame, cons
     }
     // throw;
     std::cout << "Iteration count :" <<  count 
-              << ", tol: " << norm_dir 
+              << ", residual: " << norm_dir 
+              << ", relative tol: " << kRelTol * norm_impulse_initial
               << ", n_contacts " << n_contacts 
               << ", grid_DoFs " << grid_DoFs 
               << ", line_search_cnt_aver " << static_cast<T>(std::accumulate(s_line_search_cnts.begin(), s_line_search_cnts.end(), 0)) / s_line_search_cnts.size()
               << std::endl;
+    if (count == max_newton_iterations) {
+        std::cout << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!Newton iterations did not converge!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
+    }
     CUDA_SAFE_CALL(cudaFree(norm_dir_d));
     CUDA_SAFE_CALL(cudaFree(total_grid_DoFs_d));
     CUDA_SAFE_CALL(cudaFree(solved_grid_DoFs_d));
@@ -612,12 +650,28 @@ void GpuMpmSolver<T>::UpdateContact(GpuMpmState<T> *state, const int frame, cons
     }
 
     // NOTE (changyu): two-way coupling part, apply contact impulse back to the rigid part
-    CUDA_SAFE_CALL((apply_contact_impulse_to_rigid_bodies<T><<<
-        (n_contacts + config::DEFAULT_CUDA_BLOCK_SIZE - 1) / config::DEFAULT_CUDA_BLOCK_SIZE, config::DEFAULT_CUDA_BLOCK_SIZE>>>
-        (n_contacts, state->contact_pos(), state->contact_vel_star(), state->contact_vel(), 
-        state->current_volumes(), state->contact_mpm_id(), state->contact_rigid_id(), 
-        state->contact_rigid_p_WB(), state->F_Bq_W_tau(), state->F_Bq_W_f())
-        ));
+    if (mdv_as_impulse) {
+        CUDA_SAFE_CALL((apply_contact_impulse_to_rigid_bodies<T, /*MDV_AS_IMPULSE=*/true><<<
+            (n_contacts + config::DEFAULT_CUDA_BLOCK_SIZE - 1) / config::DEFAULT_CUDA_BLOCK_SIZE, config::DEFAULT_CUDA_BLOCK_SIZE>>>
+            (n_contacts, state->contact_pos(), state->contact_vel_star(), state->contact_vel(), 
+            state->current_volumes(), state->current_velocities(),
+            state->contact_dist(), state->contact_normal(), state->contact_rigid_v(),
+            state->contact_mpm_id(), state->contact_rigid_id(), 
+            state->contact_rigid_p_WB(), state->F_Bq_W_tau(), state->F_Bq_W_f(),
+            dt, friction_mu, stiffness, damping)
+            ));
+    } else {
+        // NOTE: Use negative contact energy gradient as the impulse instead of particle mdv when accumulating impulses on rigid bodies
+        CUDA_SAFE_CALL((apply_contact_impulse_to_rigid_bodies<T, /*MDV_AS_IMPULSE=*/false><<<
+            (n_contacts + config::DEFAULT_CUDA_BLOCK_SIZE - 1) / config::DEFAULT_CUDA_BLOCK_SIZE, config::DEFAULT_CUDA_BLOCK_SIZE>>>
+            (n_contacts, state->contact_pos(), state->contact_vel_star(), state->contact_vel(), 
+            state->current_volumes(), state->current_velocities(),
+            state->contact_dist(), state->contact_normal(), state->contact_rigid_v(),
+            state->contact_mpm_id(), state->contact_rigid_id(), 
+            state->contact_rigid_p_WB(), state->F_Bq_W_tau(), state->F_Bq_W_f(),
+            dt, friction_mu, stiffness, damping)
+            ));
+    }
 }
 
 template class GpuMpmSolver<config::GpuT>;

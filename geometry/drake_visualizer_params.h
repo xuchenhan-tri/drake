@@ -55,7 +55,12 @@ struct DrakeVisualizerParams {
   bool use_role_channel_suffix{false};
 
   // NOTE (changyu): to show MPM model
-  bool show_mpm{false};
+  enum class ShowMpmOpt {
+    kClothMpm,
+    kParticleMpm,
+    kNone
+  };
+  ShowMpmOpt show_mpm{ShowMpmOpt::kNone};
 };
 
 }  // namespace geometry

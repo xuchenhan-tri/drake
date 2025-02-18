@@ -11,6 +11,27 @@ namespace multibody {
 namespace gmpm {
 
 template<typename T>
+__global__ void initialize_particle_state_kernel(
+    const size_t n_particles,
+    T *deformation_gradients) {
+    uint32_t idx = threadIdx.x + blockDim.x * blockIdx.x;
+    if (idx < n_particles) {
+        T *F = &deformation_gradients[idx * 9];
+        F[0] = T(1.);
+        F[1] = T(0.);
+        F[2] = T(0.);
+
+        F[3] = T(0.);
+        F[4] = T(1.);
+        F[5] = T(0.);
+
+        F[6] = T(0.);
+        F[7] = T(0.);
+        F[8] = T(1.);
+    }
+}
+
+template<typename T>
 __global__ void initialize_fem_state_kernel(
     const size_t n_faces,
     const int *indices,
@@ -60,7 +81,9 @@ __global__ void initialize_fem_state_kernel(
 
         T D0xD1[3];
         cross_product3(D0, D1, D0xD1);
-        T volume_4 = norm<3>(D0xD1) / T(8.) * config::G_DX<T>;
+        // NOTE (changyu): hard-code thickness as 1mm.
+        // The parameter shouldn't vary with grid dx.
+        T volume_4 = norm<3>(D0xD1) / T(8.) * T(0.01);
 
         volumes[idx] += volume_4;
         atomicAdd(&volumes[v0], volume_4);
@@ -299,6 +322,123 @@ __global__ void calc_fem_state_and_force_kernel(
             atomicAdd(&forces[v0 * 3 + i], -G[i * 3 + 0]);
             atomicAdd(&forces[v1 * 3 + i], -G[i * 3 + 1]);
             atomicAdd(&forces[v2 * 3 + i], -G[i * 3 + 2]);
+        }
+    }
+}
+
+template<typename T, bool PLASTICITY=true>
+__global__ void calc_particle_state_and_force_kernel(
+    const size_t n_particles,
+    const T* volumes,
+    const T* affine_matrices,
+    T* deformation_gradients,
+    T* taus,
+    const T dt) {
+    uint32_t idx = threadIdx.x + blockDim.x * blockIdx.x;
+    if (idx < n_particles) {
+        T* F = &deformation_gradients[idx * 9];
+        const T* C = &affine_matrices[idx * 9];
+        
+        float new_F[9];
+        new_F[0] = (T(1.) + dt * C[0]) * F[0] + dt * C[1] * F[3] + dt * C[2] * F[6];
+        new_F[1] = (T(1.) + dt * C[0]) * F[1] + dt * C[1] * F[4] + dt * C[2] * F[7];
+        new_F[2] = (T(1.) + dt * C[0]) * F[2] + dt * C[1] * F[5] + dt * C[2] * F[8];
+
+        new_F[3] = dt * C[3] * F[0] + (T(1.) + dt * C[4]) * F[3] + dt * C[5] * F[6];
+        new_F[4] = dt * C[3] * F[1] + (T(1.) + dt * C[4]) * F[4] + dt * C[5] * F[7];
+        new_F[5] = dt * C[3] * F[2] + (T(1.) + dt * C[4]) * F[5] + dt * C[5] * F[8];
+
+        new_F[6] = dt * C[6] * F[0] + dt * C[7] * F[3] + (T(1.) + dt * C[8]) * F[6];
+        new_F[7] = dt * C[6] * F[1] + dt * C[7] * F[4] + (T(1.) + dt * C[8]) * F[7];
+        new_F[8] = dt * C[6] * F[2] + dt * C[7] * F[5] + (T(1.) + dt * C[8]) * F[8];
+
+        #pragma unroll
+        for (int i = 0; i < 9; ++i) {
+            F[i] = new_F[i];
+        }
+
+        // NOTE, TODO (changyu): currently svd only supports float, all set float here
+        float Uf[9], sigmaf[9], Vf[9];
+        ssvd3x3<float>(new_F, Uf, sigmaf, Vf);
+         
+        T U[9], sigma[9], V[9];
+        #pragma unroll
+        for (int i = 0; i < 9; ++i) {
+            U[i] = Uf[i];
+            sigma[i] = sigmaf[i];
+            V[i] = Vf[i];
+        }
+
+        if constexpr(PLASTICITY) {
+            T b_trial[3] = {
+                sigma[0] * sigma[0],
+                sigma[4] * sigma[4],
+                sigma[8] * sigma[8]
+            };
+
+            T epsilon[3] = {
+                log(sigma[0]),
+                log(sigma[4]),
+                log(sigma[8])
+            };
+
+            T trace_epsilon = epsilon[0] + epsilon[1] + epsilon[2];
+            T epsilon_hat[3] = {
+                epsilon[0] - (trace_epsilon / T(3.)),
+                epsilon[1] - (trace_epsilon / T(3.)),
+                epsilon[2] - (trace_epsilon / T(3.))
+            };
+            T s_trial[3] = {
+                T(2.) * config::PARTICLE_MU<T> * epsilon_hat[0],
+                T(2.) * config::PARTICLE_MU<T> * epsilon_hat[1],
+                T(2.) * config::PARTICLE_MU<T> * epsilon_hat[2],
+            };
+            T s_trial_norm = norm<3>(s_trial) + T(1e-8);
+            T y = s_trial_norm - sqrt(T(2./3.)) * config::PARTICLE_YIELD_STRESS<T>;
+            if (y > 0) {
+                T mu_hat = config::PARTICLE_MU<T> * (b_trial[0] + b_trial[1] + b_trial[2]) / T(3.);
+                T s_new_norm = s_trial_norm - y;
+                T s_new[3] = {
+                    (s_new_norm / s_trial_norm) * s_trial[0],
+                    (s_new_norm / s_trial_norm) * s_trial[1],
+                    (s_new_norm / s_trial_norm) * s_trial[2]
+                };
+                T H[3] = {
+                    s_new[0] / (T(2.) * config::PARTICLE_MU<T>) + trace_epsilon / T(3.),
+                    s_new[1] / (T(2.) * config::PARTICLE_MU<T>) + trace_epsilon / T(3.),
+                    s_new[2] / (T(2.) * config::PARTICLE_MU<T>) + trace_epsilon / T(3.)
+                };
+
+                sigma[0 * 3 + 0] = exp(H[0]);
+                sigma[1 * 3 + 1] = exp(H[1]);
+                sigma[2 * 3 + 2] = exp(H[2]);
+            }
+
+            T tmp[9];
+            matmul<3, 3, 3, T>(U, sigma, tmp);
+            matmulT<3, 3, 3, T>(tmp, V, F);
+        }
+        
+        // TODO (changyu): many register used here. Most of them could be reused to optimize performance.
+        T J = determinant3(F);
+        T *stress = &taus[idx * 9];
+        T R[9];
+        matmulT<3, 3, 3, T>(U, V, R);
+        
+        T *two_mu_F_minus_R = R;
+        #pragma unroll
+        for (int i = 0; i < 9; ++i) {
+            two_mu_F_minus_R[i] = T(2.) * config::PARTICLE_MU<T> * (F[i] - R[i]);
+        }
+        matmulT<3, 3, 3, T>(two_mu_F_minus_R, F, stress);
+        #pragma unroll
+        for (int i = 0; i < 3; ++i) {
+            stress[i * 3 + i] += config::PARTICLE_LAMBDA<T> * J * (J - T(1.));
+        }
+
+        #pragma unroll
+        for (int i = 0; i < 9; ++i) {
+            stress[i] *= volumes[idx];
         }
     }
 }
@@ -639,7 +779,7 @@ __global__ void clean_grid_contact_kernel(
     }
 }
 
-template<typename T, int MPM_BOUNDARY_CONDITION=-1>
+template<typename T, int MPM_BOUNDARY_CONDITION=-1, bool ENFORCE_BC_ONLY=false>
 __global__ void update_grid_kernel(
     const uint32_t touched_cells_cnt,
     uint32_t* g_touched_ids,
@@ -652,10 +792,13 @@ __global__ void update_grid_kernel(
         uint32_t cell_idx = (block_idx << (config::G_BLOCK_BITS * 3)) | (idx & config::G_BLOCK_VOLUME_MASK);
         if (g_masses[cell_idx] > T(0.)) {
             T *g_vel = &g_momentum[cell_idx * 3];
-            // printf("m=%lf mv=(%lf %lf %lf)\n", g_masses[cell_idx], g_vel[0], g_vel[1], g_vel[2]);
-            g_vel[0] /= g_masses[cell_idx];
-            g_vel[1] /= g_masses[cell_idx];
-            g_vel[2] /= g_masses[cell_idx];
+
+            if constexpr (!ENFORCE_BC_ONLY) {
+                // printf("m=%lf mv=(%lf %lf %lf)\n", g_masses[cell_idx], g_vel[0], g_vel[1], g_vel[2]);
+                g_vel[0] /= g_masses[cell_idx];
+                g_vel[1] /= g_masses[cell_idx];
+                g_vel[2] /= g_masses[cell_idx];
+            }
 
             // apply boundary condition
             const int boundary_condition = config::G_BOUNDARY_CONDITION;
@@ -758,6 +901,36 @@ __global__ void update_grid_kernel(
                     }
                 }
 
+                // z-axis=0.5 used for particle (dual_arm/roll/) demos
+                else if constexpr (MPM_BOUNDARY_CONDITION == 111) {
+                    normal[0] = T(0.);
+                    normal[1] = T(0.);
+                    normal[2] = T(1.);
+                    dist = pos[2] - T(0.5);
+                    if (dist < 0) {
+                        inside = true;
+                        diff_vel[0] = -g_vel[0];
+                        diff_vel[1] = -g_vel[1];
+                        diff_vel[2] = -g_vel[2];
+                        dotnv = dot<3>(diff_vel, normal);
+                    }
+                }
+
+                // z-axis=0.005 used for cloth (dual_arm_folding) demos
+                else if constexpr (MPM_BOUNDARY_CONDITION == 222) {
+                    normal[0] = T(0.);
+                    normal[1] = T(0.);
+                    normal[2] = T(1.);
+                    dist = pos[2] - T(0.02);
+                    if (dist < 0) {
+                        inside = true;
+                        diff_vel[0] = -g_vel[0];
+                        diff_vel[1] = -g_vel[1];
+                        diff_vel[2] = -g_vel[2];
+                        dotnv = dot<3>(diff_vel, normal);
+                    }
+                }
+
                 // four-corner suspension used for bagging demo
                 else if constexpr (MPM_BOUNDARY_CONDITION == 3) {
                     fixed = true;
@@ -798,9 +971,11 @@ __global__ void update_grid_kernel(
                 }
             }
 
-            g_v_star[cell_idx * 3 + 0] = g_vel[0];
-            g_v_star[cell_idx * 3 + 1] = g_vel[1];
-            g_v_star[cell_idx * 3 + 2] = g_vel[2];
+            if constexpr (!ENFORCE_BC_ONLY) {
+                g_v_star[cell_idx * 3 + 0] = g_vel[0];
+                g_v_star[cell_idx * 3 + 1] = g_vel[1];
+                g_v_star[cell_idx * 3 + 2] = g_vel[2];
+            }
         }
     }
 }
@@ -1266,6 +1441,7 @@ __global__ void update_grid_contact_coordinate_descent_kernel(
     T* g_E0,
     T* g_E1,
     T* norm_dir,
+    T* norm_impulse,
     uint32_t* total_grid_DoFs,
     const uint32_t g_color_mask,
     const T jacobi_relax_coeff) {
@@ -1280,11 +1456,30 @@ __global__ void update_grid_contact_coordinate_descent_kernel(
             T* local_Hess = &g_Hess[cell_idx * 9];
             T* local_Grad = &g_Grad[cell_idx * 3];
             T* local_Dir = &g_Dir[cell_idx * 3];
+            T sqrt_mass = sqrt(mass);
 
             // M + J^T * G * J
             local_Hess[0] += mass;
             local_Hess[4] += mass;
             local_Hess[8] += mass;
+
+            // TODO(xuchenhan-tri): We only need to compute the norm of the scaled impulse and momentum
+            //  at the first iteration.
+            // We scale the impulse and momentum by the square root of the mass following the original SAP paper.
+            T scaled_impulse[3] = {
+                -local_Grad[0] / sqrt_mass,
+                -local_Grad[1] / sqrt_mass,
+                -local_Grad[2] / sqrt_mass
+            };
+            T scaled_momentum[3] = {
+                sqrt_mass * g_vel[0],
+                sqrt_mass * g_vel[1],
+                sqrt_mass * g_vel[2]
+            };
+            // Instead of taking the max between the impulse scale and the momentum scale, we sum them.
+            // This is differs from the result from using max by at most a factor of 2.
+            T  momentum_scale = norm_sqr<3>(&scaled_momentum[0]) + norm_sqr<3>(&scaled_impulse[0]);
+            atomicAdd(norm_impulse, momentum_scale);
 
             // M (v - v*) - J^T * γ
             local_Grad[0] += mass * (g_vel[0] - g_v_star[cell_idx * 3 + 0]);
@@ -1298,6 +1493,12 @@ __global__ void update_grid_contact_coordinate_descent_kernel(
                 -local_Grad[2]
             };
 
+            T scaled_grad[3] = {
+                local_Grad[0] / sqrt_mass,
+                local_Grad[1] / sqrt_mass,
+                local_Grad[2] / sqrt_mass
+            };
+
             // Optimization problem for minimizing ℓ(v_i):
             // min_{v_i} ℓ(v_i) = (1/2) * ||v_i - v_i^*||_M^2 + ℓ_c(v_p(v_i))
             // M * (v_{n+1}^i - v_i^*) = J^T * γ(v_p(v_{n+1}^i))
@@ -1307,7 +1508,7 @@ __global__ void update_grid_contact_coordinate_descent_kernel(
             cholesky_solve3(local_Hess, negative_local_Grad, local_Dir);
 
             // stop criterion
-            atomicAdd(norm_dir, norm_sqr<3>(local_Dir));
+            atomicAdd(norm_dir, norm_sqr<3>(&scaled_grad[0]));
             atomicAdd(total_grid_DoFs, 1U);
 
             // NOTE(changyu): enable it to add relaxation factor
@@ -1690,29 +1891,96 @@ __global__ void apply_global_line_search_grid_kernel(
     }
 }
 
-template<typename T>
+template<typename T, bool MDV_AS_IMPULSE>
 __global__ void apply_contact_impulse_to_rigid_bodies(
     const size_t n_contacts,
     const T* contact_pos,
     const T* contact_vel_star,
     const T* contact_vel,
     const T* volumes,
+    const T* velocities,
+    const T* contact_dist,
+    const T* contact_normal,
+    const T* contact_rigid_v,
     const uint32_t* contact_mpm_id,
     const uint32_t* contact_rigid_id,
     const T* contact_rigid_p_WB,
     T* F_Bq_W_tau,
-    T* F_Bq_W_f) {
+    T* F_Bq_W_f,
+    const T dt,
+    const T friction_mu,
+    const T stiffness,
+    const T damping) {
     uint32_t idx = threadIdx.x + blockDim.x * blockIdx.x;
     if (idx < n_contacts) {
-        T dv[3] = {
-            contact_vel[idx * 3 + 0] - contact_vel_star[idx * 3 + 0],
-            contact_vel[idx * 3 + 1] - contact_vel_star[idx * 3 + 1],
-            contact_vel[idx * 3 + 2] - contact_vel_star[idx * 3 + 2]
-        };
-        T m = volumes[contact_mpm_id[idx]] * config::DENSITY<T>;
-        // We negate the sign of the grid node's momentum change to get
-        //  the impulse applied to the rigid body at the grid node.
-        T l_WN_W[3] = {m * -dv[0], m * -dv[1], m * -dv[2]};
+        T l_WN_W[3] = {0, 0, 0};
+        if constexpr (MDV_AS_IMPULSE) {
+            T dv[3] = {
+                contact_vel[idx * 3 + 0] - contact_vel_star[idx * 3 + 0],
+                contact_vel[idx * 3 + 1] - contact_vel_star[idx * 3 + 1],
+                contact_vel[idx * 3 + 2] - contact_vel_star[idx * 3 + 2]
+            };
+            T m = volumes[contact_mpm_id[idx]] * config::DENSITY<T>;
+
+            // We negate the sign of the grid node's momentum change to get
+            //  the impulse applied to the rigid body at the grid node.
+            l_WN_W[0] = m * -dv[0];
+            l_WN_W[1] = m * -dv[1];
+            l_WN_W[2] = m * -dv[2];
+        } else {
+            // Use negative contact energy gradient as the impulse 
+            // instead of particle mdv when accumulating impulses on rigid bodies
+            const T mass = volumes[contact_mpm_id[idx]] * config::DENSITY<T>;
+            const T* particle_vn = &velocities[contact_mpm_id[idx] * 3];
+            const T* particle_v = &contact_vel[idx * 3];
+
+            T nhat_W[3] = {contact_normal[idx * 3 + 0], contact_normal[idx * 3 + 1], contact_normal[idx * 3 + 2]};
+            T phi0 = -contact_dist[idx];
+#ifdef DEBUG
+            if (phi0 < 0) {
+                printf("IMPOSSIBLE!!!\n");
+            }
+#endif
+
+            T vn_rel_W[3] = {
+                particle_vn[0] - contact_rigid_v[idx * 3 + 0],
+                particle_vn[1] - contact_rigid_v[idx * 3 + 1],
+                particle_vn[2] - contact_rigid_v[idx * 3 + 2]
+            };
+            T v_rel_W[3] = {
+                particle_v[0] - contact_rigid_v[idx * 3 + 0],
+                particle_v[1] - contact_rigid_v[idx * 3 + 1],
+                particle_v[2] - contact_rigid_v[idx * 3 + 2]
+            };
+
+            constexpr int kZAxis = 2;
+            T R_WC[9], R_CW[9]; // for each contact pair, Ji = R_CWp * wip
+            make_from_one_unit_vector(nhat_W, kZAxis, R_WC);
+            transpose<3, 3, T>(R_WC, R_CW);
+
+            T vn_C[3], v_next_C[3]; // in the contact local coordinate
+            matmul<3, 3, 1, T>(R_CW, vn_rel_W, vn_C);
+            matmul<3, 3, 1, T>(R_CW, v_rel_W, v_next_C);
+
+            T lc_Hess_C_unused[9], lc_Grad_C[3]; // hess and grad in the contact local coordinate
+            compute_contact_grad_and_hess(phi0, dt, stiffness, damping, friction_mu, vn_C, v_next_C, lc_Hess_C_unused, lc_Grad_C);
+            
+            
+            // grad in the world local coordinate
+            T lc_Grad_W[3];
+
+            // Grad for lc(vp(vi))
+            matmul<3, 3, 1, T>(R_WC, lc_Grad_C, lc_Grad_W); // J^T Grad
+
+            // NOTE (changyu): we have two negative signs here 
+            // (1): we negate the sign of the gradient of lc() to get the impulse(gamma) applied to the grid node.
+            // (2): we negate (1) again to compute the reaction force to the rigid body, in accordance with Newton's Third Law.
+            // finally we have no sign here
+            l_WN_W[0] = lc_Grad_W[0];
+            l_WN_W[1] = lc_Grad_W[1];
+            l_WN_W[2] = lc_Grad_W[2];
+        }
+
         const T* p_WN = &contact_pos[idx * 3];
         const T* p_WB = &contact_rigid_p_WB[idx * 3];
         const T p_BN_W[3] = {
