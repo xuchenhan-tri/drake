@@ -29,16 +29,16 @@
 #include "drake/visualization/visualization_config_functions.h"
 
 DEFINE_bool(write_files, false, "Enable dumping MPM data to files.");
-DEFINE_double(simulation_time, 9.0, "Desired duration of the simulation [s].");
-DEFINE_int32(res, 70, "Cloth Resolution.");
+DEFINE_double(simulation_time, 13.0, "Desired duration of the simulation [s].");
+DEFINE_int32(res, 69, "Cloth Resolution.");
 DEFINE_double(realtime_rate, 1.0, "Desired real time rate.");
-DEFINE_double(time_step, 1e-2,
+DEFINE_double(time_step, 1e-3,
               "Discrete time step for the system [s]. Must be positive.");
 DEFINE_double(substep, 5e-4,
               "Discrete time step for the substepping scheme [s]. Must be positive.");
 DEFINE_double(stiffness, 100.0, "Contact Stiffness.");
 DEFINE_double(friction, 1.0, "Contact Friction.");
-DEFINE_double(damping, 1e-5,
+DEFINE_double(damping, 1.0,
     "Hunt and Crossley damping for the deformable body, only used when "
     "'contact_approximation' is set to 'lagged' or 'similar' [s/m].");
 
@@ -255,6 +255,8 @@ class IiwaController : public drake::systems::LeafSystem<double> {
       dX(4) += 0.0084 * rate; // move right
       dX(4) += 0.004 * rate; // move extra 20cm to get right up of the blue box
       dX(3) += 0.0015 * rate; // move outward
+     } else {
+      dX.setZero();
      }
      auto new_value = current_state_values + dX;
      next_states->set_value(new_value);
@@ -279,15 +281,17 @@ class BaggingGripperController : public systems::LeafSystem<double> {
   static constexpr double gripper_z = 0.02;
   static constexpr double gripper_density = 10000.0;
  
-  static constexpr double l_x = 0.34 - 0.025;
-  static constexpr double h_x = 0.66 + 0.025;
-  static constexpr double l_z = 0.29-1.5e-4;
-  static constexpr double h_z = 0.31+1.5e-4;
+  static constexpr double l_x = 0.34 - 0.03;
+  static constexpr double h_x = 0.66 + 0.027;
+  static constexpr double l_z = 0.29-2e-4;
+  static constexpr double h_z = 0.31+2e-4;
  
   static constexpr double initial_free_duration = 0.25;
   static constexpr double initial_loose_duration = 0.25;
   static constexpr double free_duration = 7.0;
   static constexpr double bagging_duration = 1.25 - initial_loose_duration;
+  static constexpr double static_duration = 2.0;
+  static constexpr double final_loose_duration = 0.4;
   static constexpr double bagging_v = 0.1;
  
   static ModelInstanceIndex AddGripperInstance(MultibodyPlant<double>* plant, ProximityProperties rigid_proximity_props) {
@@ -437,7 +441,7 @@ class BaggingGripperController : public systems::LeafSystem<double> {
        glh_down_v = Vector3d(+ dt * bagging_v, - dt * bagging_v, 0);
        ghl_down_v = Vector3d(- dt * bagging_v, + dt * bagging_v, 0);
        ghh_down_v = Vector3d(- dt * bagging_v, - dt * bagging_v, 0);
-     } else {
+     } else if (t < free_duration + bagging_duration + initial_loose_duration + initial_free_duration + static_duration) {
         double total_dur = initial_loose_duration + bagging_duration;
        gll_up_p = Vector3d(l_x + total_dur * bagging_v, l_x + total_dur * bagging_v, h_z);
        glh_up_p = Vector3d(l_x + total_dur * bagging_v, h_x - total_dur * bagging_v, h_z);
@@ -456,6 +460,27 @@ class BaggingGripperController : public systems::LeafSystem<double> {
        glh_down_v = Vector3d(0, 0, 0);
        ghl_down_v = Vector3d(0, 0, 0);
        ghh_down_v = Vector3d(0, 0, 0);
+     } else {
+      double total_dur = initial_loose_duration + bagging_duration;
+      double dt = std::min(t - (free_duration + bagging_duration + initial_loose_duration + initial_free_duration + static_duration), 
+                           final_loose_duration);
+      gll_up_p = Vector3d(l_x + total_dur * bagging_v, l_x + total_dur * bagging_v, h_z);
+      glh_up_p = Vector3d(l_x + total_dur * bagging_v, h_x - total_dur * bagging_v, h_z);
+      ghl_up_p = Vector3d(h_x - (total_dur - dt) * bagging_v, l_x + (total_dur - dt) * bagging_v,  h_z + dt * bagging_v);
+      ghh_up_p = Vector3d(h_x - (total_dur - dt) * bagging_v, h_x - (total_dur - dt) * bagging_v, h_z + dt * bagging_v);
+      gll_down_p = Vector3d(l_x + total_dur * bagging_v, l_x + total_dur * bagging_v, l_z);
+      glh_down_p = Vector3d(l_x + total_dur * bagging_v, h_x - total_dur * bagging_v, l_z);
+      ghl_down_p = Vector3d(h_x - (total_dur - dt) * bagging_v, l_x + (total_dur - dt) * bagging_v,  l_z - dt * bagging_v);
+      ghh_down_p = Vector3d(h_x - (total_dur - dt) * bagging_v, h_x - (total_dur - dt) * bagging_v, l_z - dt * bagging_v);
+
+      gll_up_v = Vector3d(0, 0, 0);
+       glh_up_v = Vector3d(0, 0, 0);
+       ghl_up_v = Vector3d(bagging_v, -bagging_v, + bagging_v);
+       ghh_up_v = Vector3d(bagging_v, +bagging_v, + bagging_v);
+       gll_down_v = Vector3d(0, 0, 0);
+       glh_down_v = Vector3d(0, 0, 0);
+       ghl_down_v = Vector3d(bagging_v, -bagging_v, - bagging_v);
+       ghh_down_v = Vector3d(bagging_v, +bagging_v, - bagging_v);
      }
  
      output->get_mutable_value() << 
