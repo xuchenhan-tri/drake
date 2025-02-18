@@ -29,7 +29,7 @@
 #include "drake/visualization/visualization_config_functions.h"
 
 DEFINE_bool(write_files, false, "Enable dumping MPM data to files.");
-DEFINE_double(simulation_time, 6.0, "Desired duration of the simulation [s].");
+DEFINE_double(simulation_time, 9.0, "Desired duration of the simulation [s].");
 DEFINE_int32(res, 60, "Cloth Resolution.");
 DEFINE_double(realtime_rate, 1.0, "Desired real time rate.");
 DEFINE_double(time_step, 1e-2,
@@ -102,16 +102,28 @@ class HandPoseController : public drake::systems::LeafSystem<double> {
      double t = context.get_time();
      if (t < 0.5) {
      } else if (t < 1.0){
-       // start gripping
+       // start gripping red box
        double dt = std::min(std::max((context.get_time() - 0.5) / 0.5, 0.0), 1.0);
        positions = (1.0 - dt) * GetHomePosition() + dt * GetGripPosition();
      } else if (t < 2.5) {
        positions = GetGripPosition();
-     } else if (t < 3.0) {
+     } else if (t < 4.0) {
        // loose hand to put red box down
        double dt = std::min(std::max((context.get_time() - 2.5) / 0.5, 0.0), 1.0);
        positions = (1.0 - dt) * GetGripPosition() + dt * GetHomePosition();
-     }
+     } else if (t < 4.5){
+      // start gripping blue box
+      double dt = std::min(std::max((context.get_time() - 4.0) / 0.5, 0.0), 1.0);
+      positions = (1.0 - dt) * GetHomePosition() + dt * GetGripPosition();
+    } else if (t < 6.0) {
+      positions = GetGripPosition();
+    } else if (t < 6.5) {
+      // loose hand to put blue box down
+      double dt = std::min(std::max((context.get_time() - 6.0) / 0.5, 0.0), 1.0);
+      positions = (1.0 - dt) * GetGripPosition() + dt * GetHomePosition();
+    } else {
+      positions = GetHomePosition();
+    }
      Eigen::VectorXd q_and_v(32);
      q_and_v << positions, GetHomeVelocity();
      output->set_value(q_and_v);
@@ -222,9 +234,28 @@ class IiwaController : public drake::systems::LeafSystem<double> {
      } else if (t < 3.0) {
       // hold
      } else if (t < 3.5) {
-      dX(5) -= 0.002 * rate; // move up
+      dX(5) -= 0.0038 * rate; // move down 
       dX(4) += 0.0084 * rate; // move right
-      dX(3) += 0.0014 * rate; // move outward
+      dX(4) += 0.004 * rate; // move extra 20cm to get right up of the blue box
+      dX(3) += 0.0015 * rate; // move outward
+     } else if (t < 4.0) {
+      dX(5) -= 0.002 * rate; // move down
+     } else if (t < 4.5) {
+      // hold
+     } else if (t < 5.0) {
+      dX(5) += 0.002 * rate; // move up
+     } else if (t < 6.0) {
+        dX(5) += 0.0019 * rate; // move up 
+        dX(4) -= 0.0048 * rate; // move left
+        dX(4) -= 0.002 * rate; // move extra 20cm
+        dX(3) -= 0.0007 * rate; // move inward
+     } else if (t < 6.5) {
+        // hold
+     } else if (t < 7.0) {
+      dX(5) -= 0.0038 * rate; // move down 
+      dX(4) += 0.0084 * rate; // move right
+      dX(4) += 0.004 * rate; // move extra 20cm to get right up of the blue box
+      dX(3) += 0.0015 * rate; // move outward
      }
      auto new_value = current_state_values + dX;
      next_states->set_value(new_value);
@@ -256,7 +287,7 @@ class BaggingGripperController : public systems::LeafSystem<double> {
  
   static constexpr double initial_free_duration = 0.25;
   static constexpr double initial_loose_duration = 0.25;
-  static constexpr double free_duration = 4.0;
+  static constexpr double free_duration = 7.0;
   static constexpr double bagging_duration = 1.25 - initial_loose_duration;
   static constexpr double bagging_v = 0.1;
  
@@ -470,21 +501,40 @@ int do_main() {
   
   // free box
   const Vector4<double> red(1.0, 0.0, 0.0, 1.0);
+  const Vector4<double> blue(0.0, 0.0, 1.0, 1.0);
   double box_width = 0.08;
-  ModelInstanceIndex free_body_model_instance =
-      plant.AddModelInstance("free_body_instance");
-  const SpatialInertia<double> free_body_box_spatial =
-      SpatialInertia<double>::SolidBoxWithDensity(300.0, box_width,
+
+
+
+  ModelInstanceIndex free_body_model_instance1 =
+      plant.AddModelInstance("free_body_instance1");
+  const SpatialInertia<double> free_body_box_spatial1 =
+      SpatialInertia<double>::SolidBoxWithDensity(200.0, box_width,
                                                   box_width, box_width);
-  const RigidBody<double>& free_box = plant.AddRigidBody(
-      "free_box", free_body_model_instance, free_body_box_spatial);
+  const RigidBody<double>& free_box1 = plant.AddRigidBody(
+      "free_box1", free_body_model_instance1, free_body_box_spatial1);
     
-    plant.RegisterVisualGeometry(free_box, RigidTransformd::Identity(),
+    plant.RegisterVisualGeometry(free_box1, RigidTransformd::Identity(),
     Box(box_width, box_width, box_width),
-    "FreeCubeV", red);
-  plant.RegisterCollisionGeometry(free_box, RigidTransformd::Identity(),
+    "FreeCubeV1", red);
+  plant.RegisterCollisionGeometry(free_box1, RigidTransformd::Identity(),
           Box(box_width, box_width, box_width),
-          "FreeCube", rigid_proximity_props);
+          "FreeCube1", rigid_proximity_props);
+  
+    ModelInstanceIndex free_body_model_instance2 =
+    plant.AddModelInstance("free_body_instance2");
+const SpatialInertia<double> free_body_box_spatial2 =
+    SpatialInertia<double>::SolidBoxWithDensity(200.0, box_width,
+                                                box_width, box_width);
+  const RigidBody<double>& free_box2 = plant.AddRigidBody(
+    "free_box2", free_body_model_instance2, free_body_box_spatial2);
+  
+  plant.RegisterVisualGeometry(free_box2, RigidTransformd::Identity(),
+  Box(box_width, box_width, box_width),
+  "FreeCubeV2", blue);
+plant.RegisterCollisionGeometry(free_box2, RigidTransformd::Identity(),
+        Box(box_width, box_width, box_width),
+        "FreeCube2", rigid_proximity_props);
 
   MultibodyPlant<double> iiwa_controller_plant =
       MultibodyPlant<double>(plant_config.time_step);
@@ -679,8 +729,12 @@ int do_main() {
 
   // set free box initial position
   plant.SetFreeBodyPose(
-      &plant_context, plant.GetBodyByName("free_box"),
+      &plant_context, plant.GetBodyByName("free_box1"),
       math::RigidTransformd{Vector3d(0.6, 1.0, box_width / 2.0 + 0.05)});
+  
+  plant.SetFreeBodyPose(
+    &plant_context, plant.GetBodyByName("free_box2"),
+    math::RigidTransformd{Vector3d(0.6, 1.2, box_width / 2.0 + 0.05)});
 
   plant.SetPositions(&plant_context, iiwa, iiwa_initial_joint_values);
 
