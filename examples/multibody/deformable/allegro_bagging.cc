@@ -98,24 +98,24 @@ class HandPoseController : public drake::systems::LeafSystem<double> {
  
    void CalcDesiredState(const Context<double>& context,
                          drake::systems::BasicVector<double>* output) const {
-     double alpha = 1.0;
- 
-     if (context.get_time() < prep_time_) {
-       Eigen::VectorXd positions = GetHomePosition();
-       Eigen::VectorXd q_and_v(32);
-       q_and_v << positions, GetHomeVelocity();
-       output->set_value(q_and_v);
-     } else {
+     Eigen::VectorXd positions = GetHomePosition();
+     double t = context.get_time();
+     if (t < 0.5) {
+     } else if (t < 1.0){
        // start gripping
-       double t = (context.get_time() - prep_time_) / grip_time_;
-       Eigen::VectorXd positions =
-           std::max(1.0 - t * alpha, 0.0) * GetHomePosition() +
-           std::min(t * alpha, 1.0) * GetGripPosition();
-       Eigen::VectorXd q_and_v(32);
-       q_and_v << positions, GetHomeVelocity();
-       output->set_value(q_and_v);
+       double dt = std::min(std::max((context.get_time() - 0.5) / 0.5, 0.0), 1.0);
+       positions = (1.0 - dt) * GetHomePosition() + dt * GetGripPosition();
+     } else if (t < 2.5) {
+       positions = GetGripPosition();
+     } else if (t < 3.0) {
+       // loose hand to put red box down
+       double dt = std::min(std::max((context.get_time() - 2.5) / 0.5, 0.0), 1.0);
+       positions = (1.0 - dt) * GetGripPosition() + dt * GetHomePosition();
      }
-   }
+     Eigen::VectorXd q_and_v(32);
+     q_and_v << positions, GetHomeVelocity();
+     output->set_value(q_and_v);
+   } 
  
    Eigen::VectorXd GetHomePosition() const {
      Eigen::VectorXd pos(16);
@@ -207,26 +207,24 @@ class IiwaController : public drake::systems::LeafSystem<double> {
      // fake update:
      VectorX<double> dX = current_state_values;
      dX.setZero();
-     if ((context.get_time() >= 0.0 + 1) && (context.get_time() < 0.1 + 1)) {
-       double target_displacement = 0.02;
-       dX(4) = target_displacement /
-               (0.1 / FLAGS_time_step);  // a horinzontal squeeze
-     }
-     if ((context.get_time() > 1.0 + 1) && (context.get_time() < 1.6 + 1)) {
-       double target_displacement = 0.19;
-       dX(5) = target_displacement / (0.6 / FLAGS_time_step);  // move up
-     }
-     if ((context.get_time() > 1.6 + 1) && (context.get_time() < 1.9 + 1)) {
+     double t = context.get_time();
+     double rate = plant_.time_step() / 0.01;
+     if (t < 0.5) {
+       dX(5) -= 0.002 * rate; // move down
+     } else if (t < 1.0) {
        // hold
-       dX.setZero();
-     }
-     if ((context.get_time() > 1.9 + 1) && (context.get_time() < 2.5 + 1)) {
-       double target_displacement = 0.21;
-       dX(4) = target_displacement / (0.6 / FLAGS_time_step);
-     }
-     if ((context.get_time() > 2.7 + 1) && (context.get_time() < 3.5 + 1)) {
-       double target_displacement = 0.25 * 8.5;
-       dX(1) = target_displacement / (0.8 / FLAGS_time_step);  // rotate
+     } else if (t < 1.5) {
+      dX(5) += 0.002 * rate; // move up
+     } else if (t < 2.5) {
+      dX(5) += 0.002 * rate; // move up
+      dX(4) -= 0.0042 * rate; // move left
+      dX(3) -= 0.0005 * rate; // move inward
+     } else if (t < 3.0) {
+      // hold
+     } else if (t < 3.5) {
+      dX(5) -= 0.002 * rate; // move up
+      dX(4) += 0.0084 * rate; // move right
+      dX(3) += 0.001 * rate; // move outward
      }
      auto new_value = current_state_values + dX;
      next_states->set_value(new_value);
@@ -258,7 +256,7 @@ class BaggingGripperController : public systems::LeafSystem<double> {
  
   static constexpr double initial_free_duration = 0.25;
   static constexpr double initial_loose_duration = 0.25;
-  static constexpr double free_duration = 2.0;
+  static constexpr double free_duration = 4.0;
   static constexpr double bagging_duration = 1.25 - initial_loose_duration;
   static constexpr double bagging_v = 0.1;
  
