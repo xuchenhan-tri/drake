@@ -218,13 +218,13 @@ class IiwaController : public drake::systems::LeafSystem<double> {
      } else if (t < 2.5) {
       dX(5) += 0.002 * rate; // move up
       dX(4) -= 0.0042 * rate; // move left
-      dX(3) -= 0.0005 * rate; // move inward
+      dX(3) -= 0.0007 * rate; // move inward
      } else if (t < 3.0) {
       // hold
      } else if (t < 3.5) {
       dX(5) -= 0.002 * rate; // move up
       dX(4) += 0.0084 * rate; // move right
-      dX(3) += 0.001 * rate; // move outward
+      dX(3) += 0.0014 * rate; // move outward
      }
      auto new_value = current_state_values + dX;
      next_states->set_value(new_value);
@@ -444,7 +444,7 @@ int do_main() {
   ProximityProperties rigid_proximity_props;
   ProximityProperties ground_proximity_props;
   const CoulombFriction<double> surface_friction(1.0, 1.0);
-  AddCompliantHydroelasticProperties(1.0, 2e6, &rigid_proximity_props);
+  AddCompliantHydroelasticProperties(1.0, 2e5, &rigid_proximity_props);
   AddRigidHydroelasticProperties(1.0, &ground_proximity_props);
   AddContactMaterial({}, {}, surface_friction, &rigid_proximity_props);
   AddContactMaterial({}, {}, surface_friction, &ground_proximity_props);
