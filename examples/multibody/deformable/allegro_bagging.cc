@@ -32,12 +32,12 @@ DEFINE_bool(write_files, false, "Enable dumping MPM data to files.");
 DEFINE_double(simulation_time, 14.0, "Desired duration of the simulation [s].");
 DEFINE_int32(res, 69, "Cloth Resolution.");
 DEFINE_double(realtime_rate, 1.0, "Desired real time rate.");
-DEFINE_double(time_step, 1e-3,
+DEFINE_double(time_step, 5e-3,
               "Discrete time step for the system [s]. Must be positive.");
 DEFINE_double(substep, 5e-4,
               "Discrete time step for the substepping scheme [s]. Must be positive.");
 DEFINE_double(stiffness, 200.0, "Contact Stiffness.");
-DEFINE_double(friction, 1.0, "Contact Friction.");
+DEFINE_double(friction, 0.3, "Contact Friction.");
 DEFINE_double(damping, 1.0,
     "Hunt and Crossley damping for the deformable body, only used when "
     "'contact_approximation' is set to 'lagged' or 'similar' [s/m].");
@@ -75,6 +75,9 @@ using drake::multibody::gmpm::MpmConfigParams;
 namespace drake {
 namespace examples {
 namespace {
+
+bool use_mpm_gripper = true;
+bool add_free_box = true;
 
 RigidTransformd FromXyzRpy(const Vector3<double>& rpy,
                            const Vector3<double>& p) {
@@ -248,7 +251,7 @@ class IiwaController : public drake::systems::LeafSystem<double> {
         dX(3) += 0.0009 * rate / 1.5 * 5; // move outward
       }
      } else if (t < 4.5) {
-      dX(5) -= 0.0027 * rate * uprt; // move down
+      dX(5) -= 0.0021 * rate * uprt; // move down
      } else if (t < 5.0) {
       // hold
      } else if (t < 5.5) {
@@ -291,7 +294,8 @@ class BaggingGripperController : public systems::LeafSystem<double> {
                                     &BaggingGripperController::CalcDesiredState);
    }
   
-  static constexpr double gripper_xy = 0.1;
+  static constexpr double visual_coeff = 0.8;
+  static constexpr double gripper_xy = 0.1 * visual_coeff; // visual effect to make gripper looks less penetration
   static constexpr double gripper_z = 0.04;
   static constexpr double gripper_density = 10000.0;
  
@@ -332,7 +336,11 @@ class BaggingGripperController : public systems::LeafSystem<double> {
      const auto& z_joint = plant->AddJoint<PrismaticJoint>(name + "_z", y_body, 
            RigidTransformd::Identity(), z_body, std::nullopt, Vector3d::UnitZ());
  
-     plant->RegisterCollisionGeometry(z_body, RigidTransformd::Identity(), gripper_shape, name + "_collision", rigid_proximity_props);
+     if (use_mpm_gripper) {
+      unused(rigid_proximity_props);
+     } else {
+      plant->RegisterCollisionGeometry(z_body, RigidTransformd::Identity(), gripper_shape, name + "_collision", rigid_proximity_props);
+     }
      if (is_up) {
         plant->RegisterVisualGeometry   (z_body, RigidTransformd::Identity(), gripper_shape, name + "_visual"   , illustration_props_up);
      } else {
@@ -546,38 +554,37 @@ int do_main() {
   const Vector4<double> red(1.0, 0.0, 0.0, 1.0);
   const Vector4<double> blue(0.0, 0.0, 1.0, 1.0);
   double box_width = 0.08;
-
-
-
-  ModelInstanceIndex free_body_model_instance1 =
-      plant.AddModelInstance("free_body_instance1");
-  const SpatialInertia<double> free_body_box_spatial1 =
-      SpatialInertia<double>::SolidBoxWithDensity(1000.0, box_width,
-                                                  box_width, box_width);
-  const RigidBody<double>& free_box1 = plant.AddRigidBody(
-      "free_box1", free_body_model_instance1, free_body_box_spatial1);
-    
-    plant.RegisterVisualGeometry(free_box1, RigidTransformd::Identity(),
-    Box(box_width, box_width, box_width),
-    "FreeCubeV1", red);
-  plant.RegisterCollisionGeometry(free_box1, RigidTransformd::Identity(),
-          Box(box_width, box_width, box_width),
-          "FreeCube1", rigid_proximity_props);
-  
-    ModelInstanceIndex free_body_model_instance2 =
-    plant.AddModelInstance("free_body_instance2");
-const SpatialInertia<double> free_body_box_spatial2 =
-    SpatialInertia<double>::SolidBoxWithDensity(1000.0, box_width,
-                                                box_width, box_width);
-  const RigidBody<double>& free_box2 = plant.AddRigidBody(
-    "free_box2", free_body_model_instance2, free_body_box_spatial2);
-  
-  plant.RegisterVisualGeometry(free_box2, RigidTransformd::Identity(),
-  Box(box_width, box_width, box_width),
-  "FreeCubeV2", blue);
-plant.RegisterCollisionGeometry(free_box2, RigidTransformd::Identity(),
+  if (add_free_box) {
+      ModelInstanceIndex free_body_model_instance1 =
+          plant.AddModelInstance("free_body_instance1");
+      const SpatialInertia<double> free_body_box_spatial1 =
+          SpatialInertia<double>::SolidBoxWithDensity(1000.0, box_width,
+                                                      box_width, box_width);
+      const RigidBody<double>& free_box1 = plant.AddRigidBody(
+          "free_box1", free_body_model_instance1, free_body_box_spatial1);
+        
+        plant.RegisterVisualGeometry(free_box1, RigidTransformd::Identity(),
         Box(box_width, box_width, box_width),
-        "FreeCube2", rigid_proximity_props);
+        "FreeCubeV1", red);
+      plant.RegisterCollisionGeometry(free_box1, RigidTransformd::Identity(),
+              Box(box_width, box_width, box_width),
+              "FreeCube1", rigid_proximity_props);
+      
+        ModelInstanceIndex free_body_model_instance2 =
+        plant.AddModelInstance("free_body_instance2");
+    const SpatialInertia<double> free_body_box_spatial2 =
+        SpatialInertia<double>::SolidBoxWithDensity(1000.0, box_width,
+                                                    box_width, box_width);
+      const RigidBody<double>& free_box2 = plant.AddRigidBody(
+        "free_box2", free_body_model_instance2, free_body_box_spatial2);
+      
+      plant.RegisterVisualGeometry(free_box2, RigidTransformd::Identity(),
+      Box(box_width, box_width, box_width),
+      "FreeCubeV2", blue);
+    plant.RegisterCollisionGeometry(free_box2, RigidTransformd::Identity(),
+            Box(box_width, box_width, box_width),
+            "FreeCube2", rigid_proximity_props);
+  }
 
   MultibodyPlant<double> iiwa_controller_plant =
       MultibodyPlant<double>(plant_config.time_step);
@@ -620,7 +627,11 @@ plant.RegisterCollisionGeometry(free_box2, RigidTransformd::Identity(),
   mpm_config.contact_damping = FLAGS_damping;
   mpm_config.contact_friction_mu = FLAGS_friction;
   mpm_config.contact_query_frequency = 8;
-  mpm_config.mpm_bc = -1;
+  if (use_mpm_gripper) {
+    mpm_config.mpm_bc = 114;
+  } else {
+    mpm_config.mpm_bc = -1;
+  }
   mpm_config.ignore_face_contact = true;
   mpm_config.mdv_as_impulse = false;
   deformable_model.SetMpmConfig(std::move(mpm_config));
@@ -771,13 +782,15 @@ plant.RegisterCollisionGeometry(free_box2, RigidTransformd::Identity(),
   //       diff_ik->GetMyMutableContextFromRoot(&mutable_context);
 
   // set free box initial position
-  plant.SetFreeBodyPose(
-      &plant_context, plant.GetBodyByName("free_box1"),
-      math::RigidTransformd{Vector3d(0.6, 1.0, box_width / 2.0 + 0.05)});
-  
-  plant.SetFreeBodyPose(
-    &plant_context, plant.GetBodyByName("free_box2"),
-    math::RigidTransformd{Vector3d(0.6, 1.2, box_width / 2.0 + 0.05)});
+  if (add_free_box) {
+    plant.SetFreeBodyPose(
+        &plant_context, plant.GetBodyByName("free_box1"),
+        math::RigidTransformd{Vector3d(0.6, 1.0, box_width / 2.0 + 0.05)});
+    
+    plant.SetFreeBodyPose(
+      &plant_context, plant.GetBodyByName("free_box2"),
+      math::RigidTransformd{Vector3d(0.6, 1.2, box_width / 2.0 + 0.05)});
+  }
 
   plant.SetPositions(&plant_context, iiwa, iiwa_initial_joint_values);
 

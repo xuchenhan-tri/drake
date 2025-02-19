@@ -174,6 +174,8 @@ public:
 
     int total_contact_iteration_count = 0;
 
+    T times_elapsed = 0;
+
 private:
 
     bool is_particle_mpm_ = false;

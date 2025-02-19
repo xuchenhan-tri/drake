@@ -262,6 +262,7 @@ class DeformableDriver : public ScalarConvertibleComponent<T> {
         substep += 1;
       }
       FinalizeExternalContactForces(&mutable_mpm_state, dt);
+      mutable_mpm_state.times_elapsed += dt;
 
       // logging
       long long after_ts = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();

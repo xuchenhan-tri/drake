@@ -132,7 +132,7 @@ void GpuMpmSolver<T>::UpdateGrid(GpuMpmState<T> *state, int mpm_bc, bool enforce
         CUDA_SAFE_CALL(( \
             update_grid_kernel<T, MPM_BC, ENFORCE_BC_ONLY><<< \
             (touched_cells_cnt + config::DEFAULT_CUDA_BLOCK_SIZE - 1) / config::DEFAULT_CUDA_BLOCK_SIZE, config::DEFAULT_CUDA_BLOCK_SIZE \
-            >>>(touched_cells_cnt, state->grid_touched_ids(), state->grid_masses(), state->grid_momentum(), state->grid_v_star()) \
+            >>>(touched_cells_cnt, state->grid_touched_ids(), state->grid_masses(), state->grid_momentum(), state->grid_v_star(), state->times_elapsed) \
         )); \
     }
     
@@ -142,6 +142,7 @@ void GpuMpmSolver<T>::UpdateGrid(GpuMpmState<T> *state, int mpm_bc, bool enforce
         GRID_OP_WITH_BC(2, true)
         GRID_OP_WITH_BC(3, true)
         GRID_OP_WITH_BC(111, true)
+        GRID_OP_WITH_BC(114, true)
         GRID_OP_WITH_BC(222, true)
         GRID_OP_WITH_BC(-1, true)
     }
@@ -151,6 +152,7 @@ void GpuMpmSolver<T>::UpdateGrid(GpuMpmState<T> *state, int mpm_bc, bool enforce
         GRID_OP_WITH_BC(2, false)
         GRID_OP_WITH_BC(3, false)
         GRID_OP_WITH_BC(111, false)
+        GRID_OP_WITH_BC(114, false)
         GRID_OP_WITH_BC(222, false)
         GRID_OP_WITH_BC(-1, false)
     }
