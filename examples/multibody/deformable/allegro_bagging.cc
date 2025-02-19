@@ -30,7 +30,7 @@
 
 DEFINE_bool(write_files, false, "Enable dumping MPM data to files.");
 DEFINE_double(simulation_time, 14.0, "Desired duration of the simulation [s].");
-DEFINE_int32(res, 2, "Cloth Resolution.");
+DEFINE_int32(res, 69, "Cloth Resolution.");
 DEFINE_double(realtime_rate, 1.0, "Desired real time rate.");
 DEFINE_double(time_step, 1e-3,
               "Discrete time step for the system [s]. Must be positive.");
@@ -516,7 +516,7 @@ int do_main() {
   ProximityProperties rigid_proximity_props;
   ProximityProperties ground_proximity_props;
   const CoulombFriction<double> surface_friction(1.0, 1.0);
-  AddCompliantHydroelasticProperties(1.0, 2e5, &rigid_proximity_props);
+  AddCompliantHydroelasticProperties(1.0, 2e6, &rigid_proximity_props);
   AddRigidHydroelasticProperties(1.0, &ground_proximity_props);
   AddContactMaterial({}, {}, surface_friction, &rigid_proximity_props);
   AddContactMaterial({}, {}, surface_friction, &ground_proximity_props);
@@ -550,7 +550,7 @@ int do_main() {
   ModelInstanceIndex free_body_model_instance1 =
       plant.AddModelInstance("free_body_instance1");
   const SpatialInertia<double> free_body_box_spatial1 =
-      SpatialInertia<double>::SolidBoxWithDensity(200.0, box_width,
+      SpatialInertia<double>::SolidBoxWithDensity(1000.0, box_width,
                                                   box_width, box_width);
   const RigidBody<double>& free_box1 = plant.AddRigidBody(
       "free_box1", free_body_model_instance1, free_body_box_spatial1);
@@ -565,7 +565,7 @@ int do_main() {
     ModelInstanceIndex free_body_model_instance2 =
     plant.AddModelInstance("free_body_instance2");
 const SpatialInertia<double> free_body_box_spatial2 =
-    SpatialInertia<double>::SolidBoxWithDensity(200.0, box_width,
+    SpatialInertia<double>::SolidBoxWithDensity(1000.0, box_width,
                                                 box_width, box_width);
   const RigidBody<double>& free_box2 = plant.AddRigidBody(
     "free_box2", free_body_model_instance2, free_body_box_spatial2);
