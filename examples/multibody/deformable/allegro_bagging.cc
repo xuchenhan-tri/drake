@@ -36,7 +36,7 @@ DEFINE_double(time_step, 5e-3,
               "Discrete time step for the system [s]. Must be positive.");
 DEFINE_double(substep, 5e-4,
               "Discrete time step for the substepping scheme [s]. Must be positive.");
-DEFINE_double(stiffness, 200.0, "Contact Stiffness.");
+DEFINE_double(stiffness, 100.0, "Contact Stiffness.");
 DEFINE_double(friction, 0.3, "Contact Friction.");
 DEFINE_double(damping, 1.0,
     "Hunt and Crossley damping for the deformable body, only used when "
@@ -526,7 +526,7 @@ int do_main() {
   ProximityProperties rigid_proximity_props;
   ProximityProperties ground_proximity_props;
   const CoulombFriction<double> surface_friction(1.0, 1.0);
-  AddCompliantHydroelasticProperties(1.0, 2e6, &rigid_proximity_props);
+  AddCompliantHydroelasticProperties(1.0, 1e6, &rigid_proximity_props);
   AddRigidHydroelasticProperties(1.0, &ground_proximity_props);
   AddContactMaterial({}, {}, surface_friction, &rigid_proximity_props);
   AddContactMaterial({}, {}, surface_friction, &ground_proximity_props);
