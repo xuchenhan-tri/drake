@@ -83,7 +83,7 @@ __global__ void initialize_fem_state_kernel(
         cross_product3(D0, D1, D0xD1);
         // NOTE (changyu): hard-code thickness as 1mm.
         // The parameter shouldn't vary with grid dx.
-        T volume_4 = norm<3>(D0xD1) / T(8.) * T(0.01);
+        T volume_4 = norm<3>(D0xD1) / T(8.) * T(0.001);
 
         volumes[idx] += volume_4;
         atomicAdd(&volumes[v0], volume_4);
