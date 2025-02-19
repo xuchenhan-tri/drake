@@ -971,8 +971,8 @@ __global__ void update_grid_kernel(
                     constexpr T initial_free_duration = 0.25;
                     constexpr T initial_loose_duration = 0.25;
                     constexpr T free_duration = 8.0;
-                    constexpr T bagging_duration = 1.25 - initial_loose_duration;
-                    constexpr T static_duration = 2.0;
+                    constexpr T bagging_duration = 1.0 - initial_loose_duration;
+                    constexpr T static_duration = 1.0;
                     constexpr T final_loose_duration = 0.4;
                     constexpr T bagging_v = 0.1;
 

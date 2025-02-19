@@ -307,8 +307,8 @@ class BaggingGripperController : public systems::LeafSystem<double> {
   static constexpr double initial_free_duration = 0.25;
   static constexpr double initial_loose_duration = 0.25;
   static constexpr double free_duration = 8.0;
-  static constexpr double bagging_duration = 1.25 - initial_loose_duration;
-  static constexpr double static_duration = 2.0;
+  static constexpr double bagging_duration = 1.0 - initial_loose_duration;
+  static constexpr double static_duration = 1.0;
   static constexpr double final_loose_duration = 0.4;
   static constexpr double bagging_v = 0.1;
  
@@ -554,6 +554,7 @@ int do_main() {
   const Vector4<double> red(1.0, 0.0, 0.0, 1.0);
   const Vector4<double> blue(0.0, 0.0, 1.0, 1.0);
   double box_width = 0.08;
+  double visual_coeff = 0.9; // get less penetration visually
   if (add_free_box) {
       ModelInstanceIndex free_body_model_instance1 =
           plant.AddModelInstance("free_body_instance1");
@@ -564,7 +565,7 @@ int do_main() {
           "free_box1", free_body_model_instance1, free_body_box_spatial1);
         
         plant.RegisterVisualGeometry(free_box1, RigidTransformd::Identity(),
-        Box(box_width, box_width, box_width),
+        Box(box_width * visual_coeff, box_width * visual_coeff, box_width * visual_coeff),
         "FreeCubeV1", red);
       plant.RegisterCollisionGeometry(free_box1, RigidTransformd::Identity(),
               Box(box_width, box_width, box_width),
@@ -579,7 +580,7 @@ int do_main() {
         "free_box2", free_body_model_instance2, free_body_box_spatial2);
       
       plant.RegisterVisualGeometry(free_box2, RigidTransformd::Identity(),
-      Box(box_width, box_width, box_width),
+      Box(box_width * visual_coeff, box_width * visual_coeff, box_width * visual_coeff),
       "FreeCubeV2", blue);
     plant.RegisterCollisionGeometry(free_box2, RigidTransformd::Identity(),
             Box(box_width, box_width, box_width),
