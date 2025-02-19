@@ -29,15 +29,15 @@
 #include "drake/visualization/visualization_config_functions.h"
 
 DEFINE_bool(write_files, false, "Enable dumping MPM data to files.");
-DEFINE_double(simulation_time, 13.0, "Desired duration of the simulation [s].");
-DEFINE_int32(res, 69, "Cloth Resolution.");
+DEFINE_double(simulation_time, 14.0, "Desired duration of the simulation [s].");
+DEFINE_int32(res, 2, "Cloth Resolution.");
 DEFINE_double(realtime_rate, 1.0, "Desired real time rate.");
 DEFINE_double(time_step, 1e-3,
               "Discrete time step for the system [s]. Must be positive.");
 DEFINE_double(substep, 5e-4,
               "Discrete time step for the substepping scheme [s]. Must be positive.");
 DEFINE_double(stiffness, 100.0, "Contact Stiffness.");
-DEFINE_double(friction, 1.0, "Contact Friction.");
+DEFINE_double(friction, 1.5, "Contact Friction.");
 DEFINE_double(damping, 1.0,
     "Hunt and Crossley damping for the deformable body, only used when "
     "'contact_approximation' is set to 'lagged' or 'similar' [s/m].");
@@ -109,20 +109,20 @@ class HandPoseController : public drake::systems::LeafSystem<double> {
        positions = GetGripPosition();
      } else if (t < 4.0) {
        // loose hand to put red box down
-       double dt = std::min(std::max((context.get_time() - 2.5) / 0.5, 0.0), 1.0);
+       double dt = std::min(std::max((context.get_time() - 2.5) / 0.5, 0.0), 0.7);
        positions = (1.0 - dt) * GetGripPosition() + dt * GetHomePosition();
-     } else if (t < 4.5){
+     } else if (t < 5.0){
       // start gripping blue box
-      double dt = std::min(std::max((context.get_time() - 4.0) / 0.5, 0.0), 1.0);
+      double dt = std::min(std::max((context.get_time() - 4.5) / 0.5, 0.3), 1.0);
       positions = (1.0 - dt) * GetHomePosition() + dt * GetGripPosition();
-    } else if (t < 6.0) {
-      positions = GetGripPosition();
     } else if (t < 6.5) {
+      positions = GetGripPosition();
+    } else if (t < 7.0) {
       // loose hand to put blue box down
-      double dt = std::min(std::max((context.get_time() - 6.0) / 0.5, 0.0), 1.0);
+      double dt = std::min(std::max((context.get_time() - 6.5) / 0.5, 0.0), 0.5);
       positions = (1.0 - dt) * GetGripPosition() + dt * GetHomePosition();
     } else {
-      positions = GetHomePosition();
+      positions = (1.0 - 0.5) * GetGripPosition() + 0.5 * GetHomePosition();
     }
      Eigen::VectorXd q_and_v(32);
      q_and_v << positions, GetHomeVelocity();
@@ -230,28 +230,40 @@ class IiwaController : public drake::systems::LeafSystem<double> {
      } else if (t < 2.5) {
       dX(5) += 0.002 * rate; // move up
       dX(4) -= 0.0042 * rate; // move left
-      dX(3) -= 0.0007 * rate; // move inward
+      dX(3) -= 0.0009 * rate; // move inward
      } else if (t < 3.0) {
       // hold
-     } else if (t < 3.5) {
-      dX(5) -= 0.0038 * rate; // move down 
-      dX(4) += 0.0084 * rate; // move right
-      dX(4) += 0.004 * rate; // move extra 20cm to get right up of the blue box
-      dX(3) += 0.0015 * rate; // move outward
      } else if (t < 4.0) {
-      dX(5) -= 0.002 * rate; // move down
+      if (t < 3.5) {
+        dX(5) += 0.002 * rate; // move up 
+      } else {
+        dX(5) -= 0.002 * rate; // move up
+      }
+      dX(5) -= 0.0019 * rate; // move down 
+      dX(4) += 0.0042 * rate; // move right
+      dX(4) += 0.002 * rate; // move extra 20cm to get right up of the blue box
+      if (t > 3.7) {
+        dX(3) += 0.0009 * rate / 1.5 * 5; // move outward
+      }
      } else if (t < 4.5) {
-      // hold
+      dX(5) -= 0.003 * rate; // move down
      } else if (t < 5.0) {
-      dX(5) += 0.002 * rate; // move up
-     } else if (t < 6.0) {
+      // hold
+     } else if (t < 5.5) {
+      dX(5) += 0.003 * rate; // move up
+     } else if (t < 6.5) {
         dX(5) += 0.0019 * rate; // move up 
         dX(4) -= 0.0048 * rate; // move left
         dX(4) -= 0.002 * rate; // move extra 20cm
-        dX(3) -= 0.0007 * rate; // move inward
-     } else if (t < 6.5) {
+        dX(3) -= 0.0008 * rate; // move inward
+     } else if (t < 7.0) {
         // hold
-     } else if (t < 8.5) {
+     } else if (t < 9.0) {
+      if (t < 8.0) {
+        dX(5) += 0.002 * rate / 4.0;
+      } else {
+        dX(5) -= 0.002 * rate / 4.0;
+      }
       dX(4) += 0.0084 * rate / 4.0; // move right
       dX(4) += 0.004 * rate / 4.0; // move extra 20cm to get right up of the blue box
       dX(3) += 0.0015 * rate / 4.0; // move outward
@@ -277,33 +289,35 @@ class BaggingGripperController : public systems::LeafSystem<double> {
                                     &BaggingGripperController::CalcDesiredState);
    }
   
-  static constexpr double gripper_xy = 0.05;
-  static constexpr double gripper_z = 0.02;
+  static constexpr double gripper_xy = 0.1;
+  static constexpr double gripper_z = 0.04;
   static constexpr double gripper_density = 10000.0;
  
-  static constexpr double l_x = 0.34 - 0.03;
-  static constexpr double h_x = 0.66 + 0.027;
-  static constexpr double l_z = 0.29-2e-4;
-  static constexpr double h_z = 0.31+2e-4;
+  static constexpr double l_x = 0.34 - 0.03 - 0.01;
+  static constexpr double h_x = 0.66 + 0.027 + 0.01;
+  static constexpr double l_z = 0.29-2e-4 - 0.01;
+  static constexpr double h_z = 0.31+2e-4 + 0.01;
  
   static constexpr double initial_free_duration = 0.25;
   static constexpr double initial_loose_duration = 0.25;
-  static constexpr double free_duration = 7.0;
+  static constexpr double free_duration = 8.0;
   static constexpr double bagging_duration = 1.25 - initial_loose_duration;
   static constexpr double static_duration = 2.0;
   static constexpr double final_loose_duration = 0.4;
   static constexpr double bagging_v = 0.1;
  
   static ModelInstanceIndex AddGripperInstance(MultibodyPlant<double>* plant, ProximityProperties rigid_proximity_props) {
-   IllustrationProperties illustration_props;
-   illustration_props.AddProperty("phong", "diffuse", Vector4d(0.5, 0.5, 0.5, 0.8));
+   IllustrationProperties illustration_props_up;
+   illustration_props_up.AddProperty("phong", "diffuse", Vector4d(0.6, 0.6, 0.6, 0.8));
+   IllustrationProperties illustration_props_down;
+   illustration_props_down.AddProperty("phong", "diffuse", Vector4d(0.4, 0.4, 0.4, 0.8));
  
    Box gripper_shape(gripper_xy, gripper_xy, gripper_z);
    const auto &gripper_inertia = SpatialInertia<double>::SolidBoxWithDensity(gripper_density, gripper_xy, gripper_xy, gripper_z);
  
    ModelInstanceIndex gripper_instance = plant->AddModelInstance("gripper_instance");
  
-   const auto &add_single_gripper = [&](std::string name, double x, double y, double z) {
+   const auto &add_single_gripper = [&](std::string name, double x, double y, double z, bool is_up) {
      const RigidBody<double>& x_body = plant->AddRigidBody(name + "_x", gripper_instance, gripper_inertia);
      const auto& x_joint = plant->AddJoint<PrismaticJoint>(name + "_x", plant->world_body(), 
            RigidTransformd::Identity(), x_body, std::nullopt, Vector3d::UnitX());
@@ -317,7 +331,11 @@ class BaggingGripperController : public systems::LeafSystem<double> {
            RigidTransformd::Identity(), z_body, std::nullopt, Vector3d::UnitZ());
  
      plant->RegisterCollisionGeometry(z_body, RigidTransformd::Identity(), gripper_shape, name + "_collision", rigid_proximity_props);
-     plant->RegisterVisualGeometry   (z_body, RigidTransformd::Identity(), gripper_shape, name + "_visual"   , illustration_props);
+     if (is_up) {
+        plant->RegisterVisualGeometry   (z_body, RigidTransformd::Identity(), gripper_shape, name + "_visual"   , illustration_props_up);
+     } else {
+        plant->RegisterVisualGeometry   (z_body, RigidTransformd::Identity(), gripper_shape, name + "_visual"   , illustration_props_down);
+     }
  
      const auto x_actuator = plant->AddJointActuator("prismatic" + name + "_x", x_joint).index();
      const auto y_actuator = plant->AddJointActuator("prismatic" + name + "_y", y_joint).index();
@@ -330,14 +348,14 @@ class BaggingGripperController : public systems::LeafSystem<double> {
      plant->get_mutable_joint_actuator(z_actuator).set_controller_gains({1e6, 1});
    };
  
-   add_single_gripper("gll_up",  l_x, l_x, h_z);
-   add_single_gripper("glh_up", l_x, h_x, h_z);
-   add_single_gripper("ghl_up",  h_x, l_x,  h_z);
-   add_single_gripper("ghh_up", h_x, h_x, h_z);
-   add_single_gripper("gll_down",  l_x, l_x, l_z);
-   add_single_gripper("glh_down", l_x, h_x, l_z);
-   add_single_gripper("ghl_down",  h_x, l_x,  l_z);
-   add_single_gripper("ghh_down", h_x, h_x, l_z);
+   add_single_gripper("gll_up",  l_x, l_x, h_z, true);
+   add_single_gripper("glh_up", l_x, h_x, h_z, true);
+   add_single_gripper("ghl_up",  h_x, l_x,  h_z, true);
+   add_single_gripper("ghh_up", h_x, h_x, h_z, true);
+   add_single_gripper("gll_down",  l_x, l_x, l_z, false);
+   add_single_gripper("glh_down", l_x, h_x, l_z, false);
+   add_single_gripper("ghl_down",  h_x, l_x,  l_z, false);
+   add_single_gripper("ghh_down", h_x, h_x, l_z, false);
  
    return gripper_instance;
  }
@@ -462,8 +480,7 @@ class BaggingGripperController : public systems::LeafSystem<double> {
        ghh_down_v = Vector3d(0, 0, 0);
      } else {
       double total_dur = initial_loose_duration + bagging_duration;
-      double dt = std::min(t - (free_duration + bagging_duration + initial_loose_duration + initial_free_duration + static_duration), 
-                           final_loose_duration);
+      double dt = 100.0;
       gll_up_p = Vector3d(l_x + total_dur * bagging_v, l_x + total_dur * bagging_v, h_z);
       glh_up_p = Vector3d(l_x + total_dur * bagging_v, h_x - total_dur * bagging_v, h_z);
       ghl_up_p = Vector3d(h_x - (total_dur - dt) * bagging_v, l_x + (total_dur - dt) * bagging_v,  h_z + dt * bagging_v);
