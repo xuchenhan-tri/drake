@@ -15,7 +15,6 @@
 #include "drake/geometry/scene_graph.h"
 #include "drake/math/rigid_transform.h"
 #include "drake/multibody/fem/deformable_body_config.h"
-#include "drake/multibody/parsing/parser.h"
 #include "drake/multibody/plant/deformable_model.h"
 #include "drake/multibody/plant/multibody_plant.h"
 #include "drake/multibody/plant/multibody_plant_config_functions.h"
@@ -27,11 +26,11 @@
 #include "drake/visualization/visualization_config.h"
 #include "drake/visualization/visualization_config_functions.h"
 
-DEFINE_double(simulation_time, 3.0, "Desired duration of the simulation [s].");
-DEFINE_double(time_step, 1e-3,
+DEFINE_double(simulation_time, 1.0, "Desired duration of the simulation [s].");
+DEFINE_double(time_step, 1e-2,
               "Discrete time step for the system [s]. Must be positive.");
 DEFINE_double(
-    substep, 1e-4,
+    substep, 2e-4,
     "Discrete time step for the substepping scheme [s]. Must be positive.");
 
 using drake::geometry::AddContactMaterial;
@@ -86,12 +85,13 @@ int do_main() {
 
   ProximityProperties box_proximity_props;
   const CoulombFriction<double> surface_friction(0.8, 0.8);
-  AddContactMaterial(FLAGS_damping, {}, surface_friction, &box_proximity_props);
+  AddContactMaterial(/* unused damping */ 1.0, {}, surface_friction,
+                     &box_proximity_props);
   const double mpm_box_width = 0.1;
 
-  const double rigid_box_side_x = 1.0 / 60.0;
+  const double rigid_box_side_x = 0.14;
   const double rigid_box_side_y = 0.14;
-  const double rigid_box_side_z = 0.1;
+  const double rigid_box_side_z = 0.14;
   const double rigid_box_density = 1000;
   const double mpm_shift = 0.5;
   const RigidTransformd X_WB(Eigen::Vector3d{mpm_shift, mpm_shift, mpm_shift});
@@ -103,30 +103,25 @@ int do_main() {
           rigid_box_side_z);
   const RigidBody<double>& left_box =
       plant.AddRigidBody("left_box", left_box_model_instance, box_spatial);
-  const auto& left_prismatic_joint_x = plant.AddJoint<PrismaticJoint>(
+  const auto& left_joint = plant.AddJoint<PrismaticJoint>(
       "left_translate_x_joint", plant.world_body(), X_WB, left_box,
       std::nullopt, Vector3d::UnitX());
+
   plant.GetMutableJointByName<PrismaticJoint>("left_translate_x_joint")
-      .set_default_translation(-(0.5 + 0.5 / 6.0 + 0.0 / FLAGS_ppc) *
-                               box_width);
-  const auto left_actuator_x_index =
-      plant.AddJointActuator("left x actuator", left_prismatic_joint_x).index();
-  unused(left_actuator_x_index);
+      .set_default_translation(-0.5 * mpm_box_width - 0.5 * rigid_box_side_x);
+  plant.AddJointActuator("left_actuator", left_joint);
 
   // box controlled on the right
   ModelInstanceIndex right_box_model_instance =
       plant.AddModelInstance("right_box_instance");
   const RigidBody<double>& right_box =
       plant.AddRigidBody("right_box", right_box_model_instance, box_spatial);
-  const auto& right_prismatic_joint_x = plant.AddJoint<PrismaticJoint>(
+  const auto& right_joint = plant.AddJoint<PrismaticJoint>(
       "right_translate_x_joint", plant.world_body(), X_WB, right_box,
       std::nullopt, Vector3d::UnitX());
   plant.GetMutableJointByName<PrismaticJoint>("right_translate_x_joint")
-      .set_default_translation((0.5 + 0.5 / 6.0) * box_width);
-  const auto right_actuator_x_index =
-      plant.AddJointActuator("right x actuator", right_prismatic_joint_x)
-          .index();
-  unused(right_actuator_x_index);
+      .set_default_translation(0.5 * mpm_box_width + 0.5 * rigid_box_side_x);
+  plant.AddJointActuator("right_actuator", right_joint);
 
   Box rigid_box(rigid_box_side_x, rigid_box_side_y, rigid_box_side_z);
   const Vector4<double> grey(0.5, 0.5, 0.5, 1.0);
@@ -142,27 +137,29 @@ int do_main() {
   // mpm stuff
   DeformableModel<double>& deformable_model = plant.mutable_deformable_model();
 
-  const int num_per_dim = 12;
+  const int num_per_dim = 11;
   const std::vector<Eigen::Vector3d> inital_pos = MakeInitialPositions(
-      {mpm_shift - box_width * 0.5, mpm_shift - box_width * 0.5,
-       mpm_shift - box_width * 0.5},
-      {mpm_shift + box_width * 0.5, mpm_shift + box_width * 0.5,
-       mpm_shift + box_width * 0.5},
+      {mpm_shift - mpm_box_width * 0.5, mpm_shift - mpm_box_width * 0.5,
+       mpm_shift - mpm_box_width * 0.5},
+      {mpm_shift + mpm_box_width * 0.5, mpm_shift + mpm_box_width * 0.5,
+       mpm_shift + mpm_box_width * 0.5},
       num_per_dim);
   const int num_particles_per_box = inital_pos.size();
+  std::cout << "NUM PARTICLE = " << inital_pos.size() << std::endl;
   const std::vector<Eigen::Vector3d> inital_vel(inital_pos.size(),
                                                 Vector3d{0, 0, 0});
   const double particle_vol =
-      box_width * box_width * box_width / num_particles_per_box;
+      mpm_box_width * mpm_box_width * mpm_box_width / num_particles_per_box;
   deformable_model.RegisterMpmParticle(inital_pos, inital_vel, particle_vol);
 
   MpmConfigParams mpm_config;
   mpm_config.substep_dt = FLAGS_substep;
   mpm_config.write_files = true;
-  mpm_config.contact_stiffness = 1e3;
+  mpm_config.contact_stiffness = 1e5;
   mpm_config.contact_damping = 10;
   mpm_config.contact_friction_mu = 0.8;
   mpm_config.exact_line_search = true;
+  mpm_config.mdv_as_impulse = false;
   deformable_model.SetMpmConfig(std::move(mpm_config));
 
   /* All rigid and deformable models have been added. Finalize the plant. */
@@ -183,7 +180,8 @@ int do_main() {
 
   // meshcat viz
   auto meshcat = std::make_shared<geometry::Meshcat>();
-  if (FLAGS_write_files) {
+  const bool write_files = true;
+  if (write_files) {
     auto meshcat_params = drake::geometry::MeshcatVisualizerParams();
     meshcat_params.show_mpm =
         drake::geometry::MeshcatVisualizerParams::ShowMpmOpt::kParticleMpm;
@@ -216,14 +214,14 @@ int do_main() {
   plant.get_actuation_input_port(left_box_model_instance)
       .FixValue(&plant_context, external_normal_force);
   simulator.Initialize();
-  simulator.set_target_realtime_rate(FLAGS_realtime_rate);
+  simulator.set_target_realtime_rate(1.0);
 
-  if (FLAGS_write_files) {
+  if (write_files) {
     meshcat->StartRecording();
     simulator.AdvanceTo(FLAGS_simulation_time);
     meshcat->StopRecording();
     meshcat->PublishRecording();
-    std::ofstream htmlFile("/home/xuchenhan/drake/hold.html");
+    std::ofstream htmlFile("/home/changyu/drake/hold.html");
     htmlFile << meshcat->StaticHtml();
     htmlFile.close();
   } else {

@@ -30,7 +30,7 @@ struct MpmConfigParams {
     int mpm_bc{-1};
     bool exact_line_search {false};
     bool ignore_face_contact{false};
-    bool mdv_as_impulse{true};
+    bool mdv_as_impulse{false};
 };
 
 template<typename T = config::GpuT>

@@ -2368,7 +2368,7 @@ void MultibodyPlant<T>::AddAppliedExternalSpatialForces(
   const auto* applied_input = this->template EvalInputValue<
       std::vector<ExternallyAppliedSpatialForce<T>>>(
       context, input_port_indices_.applied_spatial_force);
-  
+
   // Helper to throw a useful message if the input contains NaN.
   auto throw_if_contains_nan = [this](const ExternallyAppliedSpatialForce<T>&
                                           external_spatial_force) {
@@ -2381,12 +2381,14 @@ void MultibodyPlant<T>::AddAppliedExternalSpatialForces(
           internal_tree().get_body(external_spatial_force.body_index).name()));
     }
   };
-  
+
   // NOTE (changyu): apply external mpm rigid contact force here.
   if (deformable_model().ExistsMpmModel()) {
-    const auto& mpm_state = context.template get_abstract_state<gmpm::GpuMpmState<gmpm::config::GpuT>>
-      (deformable_model().gpu_mpm_state_index());
-    const auto &mpm_rigid_forces = mpm_state.external_forces_host();
+    const auto& mpm_state =
+        context
+            .template get_abstract_state<gmpm::GpuMpmState<gmpm::config::GpuT>>(
+                deformable_model().gpu_mpm_state_index());
+    const auto& mpm_rigid_forces = mpm_state.external_forces_host();
     for (size_t i = 0; i < mpm_rigid_forces.size(); ++i) {
       const BodyIndex body_index = BodyIndex(i);
       const RigidBody<T>& body = get_body(body_index);
@@ -2397,8 +2399,15 @@ void MultibodyPlant<T>::AddAppliedExternalSpatialForces(
       // expressed in frame is the world frame. So we can directly add
       // to the external forces list without transform.
       F_BBo_W_array[body_mobod_index] += SpatialForce<T>(
-        mpm_state.external_forces_host().F_Bq_W_tau[i].template cast<T>(), 
-        mpm_state.external_forces_host().F_Bq_W_f[i].template cast<T>());
+          mpm_state.external_forces_host().F_Bq_W_tau[i].template cast<T>(),
+          mpm_state.external_forces_host().F_Bq_W_f[i].template cast<T>());
+      if (i == 1) {
+        const Vector3<T> f =
+            mpm_state.external_forces_host().F_Bq_W_f[i].template cast<T>();
+        std::ofstream force_data("/home/changyu/drake/force_data.txt",
+                                 std::ios::app);
+        force_data << f.x() << " " << f.y() << " " << f.z() << std::endl;
+      }
     }
   }
 
@@ -2418,7 +2427,8 @@ void MultibodyPlant<T>::AddAppliedExternalSpatialForces(
       const Vector3<T> p_BoBq_W = X_WB.rotation() * force_structure.p_BoBq_B;
 
       // Shift the spatial force from Bq to Bo.
-      F_BBo_W_array[body_mobod_index] += force_structure.F_Bq_W.Shift(-p_BoBq_W);
+      F_BBo_W_array[body_mobod_index] +=
+          force_structure.F_Bq_W.Shift(-p_BoBq_W);
     }
   }
 }
@@ -2982,8 +2992,7 @@ systems::EventStatus MultibodyPlant<T>::CalcDiscreteStep(
 // NOTE (changyu): for MPM
 template <typename T>
 systems::EventStatus MultibodyPlant<T>::CalcAbstractStep(
-    const systems::Context<T>& context0,
-    systems::State<T>* updates) const {
+    const systems::Context<T>& context0, systems::State<T>* updates) const {
   this->ValidateContext(context0);
   discrete_update_manager_->CalcAbstractValues(context0, updates);
   return systems::EventStatus::Succeeded();
@@ -2997,7 +3006,7 @@ void MultibodyPlant<T>::DeclareStateCacheAndPorts() {
   if (is_discrete()) {
     this->DeclarePeriodicDiscreteUpdateEvent(
         time_step_, 0.0, &MultibodyPlant<T>::CalcDiscreteStep);
-    
+
     // NOTE (changyu): for MPM
     this->DeclarePeriodicUnrestrictedUpdateEvent(
         time_step_, 0.0, &MultibodyPlant<T>::CalcAbstractStep);
@@ -3005,7 +3014,7 @@ void MultibodyPlant<T>::DeclareStateCacheAndPorts() {
     // Also permit triggering a step via a Forced update.
     this->DeclareForcedDiscreteUpdateEvent(
         &MultibodyPlant<T>::CalcDiscreteStep);
-    
+
     // NOTE (changyu): for MPM
     this->DeclareForcedUnrestrictedUpdateEvent(
         &MultibodyPlant<T>::CalcAbstractStep);

@@ -251,7 +251,7 @@ void GpuMpmSolver<T>::UpdateContact(GpuMpmState<T> *state,
     // If we don't converge in 2000 iterations, we probably will never converge anyway...    
     const int max_newton_iterations = 2000;
     constexpr bool use_jacobi = true;
-    const T kRelTol = 5e-2;
+    const T kRelTol = 1e-2;
     // Set the absolute tolerance close to machine epsilon so that we almost always exit based on the relative tolerance.
     const T kAbsTol = 16 * std::numeric_limits<T>::epsilon();
 
@@ -610,6 +610,7 @@ void GpuMpmSolver<T>::UpdateContact(GpuMpmState<T> *state,
         s_times.push_back(T((after_ts-before_ts) / 1e3));
     }
     // throw;
+    if (false) {
     std::cout << "Iteration count :" <<  count 
               << ", residual: " << norm_dir 
               << ", relative tol: " << kRelTol * norm_impulse_initial
@@ -617,6 +618,7 @@ void GpuMpmSolver<T>::UpdateContact(GpuMpmState<T> *state,
               << ", grid_DoFs " << grid_DoFs 
               << ", line_search_cnt_aver " << static_cast<T>(std::accumulate(s_line_search_cnts.begin(), s_line_search_cnts.end(), 0)) / s_line_search_cnts.size()
               << std::endl;
+    }
     if (count == max_newton_iterations) {
         std::cout << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!Newton iterations did not converge!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
     }
@@ -624,7 +626,7 @@ void GpuMpmSolver<T>::UpdateContact(GpuMpmState<T> *state,
     CUDA_SAFE_CALL(cudaFree(total_grid_DoFs_d));
     CUDA_SAFE_CALL(cudaFree(solved_grid_DoFs_d));
 
-    if (dump) {
+    if (false) {
         std::ofstream file("/home/changyu/drake/mpm-data/" 
                            + std::string(use_jacobi ? "jacobi" : "colored_gs") 
                            + "_iter_" + std::to_string(max_newton_iterations)

@@ -674,6 +674,7 @@ __global__ void particle_to_grid_kernel(const size_t n_particles,
         }
 
         const T mass = volumes[idx] * config::DENSITY<T>;
+        // printf("vol=%lf rho=%lf, mass=%lf\n", volumes[idx], config::DENSITY<T>, mass);
         const T* vel = &velocities[idx * 3];
 
         T B[9];
