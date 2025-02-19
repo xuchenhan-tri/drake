@@ -800,6 +800,7 @@ __global__ void update_grid_kernel(
                 g_vel[1] /= g_masses[cell_idx];
                 g_vel[2] /= g_masses[cell_idx];
             }
+            else {
 
             // apply boundary condition
             const int boundary_condition = config::G_BOUNDARY_CONDITION;
@@ -1176,6 +1177,7 @@ __global__ void update_grid_kernel(
                         g_vel[2] += diff_vel[2] * config::SDF_FRICTION<T> + normal[2] * dotnv_frac;
                     }
                 }
+            }
             }
 
             if constexpr (!ENFORCE_BC_ONLY) {
