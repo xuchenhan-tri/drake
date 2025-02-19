@@ -36,8 +36,8 @@ DEFINE_double(time_step, 1e-3,
               "Discrete time step for the system [s]. Must be positive.");
 DEFINE_double(substep, 5e-4,
               "Discrete time step for the substepping scheme [s]. Must be positive.");
-DEFINE_double(stiffness, 100.0, "Contact Stiffness.");
-DEFINE_double(friction, 1.5, "Contact Friction.");
+DEFINE_double(stiffness, 200.0, "Contact Stiffness.");
+DEFINE_double(friction, 1.0, "Contact Friction.");
 DEFINE_double(damping, 1.0,
     "Hunt and Crossley damping for the deformable body, only used when "
     "'contact_approximation' is set to 'lagged' or 'similar' [s/m].");
@@ -221,38 +221,40 @@ class IiwaController : public drake::systems::LeafSystem<double> {
      dX.setZero();
      double t = context.get_time();
      double rate = plant_.time_step() / 0.01;
+     // NOTE (changyu): this rate is used to control the height of gripper
+     double uprt = 0.4 / 0.3;
      if (t < 0.5) {
        dX(5) -= 0.002 * rate; // move down
      } else if (t < 1.0) {
        // hold
      } else if (t < 1.5) {
-      dX(5) += 0.002 * rate; // move up
+      dX(5) += 0.002 * rate * uprt; // move up
      } else if (t < 2.5) {
-      dX(5) += 0.002 * rate; // move up
+      dX(5) += 0.002 * rate * uprt; // move up
       dX(4) -= 0.0042 * rate; // move left
       dX(3) -= 0.0009 * rate; // move inward
      } else if (t < 3.0) {
       // hold
      } else if (t < 4.0) {
       if (t < 3.5) {
-        dX(5) += 0.002 * rate; // move up 
+        dX(5) += 0.002 * rate * uprt; // move up 
       } else {
-        dX(5) -= 0.002 * rate; // move up
+        dX(5) -= 0.002 * rate * uprt; // move up
       }
-      dX(5) -= 0.0019 * rate; // move down 
+      dX(5) -= 0.0019 * rate * uprt; // move down 
       dX(4) += 0.0042 * rate; // move right
       dX(4) += 0.002 * rate; // move extra 20cm to get right up of the blue box
       if (t > 3.7) {
         dX(3) += 0.0009 * rate / 1.5 * 5; // move outward
       }
      } else if (t < 4.5) {
-      dX(5) -= 0.003 * rate; // move down
+      dX(5) -= 0.0027 * rate * uprt; // move down
      } else if (t < 5.0) {
       // hold
      } else if (t < 5.5) {
-      dX(5) += 0.003 * rate; // move up
+      dX(5) += 0.003 * rate * uprt; // move up
      } else if (t < 6.5) {
-        dX(5) += 0.0019 * rate; // move up 
+        dX(5) += 0.0019 * rate * uprt; // move up 
         dX(4) -= 0.0048 * rate; // move left
         dX(4) -= 0.002 * rate; // move extra 20cm
         dX(3) -= 0.0008 * rate; // move inward
@@ -295,8 +297,8 @@ class BaggingGripperController : public systems::LeafSystem<double> {
  
   static constexpr double l_x = 0.34 - 0.03 - 0.01;
   static constexpr double h_x = 0.66 + 0.027 + 0.01;
-  static constexpr double l_z = 0.29-2e-4 - 0.01;
-  static constexpr double h_z = 0.31+2e-4 + 0.01;
+  static constexpr double l_z = 0.39-2e-4 - 0.01;
+  static constexpr double h_z = 0.41+2e-4 + 0.01;
  
   static constexpr double initial_free_duration = 0.25;
   static constexpr double initial_loose_duration = 0.25;
@@ -609,7 +611,7 @@ plant.RegisterCollisionGeometry(free_box2, RigidTransformd::Identity(),
 
   // mpm stuff
   DeformableModel<double>& deformable_model = plant.mutable_deformable_model();
-  AddCloth(&deformable_model, FLAGS_res, 0.3);
+  AddCloth(&deformable_model, FLAGS_res, 0.4);
 
   MpmConfigParams mpm_config;
   mpm_config.substep_dt = FLAGS_substep;
