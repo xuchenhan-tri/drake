@@ -26,11 +26,11 @@
 #include "drake/visualization/visualization_config.h"
 #include "drake/visualization/visualization_config_functions.h"
 
-DEFINE_double(simulation_time, 1.0, "Desired duration of the simulation [s].");
+DEFINE_double(simulation_time, 0.2, "Desired duration of the simulation [s].");
 DEFINE_double(time_step, 1e-4,
               "Discrete time step for the system [s]. Must be positive.");
 DEFINE_double(
-    substep, 1e-5,
+    substep, 1e-4,
     "Discrete time step for the substepping scheme [s]. Must be positive.");
 
 using drake::geometry::AddContactMaterial;
