@@ -27,10 +27,10 @@
 #include "drake/visualization/visualization_config_functions.h"
 
 DEFINE_double(simulation_time, 1.0, "Desired duration of the simulation [s].");
-DEFINE_double(time_step, 1e-2,
+DEFINE_double(time_step, 1e-4,
               "Discrete time step for the system [s]. Must be positive.");
 DEFINE_double(
-    substep, 2e-4,
+    substep, 1e-5,
     "Discrete time step for the substepping scheme [s]. Must be positive.");
 
 using drake::geometry::AddContactMaterial;
@@ -89,10 +89,14 @@ int do_main() {
                      &box_proximity_props);
   const double mpm_box_width = 0.1;
 
-  const double rigid_box_side_x = 0.14;
+  // The box body should match what Zeshun has.
+  const double rigid_box_side_x = 0.1 / 6.0;
   const double rigid_box_side_y = 0.14;
-  const double rigid_box_side_z = 0.14;
-  const double rigid_box_density = 1000;
+  const double rigid_box_side_z = 0.1;
+  // The collision geometry is slightly bigger to make sure no weird things
+  // happen with box normals.
+  const double rigid_box_geometry_size = 0.14;
+  const double rigid_box_density = 400;
   const double mpm_shift = 0.5;
   const RigidTransformd X_WB(Eigen::Vector3d{mpm_shift, mpm_shift, mpm_shift});
   ModelInstanceIndex left_box_model_instance =
@@ -108,7 +112,8 @@ int do_main() {
       std::nullopt, Vector3d::UnitX());
 
   plant.GetMutableJointByName<PrismaticJoint>("left_translate_x_joint")
-      .set_default_translation(-0.5 * mpm_box_width - 0.5 * rigid_box_side_x);
+      .set_default_translation(-0.5 * mpm_box_width -
+                               0.5 * rigid_box_geometry_size);
   plant.AddJointActuator("left_actuator", left_joint);
 
   // box controlled on the right
@@ -120,10 +125,12 @@ int do_main() {
       "right_translate_x_joint", plant.world_body(), X_WB, right_box,
       std::nullopt, Vector3d::UnitX());
   plant.GetMutableJointByName<PrismaticJoint>("right_translate_x_joint")
-      .set_default_translation(0.5 * mpm_box_width + 0.5 * rigid_box_side_x);
+      .set_default_translation(0.5 * mpm_box_width +
+                               0.5 * rigid_box_geometry_size);
   plant.AddJointActuator("right_actuator", right_joint);
 
-  Box rigid_box(rigid_box_side_x, rigid_box_side_y, rigid_box_side_z);
+  Box rigid_box(rigid_box_geometry_size, rigid_box_geometry_size,
+                rigid_box_geometry_size);
   const Vector4<double> grey(0.5, 0.5, 0.5, 1.0);
   plant.RegisterVisualGeometry(left_box, RigidTransformd::Identity(), rigid_box,
                                "LeftCubeV", grey);
@@ -155,6 +162,8 @@ int do_main() {
   MpmConfigParams mpm_config;
   mpm_config.substep_dt = FLAGS_substep;
   mpm_config.write_files = true;
+  // One order of magnitude softer than Zeshun's choice. Doesn't affect the plot
+  // that much. So we don't make the problem unnecessarily hard.
   mpm_config.contact_stiffness = 1e5;
   mpm_config.contact_damping = 10;
   mpm_config.contact_friction_mu = 0.8;

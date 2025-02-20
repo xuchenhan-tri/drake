@@ -98,8 +98,8 @@ namespace config {
 	// for tshirt/cloth folding demo, V=0.8
 	// for bagging demo, K=0.2
 	template<class T> constexpr T V;
-	template<> constexpr float V<float> = 1.0f;
-	template<> constexpr double V<double> = 1.0;
+	template<> constexpr float V<float> = 0.95f;
+	template<> constexpr double V<double> = 0.95;
 
 	template<class T> constexpr T c_F;
 	template<> constexpr float c_F<float> = .0f;
