@@ -223,13 +223,14 @@ TEST_F(DeformableDriverContactTest, EvalDeformableContact) {
   EXPECT_EQ(contact.contact_surfaces()[0].id_B(), rigid_geometry_id_);
   EXPECT_EQ(contact.contact_surfaces()[1].id_B(), rigid_geometry_id_);
 
-  /* All but the top/bottom vertex in each octahedron participate in contact. */
+  /* All but the top/bottom vertex and the center vertex in each octahedron
+   participate in contact. */
   GeometryId geometry_id0 = model_->GetGeometryId(body_id0_);
   GeometryId geometry_id1 = model_->GetGeometryId(body_id1_);
   EXPECT_EQ(
-      contact.contact_participation(geometry_id0).num_vertices_in_contact(), 6);
+      contact.contact_participation(geometry_id0).num_vertices_in_contact(), 5);
   EXPECT_EQ(
-      contact.contact_participation(geometry_id1).num_vertices_in_contact(), 6);
+      contact.contact_participation(geometry_id1).num_vertices_in_contact(), 5);
 }
 
 TEST_F(DeformableDriverContactTest, EvalDofPermutation) {
@@ -238,8 +239,9 @@ TEST_F(DeformableDriverContactTest, EvalDofPermutation) {
   const PartialPermutation& result =
       EvalDofPermutation(plant_context, DeformableBodyIndex(0));
   /* Here we use our knowledge that Drake's coarsest sphere mesh generation is
-   indexed such that the top vertex is indexed 5. (Vertex 0-4 are on the
-   equator, vertex 5 is the north pole, and vertex 6 is the south pole) */
+   indexed such that the top vertex is indexed 5 and the center vertex is
+   indexed 0. (Vertex 0-4 are on the equator, vertex 5 is the north pole, and
+   vertex 6 is the south pole) */
   const std::vector<int> expected_permutation = {{0,  1,  2,  3,  4,  5,  6,
                                                   7,  8,  9,  10, 11, 12, 13,
                                                   14, -1, -1, -1, 15, 16, 17}};
