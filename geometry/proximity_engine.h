@@ -127,6 +127,7 @@ class ProximityEngine {
   void AddDeformableGeometry(const VolumeMesh<double>& mesh_W,
                              TriangleSurfaceMesh<double> surface_mesh_W,
                              std::vector<int> surface_index_to_volume_index,
+                             std::vector<int> surface_tri_to_volume_tet,
                              GeometryId id);
 
   /* Reports if the engine requires a convex hull for the given geometry. */

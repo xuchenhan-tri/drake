@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <functional>
+#include <iostream>
 #include <memory>
 #include <string>
 #include <utility>
@@ -49,6 +50,7 @@ using internal::kSlabThickness;
 using internal::MakeRenderMeshFromTriangleSurfaceMesh;
 using internal::ProximityEngine;
 using internal::RenderMesh;
+using internal::TetFace;
 using internal::VertexSampler;
 using math::RigidTransform;
 using math::RigidTransformd;
@@ -1226,11 +1228,19 @@ void GeometryState<T>::AssignRole(SourceId source_id, GeometryId geometry_id,
         DRAKE_DEMAND(geometry.reference_mesh() != nullptr);
         const VolumeMesh<double>& reference_mesh = *geometry.reference_mesh();
         std::vector<int> surface_vertices;
+        std::vector<TetFace> tet_faces;
         TriangleSurfaceMesh<double> surface_mesh =
-            ConvertVolumeToSurfaceMeshWithBoundaryVertices(reference_mesh,
-                                                           &surface_vertices);
-        geometry_engine_->AddDeformableGeometry(reference_mesh, surface_mesh,
-                                                surface_vertices, geometry_id);
+            ConvertVolumeToSurfaceMeshWithBoundaryVertices(
+                reference_mesh, &surface_vertices, &tet_faces);
+        std::vector<int> surface_tri_to_volume_tet(tet_faces.size());
+        for (int i = 0; i < ssize(tet_faces); ++i) {
+          const TetFace& face = tet_faces[i];
+          surface_tri_to_volume_tet[i] = face.tet_index;
+        }
+
+        geometry_engine_->AddDeformableGeometry(
+            reference_mesh, surface_mesh, surface_vertices,
+            surface_tri_to_volume_tet, geometry_id);
         VertexSampler vertex_sampler(std::move(surface_vertices),
                                      reference_mesh);
         std::vector<DrivenTriangleMesh> driven_meshes;
@@ -1952,11 +1962,18 @@ void GeometryState<T>::AddToProximityEngineUnchecked(
     DRAKE_DEMAND(geometry.reference_mesh() != nullptr);
     const VolumeMesh<double>& reference_mesh = *geometry.reference_mesh();
     std::vector<int> surface_vertices;
+    std::vector<TetFace> tet_faces;
     TriangleSurfaceMesh<double> surface_mesh =
-        ConvertVolumeToSurfaceMeshWithBoundaryVertices(reference_mesh,
-                                                       &surface_vertices);
-    geometry_engine_->AddDeformableGeometry(reference_mesh, surface_mesh,
-                                            surface_vertices, geometry_id);
+        ConvertVolumeToSurfaceMeshWithBoundaryVertices(
+            reference_mesh, &surface_vertices, &tet_faces);
+    std::vector<int> surface_tri_to_volume_tet(tet_faces.size());
+    for (int i = 0; i < ssize(tet_faces); ++i) {
+      const TetFace& face = tet_faces[i];
+      surface_tri_to_volume_tet[i] = face.tet_index;
+    }
+    geometry_engine_->AddDeformableGeometry(
+        reference_mesh, surface_mesh, surface_vertices,
+        surface_tri_to_volume_tet, geometry_id);
     VertexSampler vertex_sampler(std::move(surface_vertices), reference_mesh);
     std::vector<DrivenTriangleMesh> driven_meshes;
     driven_meshes.emplace_back(vertex_sampler, surface_mesh);

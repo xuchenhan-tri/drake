@@ -41,9 +41,10 @@ namespace internal {
 void AddDeformableRigidContactSurface(
     const VolumeMeshFieldLinear<double, double>& pressure_field_R,
     const DeformableSurfaceMeshWithBvh<double>& deformable_mesh_D,
+    const DeformableVolumeMeshWithBvh<double>& deformable_volume_mesh,
     const std::vector<int>& surface_index_to_volume_index,
-    GeometryId deformable_id, GeometryId rigid_id,
-    const VolumeMesh<double>& rigid_mesh_R,
+    const std::vector<int>& surface_tri_to_volume_tet, GeometryId deformable_id,
+    GeometryId rigid_id, const VolumeMesh<double>& rigid_mesh_R,
     const Bvh<Obb, VolumeMesh<double>>& rigid_bvh_R,
     const math::RigidTransform<double>& X_RD,
     DeformableContact<double>* deformable_contact);

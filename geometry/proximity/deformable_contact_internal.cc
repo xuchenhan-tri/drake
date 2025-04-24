@@ -1,6 +1,7 @@
 #include "drake/geometry/proximity/deformable_contact_internal.h"
 
 #include <algorithm>
+#include <iostream>
 #include <memory>
 #include <unordered_map>
 #include <utility>
@@ -58,10 +59,12 @@ void Geometries::UpdateRigidWorldPose(
 void Geometries::AddDeformableGeometry(
     GeometryId id, VolumeMesh<double> volume_mesh,
     TriangleSurfaceMesh<double> surface_mesh,
-    std::vector<int> surface_index_to_volume_index) {
+    std::vector<int> surface_index_to_volume_index,
+    std::vector<int> surface_tri_to_volume_tet) {
   deformable_geometries_.insert(
       {id, DeformableGeometry(std::move(volume_mesh), std::move(surface_mesh),
-                              std::move(surface_index_to_volume_index))});
+                              std::move(surface_index_to_volume_index),
+                              std::move(surface_tri_to_volume_tet))});
   FlushPendingRigidGeometry();
 }
 
@@ -113,8 +116,10 @@ DeformableContact<double> Geometries::ComputeDeformableContact(
         // Deformable geometry is in the world frame.
         const auto X_RD = X_WR.inverse();
         AddDeformableRigidContactSurface(
-            pressure_field_R, deformable_geometry.deformable_surface(),
-            deformable_geometry.surface_index_to_volume_index(), deformable_id,
+            pressure_field_R, deformable_geometry.deformable_surface(), deformable_geometry.deformable_volume(),
+            deformable_geometry.surface_index_to_volume_index(), 
+            deformable_geometry.surface_tri_to_volume_tet(),
+            deformable_id,
             rigid_id, rigid_volume_mesh, rigid_bvh, X_RD, &result);
       }
     }

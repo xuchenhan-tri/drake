@@ -1,6 +1,7 @@
 #include "drake/multibody/plant/deformable_driver.h"
 
 #include <array>
+#include <iostream>
 #include <limits>
 #include <map>
 #include <memory>
@@ -533,6 +534,9 @@ void DeformableDriver<T>::AppendDiscreteContactPairs(
       const T fn0 = surface.is_B_deformable()
                         ? -k * surface.signed_distances()[i]
                         : Ae * surface.pressures()[i];
+      if (fn0 < 0) {
+        continue;
+      }
       /* Penetration distance. */
       const T phi0 = surface.is_B_deformable() ? surface.signed_distances()[i]
                                                : -surface.pressures()[i] / g;
