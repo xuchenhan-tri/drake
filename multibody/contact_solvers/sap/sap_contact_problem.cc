@@ -327,6 +327,7 @@ void SapContactProblem<T>::CalcConstraintMultibodyForces(
                                                &clique_forces);
     }
 
+    // TODO(xuchenhan-tri):check whether deformable affect spatial forces.
     // Accumulate spatial forces per object.
     for (int o = 0; o < constraint.num_objects(); ++o) {
       const int object = constraint.object(o);
