@@ -1,5 +1,6 @@
 #include "drake/geometry/proximity/hydroelastic_calculator.h"
 
+#include <type_traits>
 #include <utility>
 
 #include <fmt/format.h>
@@ -8,6 +9,7 @@
 #include "drake/geometry/proximity/field_intersection.h"
 #include "drake/geometry/proximity/mesh_half_space_intersection.h"
 #include "drake/geometry/proximity/mesh_intersection.h"
+#include "drake/geometry/proximity/mesh_intersection_fast.h"
 #include "drake/geometry/proximity/mesh_plane_intersection.h"
 #include "drake/geometry/proximity/proximity_utilities.h"
 
@@ -41,6 +43,13 @@ std::unique_ptr<ContactSurface<T>> CalcRigidCompliant(
     }
   } else {
     // soft cannot be a half space; so this must be mesh-mesh.
+    if constexpr (std::is_same_v<T, double>) {
+      if (representation == HydroelasticContactRepresentation::kPolygon) {
+        return ComputeContactSurfaceFromSoftVolumeRigidSurfaceFast(
+            id_S, soft.pressure_field(), soft.bvh(), X_WS, id_R, rigid.mesh(),
+            rigid.bvh(), X_WR);
+      }
+    }
     const VolumeMeshFieldLinear<double, double>& field_S =
         soft.pressure_field();
     const Bvh<Obb, VolumeMesh<double>>& bvh_S = soft.bvh();

@@ -96,7 +96,8 @@ SoftMesh::SoftMesh(
     std::unique_ptr<VolumeMeshFieldLinear<double, double>> pressure)
     : mesh_(std::move(mesh)),
       pressure_(std::move(pressure)),
-      bvh_(std::make_unique<Bvh<Obb, VolumeMesh<double>>>(*mesh_)) {
+      bvh_(std::make_unique<Bvh<Obb, VolumeMesh<double>>>(*mesh_)),
+      aabb_bvh_(std::make_unique<Bvh<Aabb, VolumeMesh<double>>>(*mesh_)) {
   DRAKE_ASSERT(mesh_.get() == &pressure_->mesh());
   tri_to_tet_ = std::make_unique<std::vector<TetFace>>();
   surface_mesh_ = std::make_unique<TriangleSurfaceMesh<double>>(
@@ -115,6 +116,7 @@ SoftMesh& SoftMesh::operator=(const SoftMesh& s) {
   // the new mesh. So, we use CloneAndSetMesh() instead.
   pressure_ = s.pressure().CloneAndSetMesh(mesh_.get());
   bvh_ = make_unique<Bvh<Obb, VolumeMesh<double>>>(s.bvh());
+  aabb_bvh_ = make_unique<Bvh<Aabb, VolumeMesh<double>>>(s.aabb_bvh());
   surface_mesh_ =
       std::make_unique<TriangleSurfaceMesh<double>>(s.surface_mesh());
   tri_to_tet_ = std::make_unique<std::vector<TetFace>>(s.tri_to_tet());

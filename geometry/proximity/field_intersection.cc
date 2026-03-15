@@ -2,11 +2,13 @@
 
 #include <array>
 #include <queue>
+#include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
 
 #include "drake/common/default_scalars.h"
 #include "drake/geometry/proximity/contact_surface_utility.h"
+#include "drake/geometry/proximity/field_intersection_fast.h"
 #include "drake/geometry/proximity/mesh_intersection.h"
 #include "drake/geometry/proximity/mesh_plane_intersection.h"
 #include "drake/geometry/proximity/posed_half_space.h"
@@ -497,6 +499,54 @@ void HydroelasticVolumeIntersector<MeshBuilder>::IntersectCompliantVolumes(
       std::move(grad_field0_W), std::move(grad_field1_W));
 }
 
+namespace {
+
+std::unique_ptr<ContactSurface<double>>
+ComputeContactSurfaceFromCompliantVolumesFast(
+    GeometryId id_M, const hydroelastic::SoftMesh& compliant_M,
+    const math::RigidTransformd& X_WM, GeometryId id_N,
+    const hydroelastic::SoftMesh& compliant_N,
+    const math::RigidTransformd& X_WN) {
+  thread_local FastVolumeIntersector fast_intersector;
+
+  const math::RigidTransformd X_MN = X_WM.InvertAndCompose(X_WN);
+
+  std::unique_ptr<PolygonSurfaceMesh<double>> surface_M;
+  std::unique_ptr<PolygonSurfaceMeshFieldLinear<double, double>> field_M;
+
+  fast_intersector.IntersectFields(
+      compliant_M.pressure(), compliant_M.aabb_bvh(), compliant_N.pressure(),
+      compliant_N.aabb_bvh(), X_MN, &surface_M, &field_M);
+
+  if (surface_M == nullptr) return nullptr;
+
+  surface_M->TransformVertices(X_WM);
+  field_M->Transform(X_WM);
+
+  const int num_faces = surface_M->num_elements();
+  const auto& tet0s = fast_intersector.tet0_of_contact_polygon();
+  const auto& tet1s = fast_intersector.tet1_of_contact_polygon();
+
+  auto grad_field0_W = std::make_unique<std::vector<Vector3d>>();
+  grad_field0_W->reserve(num_faces);
+  for (int i = 0; i < num_faces; ++i) {
+    grad_field0_W->emplace_back(
+        X_WM.rotation() * compliant_M.pressure().EvaluateGradient(tet0s[i]));
+  }
+  auto grad_field1_W = std::make_unique<std::vector<Vector3d>>();
+  grad_field1_W->reserve(num_faces);
+  for (int i = 0; i < num_faces; ++i) {
+    grad_field1_W->emplace_back(
+        X_WN.rotation() * compliant_N.pressure().EvaluateGradient(tet1s[i]));
+  }
+
+  return std::make_unique<ContactSurface<double>>(
+      id_M, id_N, std::move(surface_M), std::move(field_M),
+      std::move(grad_field0_W), std::move(grad_field1_W));
+}
+
+}  // namespace
+
 template <typename T>
 std::unique_ptr<ContactSurface<T>> ComputeContactSurfaceFromCompliantVolumes(
     GeometryId id_M, const hydroelastic::SoftMesh& compliant_M,
@@ -504,6 +554,12 @@ std::unique_ptr<ContactSurface<T>> ComputeContactSurfaceFromCompliantVolumes(
     const hydroelastic::SoftMesh& compliant_N,
     const math::RigidTransform<T>& X_WN,
     HydroelasticContactRepresentation representation) {
+  if constexpr (std::is_same_v<T, double>) {
+    if (representation == HydroelasticContactRepresentation::kPolygon) {
+      return ComputeContactSurfaceFromCompliantVolumesFast(
+          id_M, compliant_M, X_WM, id_N, compliant_N, X_WN);
+    }
+  }
   std::unique_ptr<ContactSurface<T>> contact_surface_W;
   if (representation == HydroelasticContactRepresentation::kTriangle) {
     HydroelasticVolumeIntersector<TriMeshBuilder<T>>()

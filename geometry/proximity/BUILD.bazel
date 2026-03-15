@@ -369,6 +369,7 @@ drake_cc_library(
     deps = [
         ":bvh",
         ":contact_surface_utility",
+        ":field_intersection_fast",
         ":hydroelastic_internal",
         ":mesh_field",
         ":mesh_intersection",
@@ -380,6 +381,25 @@ drake_cc_library(
         ":volume_to_surface_mesh",
         "//common:default_scalars",
         "//geometry/query_results:contact_surface",
+    ],
+)
+
+drake_cc_library(
+    name = "field_intersection_fast",
+    srcs = ["field_intersection_fast.cc"],
+    hdrs = ["field_intersection_fast.h"],
+    internal = True,
+    visibility = [
+        "//geometry:__subpackages__",
+    ],
+    deps = [
+        ":bv",
+        ":bvh",
+        ":mesh_field",
+        ":polygon_surface_mesh",
+        ":volume_mesh",
+        "//common:parallelism",
+        "//math",
     ],
 )
 
@@ -415,6 +435,7 @@ drake_cc_library(
         ":hydroelastic_internal",
         ":mesh_half_space_intersection",
         ":mesh_intersection",
+        ":mesh_intersection_fast",
         ":mesh_plane_intersection",
         ":penetration_as_point_pair_callback",
         ":proximity_utilities",
@@ -774,6 +795,28 @@ drake_cc_library(
         "//common:essential",
         "//geometry/query_results:contact_surface",
         "//math:geometric_transform",
+    ],
+)
+
+drake_cc_library(
+    name = "mesh_intersection_fast",
+    srcs = ["mesh_intersection_fast.cc"],
+    hdrs = ["mesh_intersection_fast.h"],
+    internal = True,
+    visibility = [
+        "//geometry:__subpackages__",
+    ],
+    deps = [
+        ":bv",
+        ":bvh",
+        ":mesh_field",
+        ":polygon_surface_mesh",
+        ":triangle_surface_mesh",
+        ":volume_mesh",
+        "//common:parallelism",
+        "//geometry:geometry_ids",
+        "//geometry/query_results:contact_surface",
+        "//math",
     ],
 )
 

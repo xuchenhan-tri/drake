@@ -71,6 +71,13 @@ class SoftMesh {
     return *bvh_;
   }
 
+  /* The AABB BVH of the mesh provided by mesh(). Used by compliant-compliant
+   fast intersection. */
+  const Bvh<Aabb, VolumeMesh<double>>& aabb_bvh() const {
+    DRAKE_DEMAND(aabb_bvh_ != nullptr);
+    return *aabb_bvh_;
+  }
+
   /* The BVH of the mesh provided by surface_mesh(). */
   const Bvh<Obb, TriangleSurfaceMesh<double>>& surface_mesh_bvh() const {
     DRAKE_DEMAND(surface_mesh_bvh_ != nullptr);
@@ -94,6 +101,7 @@ class SoftMesh {
   std::unique_ptr<VolumeMesh<double>> mesh_;
   std::unique_ptr<VolumeMeshFieldLinear<double, double>> pressure_;
   std::unique_ptr<Bvh<Obb, VolumeMesh<double>>> bvh_;
+  std::unique_ptr<Bvh<Aabb, VolumeMesh<double>>> aabb_bvh_;
   std::unique_ptr<TriangleSurfaceMesh<double>> surface_mesh_;
   std::unique_ptr<Bvh<Obb, TriangleSurfaceMesh<double>>> surface_mesh_bvh_;
   std::unique_ptr<VolumeMeshTopology> mesh_topology_;
