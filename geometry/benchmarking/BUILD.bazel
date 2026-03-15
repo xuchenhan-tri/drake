@@ -50,10 +50,12 @@ drake_cc_googlebench_binary(
     test_timeout = "moderate",
     deps = [
         "//common:essential",
+        "//geometry/proximity:contact_surface_utility",
         "//geometry/proximity:make_ellipsoid_field",
         "//geometry/proximity:make_ellipsoid_mesh",
         "//geometry/proximity:make_sphere_mesh",
         "//geometry/proximity:mesh_intersection",
+        "//geometry/proximity:mesh_intersection_fast",
         "//math",
     ],
 )
@@ -73,6 +75,62 @@ drake_cc_googlebench_binary(
         "//geometry/proximity:make_sphere_mesh",
         "//math",
         "//tools/performance:gflags_main",
+    ],
+)
+
+drake_cc_googlebench_binary(
+    name = "fast_compliant_benchmark",
+    srcs = ["fast_compliant_benchmark.cc"],
+    add_test_rule = True,
+    test_args = [
+        "--benchmark_filter=.*/3/3",
+    ],
+    test_timeout = "moderate",
+    deps = [
+        "//common:essential",
+        "//geometry/proximity:bv",
+        "//geometry/proximity:bvh",
+        "//geometry/proximity:contact_surface_utility",
+        "//geometry/proximity:field_intersection",
+        "//geometry/proximity:field_intersection_fast",
+        "//geometry/proximity:hydroelastic_internal",
+        "//geometry/proximity:make_ellipsoid_field",
+        "//geometry/proximity:make_ellipsoid_mesh",
+        "//geometry/proximity:make_sphere_field",
+        "//geometry/proximity:make_sphere_mesh",
+        "//math",
+        "//tools/performance:gflags_main",
+    ],
+)
+
+drake_cc_binary(
+    name = "fast_compliant_verify",
+    srcs = ["fast_compliant_verify.cc"],
+    deps = [
+        "//geometry/proximity:bv",
+        "//geometry/proximity:bvh",
+        "//geometry/proximity:contact_surface_utility",
+        "//geometry/proximity:field_intersection",
+        "//geometry/proximity:field_intersection_fast",
+        "//geometry/proximity:make_ellipsoid_field",
+        "//geometry/proximity:make_ellipsoid_mesh",
+        "//geometry/proximity:make_sphere_field",
+        "//geometry/proximity:make_sphere_mesh",
+        "//math",
+    ],
+)
+
+drake_cc_binary(
+    name = "pressure_culling_analysis",
+    srcs = ["pressure_culling_analysis.cc"],
+    deps = [
+        "//geometry/proximity:bvh",
+        "//geometry/proximity:field_intersection",
+        "//geometry/proximity:make_ellipsoid_field",
+        "//geometry/proximity:make_ellipsoid_mesh",
+        "//geometry/proximity:make_sphere_field",
+        "//geometry/proximity:make_sphere_mesh",
+        "//math",
     ],
 )
 

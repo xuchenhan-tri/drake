@@ -8,10 +8,12 @@
 #include <benchmark/benchmark.h>
 #include <fmt/format.h>
 
+#include "drake/geometry/proximity/contact_surface_utility.h"
 #include "drake/geometry/proximity/make_ellipsoid_field.h"
 #include "drake/geometry/proximity/make_ellipsoid_mesh.h"
 #include "drake/geometry/proximity/make_sphere_mesh.h"
 #include "drake/geometry/proximity/mesh_intersection.h"
+#include "drake/geometry/proximity/mesh_intersection_fast.h"
 #include "drake/math/rigid_transform.h"
 
 namespace drake {
@@ -154,13 +156,16 @@ const double kElasticModulus = 1.0e5;
 const double kMaxRotationFactor = 3.;
 const double kSphereDimension = 3.;
 const Vector3d kEllipsoidDimension{3.01, 3.5, 4.};
-const double kResolutionHint[4] = {4., 3., 2., 1.};
-const Vector3d kContactOverlapTranslation[5] = {
+const double kResolutionHint[6] = {4., 3., 2., 1., 0.5, 0.3};
+const Vector3d kContactOverlapTranslation[8] = {
     Vector3d{7, 7, 7},        // 0: No overlap at all.
     Vector3d{4, 4, 4},        // 1: Overlapping bounding volumes.
     Vector3d{3.5, 3.5, 3.5},  // 2: Minimal contact surface.
-    Vector3d{1.2, 1.2, 1.2},  // 3: Intermediate sized contact surface.
-    Vector3d{0, 0, 0}};       // 4: Maximal contact surface.
+    Vector3d{3.2, 3.2, 3.2},  // 3: Light contact surface.
+    Vector3d{2.8, 2.8, 2.8},  // 4: Moderate contact surface.
+    Vector3d{2.4, 2.4, 2.4},  // 5: Heavy contact surface.
+    Vector3d{1.2, 1.2, 1.2},  // 6: Near-maximal contact surface.
+    Vector3d{0, 0, 0}};       // 7: Maximal contact surface.
 
 class MeshIntersectionBenchmark : public benchmark::Fixture {
  public:
@@ -199,7 +204,7 @@ class MeshIntersectionBenchmark : public benchmark::Fixture {
   }
 
   /* Record metrics on the resulting contact surface for reporting later.  */
-  void RecordContactSurfaceResult(const TriangleSurfaceMesh<double>* surface_SR,
+  void RecordContactSurfaceResult(const PolygonSurfaceMesh<double>* surface_SR,
                                   const std::string& test_name,
                                   const benchmark::State& state) {
     const int num_elements =
@@ -212,7 +217,7 @@ class MeshIntersectionBenchmark : public benchmark::Fixture {
     if (contact_surface_result_keys.find(result_key) ==
         contact_surface_result_keys.end()) {
       contact_surface_result_output.push_back(fmt::format(
-          "{}: {:.2f} m^2, {} triangles", result_key, area, num_elements));
+          "{}: {:.2f} m^2, {} polygons", result_key, area, num_elements));
       contact_surface_result_keys.insert(result_key);
     }
   }
@@ -242,10 +247,10 @@ BENCHMARK_DEFINE_F(MeshIntersectionBenchmark, RigidSoftMesh)
   SetupMeshes(state);
   const auto bvh_S = Bvh<Obb, VolumeMesh<double>>(mesh_S_);
   const auto bvh_R = Bvh<Obb, TriangleSurfaceMesh<double>>(mesh_R_);
-  std::unique_ptr<TriangleSurfaceMesh<double>> surface_SR;
-  std::unique_ptr<TriangleSurfaceMeshFieldLinear<double, double>> e_SR;
+  std::unique_ptr<PolygonSurfaceMesh<double>> surface_SR;
+  std::unique_ptr<PolygonSurfaceMeshFieldLinear<double, double>> e_SR;
   for (auto _ : state) {
-    SurfaceVolumeIntersector<TriMeshBuilder<double>, Obb> intersector;
+    SurfaceVolumeIntersector<PolyMeshBuilder<double>, Obb> intersector;
     intersector.SampleVolumeFieldOnSurface(field_S_, bvh_S, mesh_R_, bvh_R,
                                            X_SR_);
     surface_SR = intersector.release_mesh();
@@ -256,19 +261,49 @@ BENCHMARK_DEFINE_F(MeshIntersectionBenchmark, RigidSoftMesh)
 BENCHMARK_REGISTER_F(MeshIntersectionBenchmark, RigidSoftMesh)
     ->Unit(benchmark::kMillisecond)
     ->MinTime(2)
-    ->Args({0, 4, 0})   // 0 resolution, 4 contact overlap, 0 rotation factor.
-    ->Args({1, 4, 0})   // 1 resolution, 4 contact overlap, 0 rotation factor.
-    ->Args({2, 4, 0})   // 2 resolution, 4 contact overlap, 0 rotation factor.
-    ->Args({3, 4, 0})   // 3 resolution, 4 contact overlap, 0 rotation factor.
-    ->Args({2, 0, 0})   // 2 resolution, 0 contact overlap, 0 rotation factor.
-    ->Args({2, 1, 0})   // 2 resolution, 1 contact overlap, 0 rotation factor.
-    ->Args({2, 2, 0})   // 2 resolution, 2 contact overlap, 0 rotation factor.
-    ->Args({2, 3, 0})   // 2 resolution, 3 contact overlap, 0 rotation factor.
-    ->Args({2, 4, 1})   // 2 resolution, 4 contact overlap, 1 rotation factor.
-    ->Args({2, 4, 2})   // 2 resolution, 4 contact overlap, 2 rotation factor.
-    ->Args({2, 4, 3})   // 2 resolution, 4 contact overlap, 3 rotation factor.
-    ->Args({2, 3, 1})   // 2 resolution, 3 contact overlap, 1 rotation factor.
-    ->Args({2, 2, 2});  // 2 resolution, 2 contact overlap, 2 rotation factor.
+    ->Args({3, 2, 0})   // hint=1.0, minimal contact.
+    ->Args({3, 3, 0})   // hint=1.0, light contact.
+    ->Args({3, 4, 0})   // hint=1.0, moderate contact.
+    ->Args({3, 5, 0})   // hint=1.0, heavy contact.
+    ->Args({4, 2, 0})   // hint=0.5, minimal contact.
+    ->Args({4, 3, 0})   // hint=0.5, light contact.
+    ->Args({4, 4, 0})   // hint=0.5, moderate contact.
+    ->Args({4, 5, 0})   // hint=0.5, heavy contact.
+    ->Args({5, 2, 0})   // hint=0.3, minimal contact.
+    ->Args({5, 3, 0})   // hint=0.3, light contact.
+    ->Args({5, 4, 0})   // hint=0.3, moderate contact.
+    ->Args({5, 5, 0});  // hint=0.3, heavy contact.
+
+BENCHMARK_DEFINE_F(MeshIntersectionBenchmark, FastRigidSoftMesh)
+// NOLINTNEXTLINE(runtime/references)
+(benchmark::State& state) {
+  SetupMeshes(state);
+  const auto bvh_S = Bvh<Obb, VolumeMesh<double>>(mesh_S_);
+  const auto bvh_R = Bvh<Obb, TriangleSurfaceMesh<double>>(mesh_R_);
+  FastSurfaceVolumeIntersector intersector;
+  std::unique_ptr<PolygonSurfaceMesh<double>> surface_SR;
+  std::unique_ptr<PolygonSurfaceMeshFieldLinear<double, double>> e_SR;
+  for (auto _ : state) {
+    intersector.IntersectSurfaceVolume(field_S_, bvh_S, mesh_R_, bvh_R, X_SR_,
+                                       &surface_SR, &e_SR);
+  }
+  RecordContactSurfaceResult(surface_SR.get(), "FastRigidSoftMesh", state);
+}
+BENCHMARK_REGISTER_F(MeshIntersectionBenchmark, FastRigidSoftMesh)
+    ->Unit(benchmark::kMillisecond)
+    ->MinTime(2)
+    ->Args({3, 2, 0})
+    ->Args({3, 3, 0})
+    ->Args({3, 4, 0})
+    ->Args({3, 5, 0})
+    ->Args({4, 2, 0})
+    ->Args({4, 3, 0})
+    ->Args({4, 4, 0})
+    ->Args({4, 5, 0})
+    ->Args({5, 2, 0})
+    ->Args({5, 3, 0})
+    ->Args({5, 4, 0})
+    ->Args({5, 5, 0});
 
 void ReportContactSurfaces() {
   std::cout << "Resulting contact surface sizes:" << std::endl;
