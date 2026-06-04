@@ -1,5 +1,6 @@
 #include "drake/geometry/proximity/collision_filter.h"
 
+#include <cstdint>
 #include <set>
 #include <tuple>
 #include <unordered_set>
@@ -480,6 +481,111 @@ TEST_F(CollisionFilterTest, Equivalency) {
                      GeometrySet(id_A), GeometrySet({id_B, id_C})),
                  this->get_extract_ids_functor());
   EXPECT_FALSE(filters1.IsEquivalent(filters2));
+}
+
+/* GetIsolatedGeometries() reports exactly the geometries whose filters block
+ them against every other registered geometry, tracking every kind of mutation
+ (persistent and transient declarations, declaration removal, and geometry
+ addition/removal). */
+TEST_F(CollisionFilterTest, GetIsolatedGeometries) {
+  using Set = std::unordered_set<GeometryId>;
+  CollisionFilter filters;
+
+  /* An empty filter (and a singleton filter) has no isolated geometries. */
+  EXPECT_EQ(filters.GetIsolatedGeometries(), Set{});
+  const GeometryId lone_id = GeometryId::get_new_id();
+  filters.AddGeometry(lone_id);
+  EXPECT_EQ(filters.GetIsolatedGeometries(), Set{});
+
+  CollisionFilter filters3;
+  auto [id_A, id_B, id_C] = this->InitIds(&filters3);
+  /* No filters at all: nothing is isolated. */
+  EXPECT_EQ(filters3.GetIsolatedGeometries(), Set{});
+
+  /* Block A against B only; A is not isolated (it can still collide with C).
+   */
+  filters3.Apply(
+      CollisionFilterDeclaration().ExcludeWithin(GeometrySet({id_A, id_B})),
+      this->get_extract_ids_functor());
+  EXPECT_EQ(filters3.GetIsolatedGeometries(), Set{});
+
+  /* Block A against C as well; now A is isolated, B and C are not. */
+  filters3.Apply(
+      CollisionFilterDeclaration().ExcludeWithin(GeometrySet({id_A, id_C})),
+      this->get_extract_ids_functor());
+  EXPECT_EQ(filters3.GetIsolatedGeometries(), Set{id_A});
+
+  /* Adding a new geometry de-isolates A (A can collide with the newcomer). */
+  const GeometryId id_D = GeometryId::get_new_id();
+  filters3.AddGeometry(id_D);
+  EXPECT_EQ(filters3.GetIsolatedGeometries(), Set{});
+
+  /* Removing that geometry re-isolates A. */
+  filters3.RemoveGeometry(id_D);
+  EXPECT_EQ(filters3.GetIsolatedGeometries(), Set{id_A});
+
+  /* Removing a geometry can also isolate a *different* geometry: B is blocked
+   only against A; once C is removed, both A and B are blocked against
+   everything that remains. */
+  filters3.RemoveGeometry(id_C);
+  EXPECT_EQ(filters3.GetIsolatedGeometries(), (Set{id_A, id_B}));
+
+  /* Transient declarations isolate too, and removing the declaration restores
+   the previous state. */
+  CollisionFilter transient;
+  auto [id_X, id_Y, id_Z] = this->InitIds(&transient);
+  const FilterId f_id = transient.ApplyTransient(
+      CollisionFilterDeclaration().ExcludeBetween(GeometrySet(id_X),
+                                                  GeometrySet({id_Y, id_Z})),
+      this->get_extract_ids_functor());
+  EXPECT_EQ(transient.GetIsolatedGeometries(), Set{id_X});
+  /* Copies preserve the isolation state. */
+  const CollisionFilter transient_copy(transient);
+  EXPECT_EQ(transient_copy.GetIsolatedGeometries(), Set{id_X});
+  EXPECT_TRUE(transient.RemoveDeclaration(f_id));
+  EXPECT_EQ(transient.GetIsolatedGeometries(), Set{});
+}
+
+/* change_count() bumps on every mutation that can affect CanCollideWith() or
+ GetIsolatedGeometries() and is inherited by copies. */
+TEST_F(CollisionFilterTest, ChangeCount) {
+  CollisionFilter filters;
+  int64_t last_count = filters.change_count();
+  auto expect_bumped = [&filters, &last_count](bool expect_change) {
+    const int64_t count = filters.change_count();
+    EXPECT_EQ(count > last_count, expect_change);
+    last_count = count;
+  };
+
+  /* Geometry addition. */
+  auto [id_A, id_B, id_C] = this->InitIds(&filters);
+  expect_bumped(true);
+
+  /* Persistent declaration. */
+  filters.Apply(
+      CollisionFilterDeclaration().ExcludeWithin(GeometrySet({id_A, id_B})),
+      this->get_extract_ids_functor());
+  expect_bumped(true);
+
+  /* Transient declaration and its removal. */
+  const FilterId f_id = filters.ApplyTransient(
+      CollisionFilterDeclaration().ExcludeWithin(GeometrySet({id_A, id_C})),
+      this->get_extract_ids_functor());
+  expect_bumped(true);
+  EXPECT_TRUE(filters.RemoveDeclaration(f_id));
+  expect_bumped(true);
+
+  /* Removing a bogus declaration is *not* a change. */
+  EXPECT_FALSE(filters.RemoveDeclaration(FilterId::get_new_id()));
+  expect_bumped(false);
+
+  /* Geometry removal. */
+  filters.RemoveGeometry(id_C);
+  expect_bumped(true);
+
+  /* A copy inherits the count. */
+  const CollisionFilter filters_copy(filters);
+  EXPECT_EQ(filters_copy.change_count(), filters.change_count());
 }
 
 }  // namespace internal

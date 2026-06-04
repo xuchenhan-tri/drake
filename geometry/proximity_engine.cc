@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdint>
 #include <filesystem>
 #include <limits>
 #include <map>
@@ -9,6 +10,7 @@
 #include <tuple>
 #include <type_traits>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -227,6 +229,7 @@ class ProximityEngine<T>::Impl : public ShapeReifier {
     dynamic_objects_.clear();
     anchored_tree_.clear();
     anchored_objects_.clear();
+    isolated_tree_.clear();
 
     // Copy all of the geometry.
     std::unordered_map<const CollisionObjectd*, CollisionObjectd*> object_map;
@@ -235,11 +238,17 @@ class ProximityEngine<T>::Impl : public ShapeReifier {
     CopyFclObjectsOrThrow(other.dynamic_objects_, &dynamic_objects_,
                           &object_map);
 
-    // Build new AABB trees from the input AABB trees.
+    // Build new AABB trees from the input AABB trees. Filter-isolated dynamic
+    // geometries live in other.isolated_tree_ (not other.dynamic_tree_), so
+    // each rebuilt tree gets exactly the objects of its source tree.
     BuildTreeFromReference(other.dynamic_tree_, object_map, &dynamic_tree_);
     BuildTreeFromReference(other.anchored_tree_, object_map, &anchored_tree_);
+    BuildTreeFromReference(other.isolated_tree_, object_map, &isolated_tree_);
 
     collision_filter_ = other.collision_filter_;
+    isolated_dynamic_ = other.isolated_dynamic_;
+    filter_change_count_ = other.filter_change_count_;
+    isolated_tree_dirty_ = other.isolated_tree_dirty_;
   }
 
   // Only the copy constructor is used to facilitate copying of the parent
@@ -263,10 +272,16 @@ class ProximityEngine<T>::Impl : public ShapeReifier {
                           &object_map);
 
     engine->collision_filter_ = this->collision_filter_;
+    engine->isolated_dynamic_ = this->isolated_dynamic_;
+    engine->filter_change_count_ = this->filter_change_count_;
+    engine->isolated_tree_dirty_ = this->isolated_tree_dirty_;
 
-    // Build new AABB trees from the input AABB trees.
+    // Build new AABB trees from the input AABB trees. Filter-isolated dynamic
+    // geometries live in isolated_tree_ (not dynamic_tree_), so each rebuilt
+    // tree gets exactly the objects of its source tree.
     BuildTreeFromReference(dynamic_tree_, object_map, &engine->dynamic_tree_);
     BuildTreeFromReference(anchored_tree_, object_map, &engine->anchored_tree_);
+    BuildTreeFromReference(isolated_tree_, object_map, &engine->isolated_tree_);
 
     engine->hydroelastic_geometries_ = this->hydroelastic_geometries_;
     engine->geometries_for_deformable_contact_ =
@@ -346,9 +361,13 @@ class ProximityEngine<T>::Impl : public ShapeReifier {
 
     // If this led to a change in the collision object's AABB, we need to
     // propagate those changes up through the tree's BVH. The surest way to do
-    // that is to explicitly update.
+    // that is to explicitly update. (A filter-isolated dynamic geometry lives
+    // in isolated_tree_ rather than dynamic_tree_.)
     FclDynamicAABBTreeCollisionManager& tree =
-        geometry.is_dynamic() ? dynamic_tree_ : anchored_tree_;
+        geometry.is_dynamic()
+            ? (isolated_dynamic_.contains(geometry.id()) ? isolated_tree_
+                                                         : dynamic_tree_)
+            : anchored_tree_;
     tree.update();
   }
 
@@ -412,7 +431,12 @@ class ProximityEngine<T>::Impl : public ShapeReifier {
   // Removes a non-deformable geometry from this engine.
   void RemoveGeometry(GeometryId id, bool is_dynamic) {
     if (is_dynamic) {
-      RemoveGeometry(id, &dynamic_tree_, &dynamic_objects_);
+      // A filter-isolated geometry lives in isolated_tree_, not dynamic_tree_.
+      if (isolated_dynamic_.erase(id) > 0) {
+        RemoveGeometry(id, &isolated_tree_, &dynamic_objects_);
+      } else {
+        RemoveGeometry(id, &dynamic_tree_, &dynamic_objects_);
+      }
     } else {
       RemoveGeometry(id, &anchored_tree_, &anchored_objects_);
     }
@@ -452,6 +476,91 @@ class ProximityEngine<T>::Impl : public ShapeReifier {
     geometries_for_deformable_contact_.RemoveGeometry(id);
   }
 
+  // Lazily synchronizes the engine's isolated-geometry bookkeeping with the
+  // current collision filter state. A dynamic geometry that the filter
+  // "isolates" (blocks against every other geometry; see
+  // CollisionFilter::GetIsolatedGeometries()) cannot contribute to any
+  // filter-respecting pairwise query, so we move it out of dynamic_tree_
+  // (whose per-step refit and traversal cost then scales with the *active*
+  // geometry count) and park it in isolated_tree_, which serves only the
+  // queries that ignore collision filters (signed distance to point). When
+  // the filters change again, geometries move back. This is a pure
+  // optimization: query results are identical to an engine without this
+  // bookkeeping, just cheaper when many geometries are fully filtered (e.g.
+  // "sleeping"/locked bodies -- see issue #24607).
+  //
+  // Called from every entry point that reads tree state. The work is O(1)
+  // when the filter has not changed since the last call.
+  //
+  // Conceptually this is mutable cache bookkeeping, hence the const_cast.
+  // Like MeshDistanceBoundaryCache, it is not threadsafe; it relies on the
+  // fact that one engine instance is contained in a single Context and Drake
+  // advises against doing work on a single Context in multiple threads.
+  void SyncIsolatedGeometries() const {
+    if (collision_filter_.change_count() == filter_change_count_) return;
+    Impl* self = const_cast<Impl*>(this);
+    self->filter_change_count_ = collision_filter_.change_count();
+    const std::unordered_set<GeometryId> isolated =
+        collision_filter_.GetIsolatedGeometries();
+    bool changed = false;
+    // Wake geometries that are no longer isolated. Their fcl objects carry
+    // their current world pose (UpdateWorldPoses() updates isolated objects
+    // too), so they re-enter dynamic_tree_ at the right place.
+    for (auto iter = self->isolated_dynamic_.begin();
+         iter != self->isolated_dynamic_.end();) {
+      if (isolated.contains(*iter)) {
+        ++iter;
+        continue;
+      }
+      CollisionObjectd* object = self->dynamic_objects_.at(*iter).get();
+      self->isolated_tree_.unregisterObject(object);
+      self->dynamic_tree_.registerObject(object);
+      changed = true;
+      iter = self->isolated_dynamic_.erase(iter);
+    }
+    // Park newly isolated dynamic geometries. (Isolated *anchored* geometries
+    // are left in anchored_tree_: they incur no per-step pose cost, and their
+    // broadphase candidate pairs are still discarded by the filter.)
+    for (const GeometryId id : isolated) {
+      const auto object_iter = self->dynamic_objects_.find(id);
+      if (object_iter == self->dynamic_objects_.end()) continue;
+      if (!self->isolated_dynamic_.insert(id).second) continue;
+      CollisionObjectd* object = object_iter->second.get();
+      self->dynamic_tree_.unregisterObject(object);
+      self->isolated_tree_.registerObject(object);
+      changed = true;
+    }
+    if (changed) {
+      self->dynamic_tree_.update();
+      self->isolated_tree_.update();
+      self->isolated_tree_dirty_ = false;
+    }
+  }
+
+  // Refits isolated_tree_ if isolated geometry poses changed since the last
+  // refit. Only the filter-ignoring queries (signed distance to point) read
+  // this tree, so UpdateWorldPoses() defers the refit until one of them
+  // actually needs it.
+  void RefitIsolatedTree() const {
+    if (!isolated_tree_dirty_) return;
+    Impl* self = const_cast<Impl*>(this);
+    self->isolated_tree_.update();
+    self->isolated_tree_dirty_ = false;
+  }
+
+  // Reports whether the dynamic geometry with the given id is currently
+  // culled from the filter-respecting broadphase. See SyncIsolatedGeometries.
+  bool IsFilterIsolated(GeometryId id) const {
+    SyncIsolatedGeometries();
+    return isolated_dynamic_.contains(id);
+  }
+
+  // Reports the number of currently culled dynamic geometries.
+  int num_isolated() const {
+    SyncIsolatedGeometries();
+    return static_cast<int>(isolated_dynamic_.size());
+  }
+
   // Returns the total number of **rigid** geometries in this engine.
   int num_geometries() const { return num_dynamic() + num_anchored(); }
 
@@ -471,14 +580,33 @@ class ProximityEngine<T>::Impl : public ShapeReifier {
   //    a vector and the caller sets values there directly.
   void UpdateWorldPoses(
       const std::unordered_map<GeometryId, RigidTransform<T>>& X_WGs) {
+    SyncIsolatedGeometries();
+    // Hoisted so that scenes with no isolated geometries (the common case)
+    // skip the per-geometry membership test below entirely.
+    const bool has_isolated = !isolated_dynamic_.empty();
     for (const auto& id_object_pair : dynamic_objects_) {
       const GeometryId id = id_object_pair.first;
+      CollisionObjectd& object = *id_object_pair.second;
       const RigidTransform<T>& X_WG = X_WGs.at(id);
       // The FCL broadphase requires double-valued poses; so we use ADL to
       // efficiently get double-valued poses out of arbitrary T-valued poses.
       const RigidTransform<double>& X_WG_d = convert_to_double(X_WG);
-      dynamic_objects_[id]->setTransform(X_WG_d.GetAsIsometry3());
-      dynamic_objects_[id]->computeAABB();
+      if (has_isolated && isolated_dynamic_.contains(id)) {
+        // Isolated geometries are typically sleeping/locked bodies whose
+        // poses don't change from step to step. When the pose is exactly
+        // unchanged we skip the (relatively expensive) transform, AABB, and
+        // deformable-contact updates, so a stationary isolated geometry costs
+        // just this comparison per step. (It is also absent from
+        // dynamic_tree_, so the tree refit below scales with the active set.)
+        if (RigidTransformd(object.getTransform()).IsExactlyEqualTo(X_WG_d)) {
+          continue;
+        }
+        // The pose changed; isolated_tree_ needs a refit before the next
+        // filter-ignoring query reads it.
+        isolated_tree_dirty_ = true;
+      }
+      object.setTransform(X_WG_d.GetAsIsometry3());
+      object.computeAABB();
       geometries_for_deformable_contact_.UpdateRigidWorldPose(id, X_WG_d);
     }
     dynamic_tree_.update();
@@ -599,6 +727,7 @@ class ProximityEngine<T>::Impl : public ShapeReifier {
   std::vector<SignedDistancePair<T>> ComputeSignedDistancePairwiseClosestPoints(
       const std::unordered_map<GeometryId, RigidTransform<T>>& X_WGs,
       const double max_distance) const {
+    SyncIsolatedGeometries();
     std::vector<SignedDistancePair<T>> witness_pairs;
     // All these quantities are aliased in the callback data.
     shape_distance::CallbackData<T> data{&collision_filter_, &X_WGs,
@@ -666,6 +795,11 @@ class ProximityEngine<T>::Impl : public ShapeReifier {
       const Vector3<T>& p_WQ,
       const std::unordered_map<GeometryId, RigidTransform<T>>& X_WGs,
       const double threshold) const {
+    // This query ignores collision filters, so filter-isolated geometries
+    // must participate. They live in isolated_tree_, which is refit lazily
+    // here (the per-step UpdateWorldPoses() skips it).
+    SyncIsolatedGeometries();
+    RefitIsolatedTree();
     mesh_distance_boundary_cahe_.ComputeAll();
     // We create a sphere of zero radius centered at the query point and put
     // it into a CollisionObject.
@@ -682,8 +816,10 @@ class ProximityEngine<T>::Impl : public ShapeReifier {
         &query_point, threshold, p_WQ, &X_WGs, &mesh_distance_boundary_cahe_,
         &distances};
 
-    // Perform query of point vs dynamic objects.
+    // Perform query of point vs dynamic objects (including the
+    // filter-isolated ones).
     dynamic_tree_.distance(&query_point, &data, point_distance::Callback<T>);
+    isolated_tree_.distance(&query_point, &data, point_distance::Callback<T>);
 
     // Perform query of point vs anchored objects.
     anchored_tree_.distance(&query_point, &data, point_distance::Callback<T>);
@@ -727,6 +863,7 @@ class ProximityEngine<T>::Impl : public ShapeReifier {
 
   std::vector<PenetrationAsPointPair<T>> ComputePointPairPenetration(
       const std::unordered_map<GeometryId, RigidTransform<T>>& X_WGs) const {
+    SyncIsolatedGeometries();
     std::vector<PenetrationAsPointPair<T>> contacts;
     penetration_as_point_pair::CallbackData data{&collision_filter_, &X_WGs,
                                                  &contacts};
@@ -748,6 +885,7 @@ class ProximityEngine<T>::Impl : public ShapeReifier {
   }
 
   std::vector<SortedPair<GeometryId>> FindCollisionCandidates() const {
+    SyncIsolatedGeometries();
     std::vector<SortedPair<GeometryId>> pairs;
     // All these quantities are aliased in the callback data.
     find_collision_candidates::CallbackData data{&collision_filter_, &pairs};
@@ -766,6 +904,7 @@ class ProximityEngine<T>::Impl : public ShapeReifier {
   }
 
   bool HasCollisions() const {
+    SyncIsolatedGeometries();
     // All these quantities are aliased in the callback data.
     has_collisions::CallbackData data{&collision_filter_};
 
@@ -1285,6 +1424,25 @@ class ProximityEngine<T>::Impl : public ShapeReifier {
   // All of the *dynamic* collision elements (spanning all sources).
   MapGeometryIdToFclCollisionObject dynamic_objects_;
 
+  // The subset of dynamic_objects_ currently isolated by the collision filter
+  // (blocked against every other geometry) and hence culled from
+  // dynamic_tree_. See SyncIsolatedGeometries(). The objects remain in
+  // dynamic_objects_ (with current poses) and in isolated_tree_ below.
+  std::unordered_set<GeometryId> isolated_dynamic_;
+
+  // The BVH holding exactly the isolated_dynamic_ objects. It serves only the
+  // queries that ignore collision filters (signed distance to point); all
+  // filter-respecting queries use dynamic_tree_, which excludes these objects.
+  FclDynamicAABBTreeCollisionManager isolated_tree_;
+
+  // The collision_filter_.change_count() value as of the last
+  // SyncIsolatedGeometries(). -1 guarantees the first sync runs.
+  int64_t filter_change_count_{-1};
+
+  // Whether isolated geometries' poses changed since isolated_tree_ was last
+  // refit; see RefitIsolatedTree().
+  bool isolated_tree_dirty_{false};
+
   // The tree containing all of the anchored geometry.
   FclDynamicAABBTreeCollisionManager anchored_tree_;
 
@@ -1412,6 +1570,16 @@ void ProximityEngine<T>::UpdateRepresentationForNewProperties(
 template <typename T>
 void ProximityEngine<T>::RemoveGeometry(GeometryId id, bool is_dynamic) {
   impl_->RemoveGeometry(id, is_dynamic);
+}
+
+template <typename T>
+bool ProximityEngine<T>::IsFilterIsolated(GeometryId id) const {
+  return impl_->IsFilterIsolated(id);
+}
+
+template <typename T>
+int ProximityEngine<T>::num_isolated() const {
+  return impl_->num_isolated();
 }
 
 template <typename T>

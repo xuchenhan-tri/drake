@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <map>
 #include <memory>
 #include <optional>
@@ -2743,6 +2744,69 @@ TEST_F(GeometryStateTest, NonProximityRoleInCollisionFilter) {
   geometry_state_.collision_filter_manager().Apply(
       CollisionFilterDeclaration().ExcludeBetween(
           GeometrySet{added_id}, GeometrySet{anchored_geometry_}));
+  pairs = geometry_state_.ComputePointPairPenetration();
+  EXPECT_EQ(static_cast<int>(pairs.size()), expected_collisions);
+}
+
+// When collision filters isolate a geometry (block it against every other
+// geometry), the proximity engine automatically culls it from the broadphase
+// (see issue #24607) -- the "sleeping body" pattern of filtering a locked
+// body against everything. That culling is an internal optimization and must
+// be unobservable from GeometryState: filter-respecting queries simply honor
+// the filters, and signed-distance-to-point (which ignores filters) still
+// reports the isolated geometry.
+TEST_F(GeometryStateTest, FilterIsolatedGeometryQueries) {
+  SetUpSingleSourceTree(Assign::kProximity);
+
+  // Pose all of the frames to the specified poses in their parent frame.
+  FramePoseVector<double> poses;
+  for (int f = 0; f < static_cast<int>(frames_.size()); ++f) {
+    poses.set_value(frames_[f], X_PFs_[f]);
+  }
+  gs_tester_.SetFramePoses(source_id_, poses,
+                           &gs_tester_.mutable_kinematics_data());
+  gs_tester_.FinalizePoseUpdate();
+
+  // Baseline collision count, and the share involving our victim geometry.
+  const int expected_collisions = default_collision_pair_count();
+  auto pairs = geometry_state_.ComputePointPairPenetration();
+  ASSERT_EQ(static_cast<int>(pairs.size()), expected_collisions);
+  const GeometryId isolated_id = pairs[0].id_A;
+  const int pairs_with_isolated = static_cast<int>(std::count_if(
+      pairs.begin(), pairs.end(), [isolated_id](const auto& pair) {
+        return pair.id_A == isolated_id || pair.id_B == isolated_id;
+      }));
+  ASSERT_GT(pairs_with_isolated, 0);
+
+  // Isolate the geometry: a transient declaration blocking it against every
+  // geometry in the scene.
+  GeometrySet everything(geometries_);
+  everything.Add(anchored_geometry_);
+  const FilterId filter_id =
+      geometry_state_.collision_filter_manager().ApplyTransient(
+          CollisionFilterDeclaration().ExcludeBetween(GeometrySet{isolated_id},
+                                                      everything));
+
+  // Filter-respecting queries honor the filters (and only the filters).
+  pairs = geometry_state_.ComputePointPairPenetration();
+  EXPECT_EQ(static_cast<int>(pairs.size()),
+            expected_collisions - pairs_with_isolated);
+
+  // Signed-distance-to-point ignores filters: the isolated geometry is still
+  // reported.
+  const Vector3d p_WQ =
+      geometry_state_.get_pose_in_world(isolated_id).translation() +
+      Vector3d{0, 0, 2};
+  const auto distances = geometry_state_.ComputeSignedDistanceToPoint(
+      p_WQ, std::numeric_limits<double>::infinity());
+  EXPECT_TRUE(std::any_of(distances.begin(), distances.end(),
+                          [isolated_id](const auto& distance_result) {
+                            return distance_result.id_G == isolated_id;
+                          }));
+
+  // Removing the declaration restores the collisions.
+  EXPECT_TRUE(
+      geometry_state_.collision_filter_manager().RemoveDeclaration(filter_id));
   pairs = geometry_state_.ComputePointPairPenetration();
   EXPECT_EQ(static_cast<int>(pairs.size()), expected_collisions);
 }

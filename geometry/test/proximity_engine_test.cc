@@ -1610,6 +1610,122 @@ TEST_F(ProximityEngineTests, ComputePointPairPenetration) {
   EXPECT_FALSE(derivs.isZero());
 }
 
+/* When the collision filter isolates a geometry (blocks it against every
+ other geometry), the engine automatically culls it from the broadphase used
+ by filter-respecting queries (see issue #24607). This is a pure optimization
+ and must be *unobservable*:
+  1. Filter-respecting queries (penetration, candidates, HasCollisions)
+     simply honor the filters, as always.
+  2. Filter-ignoring queries (signed distance to point, explicit
+     geometry-pair queries) still see the isolated geometry -- at its
+     *current* pose, even if it moves while isolated.
+  3. The bookkeeping responds to every isolation trigger: declaration
+     application/removal and geometry addition/removal.
+  4. Copies and scalar-converted engines preserve the bookkeeping. */
+TEST_F(ProximityEngineTests, FilterIsolatedGeometry) {
+  const Sphere sphere{0.5};
+  // Sphere centers within 2 * 0.5 = 1.0 of each other penetrate.
+  const double d = 0.9;
+  const GeometryId id_A = AddDynamic(sphere, V3{0, 0, 0});
+  const GeometryId id_B = AddDynamic(sphere, V3{d, 0, 0});
+  const GeometryId id_C = AddAnchored(sphere, V3{0, d, 0});
+
+  auto eval = [this]() {
+    engine_.UpdateWorldPoses(X_WGs_);
+    return engine_.ComputePointPairPenetration(X_WGs_);
+  };
+  // Signed distance from the point 0.6 above the center of geometry `id` to
+  // that geometry's surface; this query ignores collision filters.
+  auto point_distance_to = [this](GeometryId id) {
+    const V3 p_WQ = X_WGs_.at(id).translation() + V3{0, 0, 0.6};
+    const auto results = engine_.ComputeSignedDistanceToPoint(p_WQ, X_WGs_);
+    for (const auto& distance_result : results) {
+      if (distance_result.id_G == id) return distance_result.distance;
+    }
+    return std::numeric_limits<double>::quiet_NaN();
+  };
+
+  // Baseline: A hits both B and C; nothing is isolated.
+  ASSERT_EQ(eval().size(), 2);
+  EXPECT_EQ(engine_.num_isolated(), 0);
+
+  // Isolate A: block it against everything (B and C) with two transient
+  // declarations (so they can be removed independently below).
+  const FilterId filter_ab = *ExcludeCollisionsWithin({id_A, id_B}, true);
+  ASSERT_EQ(engine_.num_isolated(), 0);  // A can still hit C.
+  ExcludeCollisionsWithin({id_A, id_C}, true);
+
+  // (1) Filter-respecting queries: all contacts involved A, so none remain.
+  // (B-C remains a broadphase *candidate* -- their AABBs overlap -- but no
+  // candidate involves A.)
+  EXPECT_TRUE(eval().empty());
+  for (const auto& candidate : engine_.FindCollisionCandidates()) {
+    EXPECT_NE(candidate.first(), id_A);
+    EXPECT_NE(candidate.second(), id_A);
+  }
+  EXPECT_FALSE(engine_.HasCollisions());
+  // A has been culled from the broadphase but remains registered.
+  EXPECT_TRUE(engine_.IsFilterIsolated(id_A));
+  EXPECT_FALSE(engine_.IsFilterIsolated(id_B));
+  EXPECT_EQ(engine_.num_isolated(), 1);
+  EXPECT_EQ(engine_.num_dynamic(), 2);
+
+  // (2) Filter-ignoring queries still see A...
+  EXPECT_NEAR(point_distance_to(id_A), 0.1, 1e-13);
+  // ... at its *current* pose, even when it moves while isolated...
+  X_WGs_.at(id_A) = RigidTransformd(V3{10, 0, 0});
+  engine_.UpdateWorldPoses(X_WGs_);
+  EXPECT_NEAR(point_distance_to(id_A), 0.1, 1e-13);
+  // ... and explicit geometry-pair queries also still work.
+  const SignedDistancePair<double> pair =
+      engine_.ComputeSignedDistancePairClosestPoints(id_A, id_B, X_WGs_);
+  EXPECT_NEAR(pair.distance, 10 - d - 1.0, 1e-13);
+  // Move A back into overlap; filter-respecting queries stay empty.
+  X_WGs_.at(id_A) = RigidTransformd(V3{0, 0, 0});
+  EXPECT_TRUE(eval().empty());
+
+  // (4) Copies and scalar-converted engines preserve the bookkeeping.
+  ProximityEngine<double> engine_copy(engine_);
+  EXPECT_EQ(engine_copy.num_isolated(), 1);
+  engine_copy.UpdateWorldPoses(X_WGs_);
+  EXPECT_TRUE(engine_copy.ComputePointPairPenetration(X_WGs_).empty());
+  std::unique_ptr<ProximityEngine<AutoDiffXd>> ad_engine =
+      engine_.ToScalarType<AutoDiffXd>();
+  EXPECT_EQ(ad_engine->num_isolated(), 1);
+
+  // (3a) Removing one declaration de-isolates A: the A-B contact returns
+  // (A-C remains filtered).
+  ASSERT_TRUE(engine_.collision_filter().RemoveDeclaration(filter_ab));
+  EXPECT_EQ(engine_.num_isolated(), 0);
+  ASSERT_EQ(eval().size(), 1);
+
+  // (3b) Adding a geometry de-isolates: re-isolate A, then add D overlapping
+  // A (and far from B and C). A wakes and the A-D contact is found.
+  ExcludeCollisionsWithin({id_A, id_B}, true);
+  ASSERT_EQ(engine_.num_isolated(), 1);
+  const GeometryId id_D = AddDynamic(sphere, V3{0, -d, 0});
+  EXPECT_EQ(engine_.num_isolated(), 0);
+  {
+    const auto contacts = eval();
+    ASSERT_EQ(contacts.size(), 1);
+    EXPECT_EQ(SortedPair(contacts[0].id_A, contacts[0].id_B),
+              SortedPair(id_A, id_D));
+  }
+
+  // (3c) Removing a geometry can isolate what remains: with D gone, A is
+  // again blocked against everything.
+  engine_.RemoveGeometry(id_D, true);
+  X_WGs_.erase(id_D);
+  EXPECT_EQ(engine_.num_isolated(), 1);
+  EXPECT_TRUE(eval().empty());
+
+  // Removing an isolated geometry is safe and clears the bookkeeping.
+  engine_.RemoveGeometry(id_A, true);
+  X_WGs_.erase(id_A);
+  EXPECT_EQ(engine_.num_isolated(), 0);
+  EXPECT_TRUE(eval().empty());  // B and C don't touch each other.
+}
+
 /* ComputeContactSurfaces() responsibilities:
   1. Empty engine produces no results.
   2. Collision result for dynamic-dynamic pair.

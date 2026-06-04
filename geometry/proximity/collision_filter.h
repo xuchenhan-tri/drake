@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <functional>
 #include <unordered_set>
 #include <utility>
@@ -109,6 +110,35 @@ class CollisionFilter {
    unfiltered.
    @pre `id_A` and `id_B` are both part of this filter system. */
   bool CanCollideWith(GeometryId id_A, GeometryId id_B) const;
+
+  /* Reports the set of "isolated" geometries: those whose filters block them
+   against *every* other geometry in this filter system (i.e., for an isolated
+   geometry g, CanCollideWith(g, x) returns false for every registered x ≠ g).
+   An isolated geometry cannot contribute to any filter-respecting pairwise
+   query, so clients (e.g., ProximityEngine) can exploit this to cull it from
+   broadphase structures entirely -- a pure optimization with no observable
+   effect on query results.
+
+   A geometry with no filters is never isolated; if fewer than two geometries
+   are registered, the result is empty.
+
+   The result is computed on demand at O(F) cost, where F is the number of
+   filtered pairs. Clients are expected to call this only when change_count()
+   reports a change, so the cost is paid once per filter mutation (batch), not
+   per query. For scale: removing any transient declaration already triggers
+   an O(F) rebuild of the composite filter state, so this is in line with
+   existing filter-mutation costs. */
+  std::unordered_set<GeometryId> GetIsolatedGeometries() const;
+
+  /* Reports a monotonically increasing counter that is bumped by every
+   operation that can change the result of CanCollideWith() or
+   GetIsolatedGeometries() -- applying or removing filter declarations and
+   adding or removing geometries. Clients that derive data structures from the
+   filter state (e.g., ProximityEngine's broadphase culling of isolated
+   geometries) can compare this against a remembered value to cheaply detect
+   when they need to resynchronize. Copies of `this` filter inherit its
+   current count. */
+  int64_t change_count() const { return change_count_; }
 
   /* Reports if two collision filters are "equivalent" -- in that they are
    defined over the same set of geometry ids and report the same pairs as being
@@ -229,6 +259,10 @@ class CollisionFilter {
    resolved statements (not a full NxN copy), so memory per entry is O(|A|+|B|)
    rather than O(N²). */
   std::vector<StateDelta> transient_history_;
+
+  /* See change_count(). Bumped by every mutator that can change the composite
+   filter state or the set of registered geometries. */
+  int64_t change_count_{0};
 };
 
 }  // namespace internal

@@ -1,6 +1,7 @@
 #include "drake/geometry/proximity/collision_filter.h"
 
 #include <algorithm>
+#include <unordered_map>
 
 #include "drake/common/drake_assert.h"
 
@@ -26,6 +27,7 @@ void CollisionFilter::Apply(const CollisionFilterDeclaration& declaration,
    wholesale copy. */
   ApplyDeclarationToState(declaration, extract_ids, is_invariant,
                           &filter_state_);
+  ++change_count_;
 }
 
 FilterId CollisionFilter::ApplyTransient(
@@ -63,6 +65,7 @@ FilterId CollisionFilter::ApplyTransient(
   /* Apply to the cached composite first, then store the delta. */
   ApplyStatements(delta, &filter_state_);
   transient_history_.push_back(std::move(delta));
+  ++change_count_;
   return new_id;
 }
 
@@ -84,6 +87,7 @@ bool CollisionFilter::RemoveDeclaration(FilterId id) {
      we must replay from scratch to get the correct result. */
     transient_history_.erase(it);
     RebuildComposite();
+    ++change_count_;
     return true;
   }
   return false;
@@ -103,7 +107,12 @@ void CollisionFilter::AddGeometry(GeometryId new_id) {
   geometries_.insert(new_id);
   /* No pair entries are needed: the sparse representation stores only filtered
    pairs, and new geometry is unfiltered by default. Transient deltas store
-   only resolved GeometryId sets, so they also require no update. */
+   only resolved GeometryId sets, so they also require no update.
+
+   Note: adding a geometry *does* change GetIsolatedGeometries() -- nothing
+   can be blocked against the new geometry yet, so no geometry is isolated
+   anymore. The change count bump below lets clients notice. */
+  ++change_count_;
 }
 
 void CollisionFilter::RemoveGeometry(GeometryId remove_id) {
@@ -126,6 +135,7 @@ void CollisionFilter::RemoveGeometry(GeometryId remove_id) {
   if (has_transient_history()) {
     RebuildComposite();
   }
+  ++change_count_;
 }
 
 bool CollisionFilter::CanCollideWith(GeometryId id_A, GeometryId id_B) const {
@@ -133,6 +143,36 @@ bool CollisionFilter::CanCollideWith(GeometryId id_A, GeometryId id_B) const {
   const PairKey key(id_A, id_B);
   return !filter_state_.filtered.contains(key) &&
          !filter_state_.invariant.contains(key);
+}
+
+std::unordered_set<GeometryId> CollisionFilter::GetIsolatedGeometries() const {
+  std::unordered_set<GeometryId> result;
+  if (geometries_.size() < 2) return result;
+  /* Tally each geometry's blocked partners. `filtered` and `invariant` are
+   disjoint and each only contains registered geometries, so every blocked
+   pair appears exactly once across the two sets and contributes one distinct
+   partner to each of its two endpoints. A geometry is isolated iff its tally
+   reaches the number of *other* registered geometries. */
+  std::unordered_map<GeometryId, int> blocked_counts;
+  auto tally = [&blocked_counts](const FilteredPairs& pairs) {
+    for (const PairKey& key : pairs) {
+      ++blocked_counts[key.first()];
+      ++blocked_counts[key.second()];
+    }
+  };
+  tally(filter_state_.filtered);
+  tally(filter_state_.invariant);
+  const int num_others = static_cast<int>(geometries_.size()) - 1;
+  for (const auto& [id, count] : blocked_counts) {
+    /* If this fails, the disjoint/no-self-pairs/registered-only invariants of
+     filtered and invariant have been violated; a wrong answer here would
+     silently cull a collidable geometry from the broadphase, so we insist on
+     checking in release builds too (the loop runs at most once per filter
+     change over the filter-participating geometries). */
+    DRAKE_DEMAND(count <= num_others);
+    if (count == num_others) result.insert(id);
+  }
+  return result;
 }
 
 bool CollisionFilter::IsEquivalent(const CollisionFilter& other) const {

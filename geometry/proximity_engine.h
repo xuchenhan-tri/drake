@@ -161,6 +161,18 @@ class ProximityEngine {
    RemoveDeformableGeometry to remove deformable geometries.  */
   void RemoveGeometry(GeometryId id, bool is_dynamic);
 
+  /* (Introspection) Reports whether the dynamic geometry with the given `id`
+   is currently culled from the filter-respecting broadphase because the
+   collision filter isolates it (blocks it against every other geometry). The
+   culling is an automatic, internal optimization (see
+   CollisionFilter::GetIsolatedGeometries()) with no observable effect on
+   query results; this accessor exists so tests can confirm the bookkeeping. */
+  bool IsFilterIsolated(GeometryId id) const;
+
+  /* (Introspection) Reports the number of dynamic geometries currently culled
+   from the filter-respecting broadphase. See IsFilterIsolated(). */
+  int num_isolated() const;
+
   /* Removes the given deformable geometry indicated by `id` from the engine.
    @param id  The id of the geometry to be removed.
    @throws std::exception if `id` does not refer to a deformable geometry in
