@@ -333,7 +333,44 @@ TEST_F(UrdfParserTest, JointBadDynamicsAttributes) {
   warning_records_.clear();
 }
 
-TEST_F(UrdfParserTest, DrakeFrictionWarning) {
+// The 'friction' attribute of a joint/dynamics tag sets the dry friction of
+// revolute, continuous and prismatic joints. Joints without the attribute have
+// zero dry friction.
+TEST_F(UrdfParserTest, JointDryFriction) {
+  EXPECT_NE(AddModelFromUrdfString(R"""(
+    <robot name='a'>
+      <link name='parent'/>
+      <link name='child'/>
+      <link name='grandchild'/>
+      <link name='great_grandchild'/>
+      <joint name='a' type='revolute'>
+        <parent link='parent'/>
+        <child link='child'/>
+        <dynamics friction='10'/>
+      </joint>
+      <joint name='b' type='prismatic'>
+        <parent link='child'/>
+        <child link='grandchild'/>
+        <dynamics damping='0.5' friction='2.5'/>
+      </joint>
+      <joint name='c' type='continuous'>
+        <parent link='grandchild'/>
+        <child link='great_grandchild'/>
+        <dynamics damping='0.5'/>
+      </joint>
+    </robot>)""",
+                                   ""),
+            std::nullopt);
+  EXPECT_EQ(plant_.GetJointByName<RevoluteJoint>("a").default_dry_friction(),
+            10.0);
+  const PrismaticJoint<double>& b = plant_.GetJointByName<PrismaticJoint>("b");
+  EXPECT_EQ(b.default_damping(), 0.5);
+  EXPECT_EQ(b.default_dry_friction(), 2.5);
+  EXPECT_EQ(plant_.GetJointByName<RevoluteJoint>("c").default_dry_friction(),
+            0.0);
+}
+
+TEST_F(UrdfParserTest, JointNegativeDryFriction) {
   EXPECT_NE(AddModelFromUrdfString(R"""(
     <robot name='a'>
       <link name='parent'/>
@@ -341,12 +378,39 @@ TEST_F(UrdfParserTest, DrakeFrictionWarning) {
       <joint name='a' type='revolute'>
         <parent link='parent'/>
         <child link='child'/>
-        <dynamics friction='10'/>
+        <dynamics friction='-1'/>
       </joint>
     </robot>)""",
                                    ""),
             std::nullopt);
-  EXPECT_THAT(TakeWarning(), MatchesRegex(".*joint friction.*"));
+  EXPECT_THAT(TakeError(),
+              MatchesRegex(".*'friction'.*joint 'a'.*non-negative.*"));
+}
+
+// Joint types that do not model dry friction warn when it is specified.
+TEST_F(UrdfParserTest, JointDryFrictionUnsupportedJointType) {
+  EXPECT_NE(AddModelFromUrdfString(R"""(
+    <robot name='a'>
+      <link name='parent'/>
+      <link name='child'/>
+      <link name='grandchild'/>
+      <drake:joint name='a' type='ball'>
+        <parent link='parent'/>
+        <child link='child'/>
+        <dynamics friction='10'/>
+      </drake:joint>
+      <joint name='b' type='planar'>
+        <parent link='child'/>
+        <child link='grandchild'/>
+        <dynamics damping='1 1 1' friction='10'/>
+      </joint>
+    </robot>)""",
+                                   ""),
+            std::nullopt);
+  EXPECT_THAT(TakeWarning(),
+              MatchesRegex(".*'a'.*'ball'.*only supports dry friction.*"));
+  EXPECT_THAT(TakeWarning(),
+              MatchesRegex(".*'b'.*'planar'.*only supports dry friction.*"));
 }
 
 TEST_F(UrdfParserTest, DrakeCoulombWarning) {
@@ -963,6 +1027,7 @@ TEST_F(UrdfParserTest, JointParsingTest) {
   EXPECT_EQ(revolute_joint.child_body().name(), "link2");
   EXPECT_EQ(revolute_joint.revolute_axis(), Vector3d::UnitZ());
   EXPECT_EQ(revolute_joint.default_damping(), 0.1);
+  EXPECT_EQ(revolute_joint.default_dry_friction(), 0.2);
   EXPECT_TRUE(
       CompareMatrices(revolute_joint.position_lower_limits(), Vector1d(-1)));
   EXPECT_TRUE(
@@ -992,6 +1057,7 @@ TEST_F(UrdfParserTest, JointParsingTest) {
   EXPECT_EQ(prismatic_joint.child_body().name(), "link3");
   EXPECT_EQ(prismatic_joint.translation_axis(), Vector3d::UnitZ());
   EXPECT_EQ(prismatic_joint.default_damping(), 0.1);
+  EXPECT_EQ(prismatic_joint.default_dry_friction(), 0.3);
   EXPECT_TRUE(
       CompareMatrices(prismatic_joint.position_lower_limits(), Vector1d(-2)));
   EXPECT_TRUE(

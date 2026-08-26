@@ -376,6 +376,51 @@ double ParseJointDamping(const SDFormatDiagnostic& diagnostic,
   return damping;
 }
 
+// Helper to parse the dry friction, //axis/dynamics/friction, for a single
+// degree of freedom joint specification. Only these joint types model dry
+// friction, see Joint::default_dry_friction_vector().
+double ParseJointDryFriction(const SDFormatDiagnostic& diagnostic,
+                             const sdf::Joint& joint_spec) {
+  DRAKE_DEMAND(joint_spec.Type() == sdf::JointType::REVOLUTE ||
+               joint_spec.Type() == sdf::JointType::PRISMATIC ||
+               joint_spec.Type() == sdf::JointType::CONTINUOUS);
+
+  // If the axis is missing, we'll rely on ExtractJointAxis to tell the user.
+  // For our purposes in this function, it's OK to just bail and return zero.
+  const sdf::JointAxis* axis = joint_spec.Axis();
+  if (axis == nullptr) {
+    return 0.0;
+  }
+  const double dry_friction = axis->Friction();
+  if (dry_friction < 0) {
+    std::string message = fmt::format(
+        "Joint friction is negative for joint '{}'. "
+        "Joint friction must be a non-negative number.",
+        joint_spec.Name());
+    diagnostic.Error(joint_spec.Element(), std::move(message));
+    return 0.0;
+  }
+  return dry_friction;
+}
+
+// Helper to warn about a specified dry friction, //axis/dynamics/friction, for
+// joint types this parser does not set it on.
+void WarnIfDryFrictionUnsupported(const SDFormatDiagnostic& diagnostic,
+                                  const sdf::Joint& joint_spec) {
+  for (const unsigned int axis_index : {0u, 1u}) {
+    const sdf::JointAxis* axis = joint_spec.Axis(axis_index);
+    if (axis != nullptr && axis->Friction() != 0.0) {
+      std::string message = fmt::format(
+          "Joint '{}' specifies a non-zero friction in its axis dynamics, but "
+          "the SDFormat parser only supports dry friction for revolute, "
+          "continuous and prismatic joints. It will be ignored.",
+          joint_spec.Name());
+      diagnostic.Warning(joint_spec.Element(), std::move(message));
+      return;
+    }
+  }
+}
+
 // We interpret a value of exactly zero to specify un-actuated joints. Thus, the
 // user would say <effort>0</effort>. The effort_limit should be non-negative.
 // SDFormat internally interprets a negative effort limit as infinite and only
@@ -745,6 +790,9 @@ bool AddJointFromSpecification(const SDFormatDiagnostic& diagnostic,
       plant->get_mutable_joint(joint.index())
           .set_acceleration_limits(Vector1d(-acceleration_limit),
                                    Vector1d(acceleration_limit));
+      plant->get_mutable_joint(joint.index())
+          .set_default_dry_friction_vector(
+              Vector1d(ParseJointDryFriction(diagnostic, joint_spec)));
       AddJointActuatorFromSpecification(diagnostic, joint_spec, joint, plant);
       AddPrismaticSpringFromSpecification(diagnostic, joint_spec, joint, plant);
       break;
@@ -766,6 +814,9 @@ bool AddJointFromSpecification(const SDFormatDiagnostic& diagnostic,
       plant->get_mutable_joint(joint.index())
           .set_acceleration_limits(Vector1d(-acceleration_limit),
                                    Vector1d(acceleration_limit));
+      plant->get_mutable_joint(joint.index())
+          .set_default_dry_friction_vector(
+              Vector1d(ParseJointDryFriction(diagnostic, joint_spec)));
       AddJointActuatorFromSpecification(diagnostic, joint_spec, joint, plant);
       if (!AddRevoluteSpringFromSpecification(diagnostic, joint_spec, joint,
                                               plant)) {
@@ -775,6 +826,7 @@ bool AddJointFromSpecification(const SDFormatDiagnostic& diagnostic,
     }
     case sdf::JointType::UNIVERSAL: {
       const double damping = ParseJointDamping(diagnostic, joint_spec);
+      WarnIfDryFrictionUnsupported(diagnostic, joint_spec);
       // In Drake's implementation of universal joint, the rotation axes are
       // built into the frames M and F; the first rotation is about Fx and the
       // second is about My. Therefore, we can't arbitrarily set M and F to be
@@ -818,6 +870,7 @@ bool AddJointFromSpecification(const SDFormatDiagnostic& diagnostic,
     }
     case sdf::JointType::BALL: {
       const double damping = ParseJointDamping(diagnostic, joint_spec);
+      WarnIfDryFrictionUnsupported(diagnostic, joint_spec);
       const auto& joint = plant->AddJoint<BallRpyJoint>(
           joint_spec.Name(), parent_body, X_PJ, child_body, X_CJ, damping);
       // At most, this prints a warning (it does not add an actuator).
@@ -841,6 +894,9 @@ bool AddJointFromSpecification(const SDFormatDiagnostic& diagnostic,
       plant->get_mutable_joint(joint.index())
           .set_acceleration_limits(Vector1d(-acceleration_limit),
                                    Vector1d(acceleration_limit));
+      plant->get_mutable_joint(joint.index())
+          .set_default_dry_friction_vector(
+              Vector1d(ParseJointDryFriction(diagnostic, joint_spec)));
       AddJointActuatorFromSpecification(diagnostic, joint_spec, joint, plant);
       if (!AddRevoluteSpringFromSpecification(diagnostic, joint_spec, joint,
                                               plant)) {
@@ -850,6 +906,7 @@ bool AddJointFromSpecification(const SDFormatDiagnostic& diagnostic,
     }
     case sdf::JointType::SCREW: {
       const double damping = ParseJointDamping(diagnostic, joint_spec);
+      WarnIfDryFrictionUnsupported(diagnostic, joint_spec);
       // The ScrewThreadPitch() API uses the same representation as
       // Drake's ScrewJoint class (meters / revolution, right-handed).
       const double screw_thread_pitch = joint_spec.ScrewThreadPitch();
