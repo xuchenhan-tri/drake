@@ -27,6 +27,7 @@ constexpr double kVelocityUpperLimit = 1.6;
 constexpr double kAccelerationLowerLimit = -1.2;
 constexpr double kAccelerationUpperLimit = 1.7;
 constexpr double kDamping = 3;
+constexpr double kDryFriction = 0.7;
 
 class PrismaticJointTest : public ::testing::Test {
  public:
@@ -65,6 +66,7 @@ class PrismaticJointTest : public ::testing::Test {
     mutable_joint1_->set_acceleration_limits(
         Vector1<double>::Constant(kAccelerationLowerLimit),
         Vector1<double>::Constant(kAccelerationUpperLimit));
+    mutable_joint1_->set_default_dry_friction(kDryFriction);
 
     return model;
   }
@@ -132,6 +134,27 @@ TEST_F(PrismaticJointTest, Damping) {
   EXPECT_THROW(joint.set_default_damping(-1), std::exception);
 }
 
+TEST_F(PrismaticJointTest, DryFriction) {
+  std::unique_ptr<internal::MultibodyTree<double>> model = MakeModel();
+  auto& joint = model->GetMutableJointByName<PrismaticJoint>("Joint1");
+  EXPECT_EQ(joint.default_dry_friction(), kDryFriction);
+  EXPECT_EQ(joint.default_dry_friction_vector(), Vector1d(kDryFriction));
+  const double new_dry_friction = 2.0 * kDryFriction;
+  joint.set_default_dry_friction(new_dry_friction);
+  EXPECT_EQ(joint.default_dry_friction(), new_dry_friction);
+  EXPECT_EQ(joint.default_dry_friction_vector(), Vector1d(new_dry_friction));
+  // Dry friction can be turned off.
+  joint.set_default_dry_friction(0.0);
+  EXPECT_EQ(joint.default_dry_friction(), 0.0);
+
+  // Expect to throw on invalid dry friction values.
+  EXPECT_THROW(joint.set_default_dry_friction(-1), std::exception);
+  EXPECT_THROW(joint.set_default_dry_friction_vector(Vector1d(-1)),
+               std::exception);
+  EXPECT_THROW(joint.set_default_dry_friction_vector(Eigen::Vector2d(1, 1)),
+               std::exception);
+}
+
 // Context-dependent value access.
 TEST_F(PrismaticJointTest, ContextDependentAccess) {
   const double some_value = 1.5;
@@ -164,6 +187,27 @@ TEST_F(PrismaticJointTest, ContextDependentAccess) {
   EXPECT_THROW(joint1_->SetDamping(context_.get(), -1), std::exception);
   EXPECT_THROW(joint1_->SetDampingVector(context_.get(), Vector1d(-1)),
                std::exception);
+
+  // Dry friction.
+  EXPECT_EQ(joint1_->GetDryFriction(*context_), kDryFriction);
+  EXPECT_EQ(joint1_->GetDryFrictionVector(*context_), Vector1d(kDryFriction));
+
+  EXPECT_NO_THROW(
+      joint1_->SetDryFrictionVector(context_.get(), Vector1d(some_value)));
+  EXPECT_EQ(joint1_->GetDryFriction(*context_), some_value);
+  EXPECT_EQ(joint1_->GetDryFrictionVector(*context_), Vector1d(some_value));
+
+  EXPECT_NO_THROW(joint1_->SetDryFriction(context_.get(), kDryFriction));
+  EXPECT_EQ(joint1_->GetDryFriction(*context_), kDryFriction);
+  EXPECT_EQ(joint1_->GetDryFrictionVector(*context_), Vector1d(kDryFriction));
+
+  // Expect to throw on invalid dry friction values.
+  EXPECT_THROW(joint1_->SetDryFriction(context_.get(), -1), std::exception);
+  EXPECT_THROW(joint1_->SetDryFrictionVector(context_.get(), Vector1d(-1)),
+               std::exception);
+  EXPECT_THROW(
+      joint1_->SetDryFrictionVector(context_.get(), Eigen::Vector2d(1, 1)),
+      std::exception);
 }
 
 // Tests API to apply torques to a joint.
@@ -230,6 +274,7 @@ TEST_F(PrismaticJointTest, Clone) {
     EXPECT_EQ(clone->acceleration_upper_limits(),
               joint1_->acceleration_upper_limits());
     EXPECT_EQ(clone->default_damping(), joint1_->default_damping());
+    EXPECT_EQ(clone->default_dry_friction(), joint1_->default_dry_friction());
     EXPECT_EQ(clone->get_default_translation(),
               joint1_->get_default_translation());
   }

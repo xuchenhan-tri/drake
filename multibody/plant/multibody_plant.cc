@@ -1638,6 +1638,57 @@ void MultibodyPlant<T>::SetUpJointLimitsParameters() {
 }
 
 template <typename T>
+void MultibodyPlant<T>::ValidateJointDryFriction() {
+  // Dry friction is only modeled by the SAP solver and only for single degree
+  // of freedom joints, see Joint::default_dry_friction_vector().
+  std::string joint_names_with_dry_friction;
+  for (JointIndex joint_index : GetJointIndices()) {
+    const Joint<T>& joint = get_joint(joint_index);
+    if ((joint.default_dry_friction_vector().array() != 0).any()) {
+      if (joint.num_velocities() != 1) {
+        throw std::runtime_error(fmt::format(
+            "Dry friction for joints with more than one degree of freedom is "
+            "not supported. Joint '{}' has {} degrees of freedom and a "
+            "non-zero default dry friction bound. See "
+            "Joint::set_default_dry_friction_vector().",
+            joint.name(), joint.num_velocities()));
+      }
+      joint_names_with_dry_friction += fmt::format(", '{}'", joint.name());
+    }
+  }
+  if (joint_names_with_dry_friction.empty()) return;
+  joint_names_with_dry_friction =
+      joint_names_with_dry_friction.substr(2);  // Nix ", ".
+
+  if (!is_discrete()) {
+    throw std::runtime_error(
+        "Currently this MultibodyPlant is set to use continuous time. "
+        "Continuous time does not support joint dry friction. Use a discrete "
+        "time model and set_discrete_contact_approximation() to set a model "
+        "approximation that uses the SAP solver instead (kSap, kSimilar, or "
+        "kLagged), or set the dry friction of these joints to zero, see "
+        "Joint::set_default_dry_friction_vector(). Joints that specify dry "
+        "friction are: " +
+        joint_names_with_dry_friction);
+  }
+  switch (get_discrete_contact_solver()) {
+    case kDiscreteContactSolverTamsi:
+      throw std::runtime_error(
+          "Currently this MultibodyPlant is set to use the TAMSI solver. "
+          "TAMSI does not support joint dry friction. Use "
+          "set_discrete_contact_approximation() to set a model approximation "
+          "that uses the SAP solver instead (kSap, kSimilar, or kLagged), or "
+          "set the dry friction of these joints to zero, see "
+          "Joint::set_default_dry_friction_vector(). Joints that specify dry "
+          "friction are: " +
+          joint_names_with_dry_friction);
+    case DiscreteContactSolver::kSap:
+      // SAP models dry friction.
+      break;
+  }
+}
+
+template <typename T>
 void MultibodyPlant<T>::FinalizeConstraints() {
   for (auto& [constraint_id, spec] : ball_constraints_specs_) {
     if (!spec.p_BQ.has_value()) {
@@ -1675,6 +1726,7 @@ void MultibodyPlant<T>::FinalizePlantOnly() {
       friction_model_.stiction_tolerance() < 0)
     set_stiction_tolerance();
   SetUpJointLimitsParameters();
+  ValidateJointDryFriction();
   if (use_sampled_output_ports_) {
     auto cache = std::make_unique<AccelerationKinematicsCache<T>>(
         internal_tree().forest());

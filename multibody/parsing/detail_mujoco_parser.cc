@@ -458,6 +458,15 @@ class MujocoParser {
     double damping{0.0};
     ParseScalarAttribute(node, "damping", &damping);
 
+    double frictionloss{0.0};
+    ParseScalarAttribute(node, "frictionloss", &frictionloss);
+    if (frictionloss < 0.0) {
+      Error(*node, fmt::format("The 'frictionloss' attribute of joint {} must "
+                               "be non-negative, but {} was specified.",
+                               name, frictionloss));
+      frictionloss = 0.0;
+    }
+
     std::string type;
     if (!ParseStringAttribute(node, "type", &type)) {
       type = "hinge";
@@ -475,6 +484,12 @@ class MujocoParser {
                     "supported for free bodies.",
                     name));
       }
+      if (frictionloss != 0.0) {
+        Warning(*node,
+                fmt::format("Friction loss was specified for the 'free' joint "
+                            "{}, but is not supported for free bodies.",
+                            name));
+      }
       plant_->SetDefaultFloatingBaseBodyPose(child, X_WC);
     } else if (type == "ball") {
       index =
@@ -483,6 +498,9 @@ class MujocoParser {
               .index();
       if (limited) {
         WarnUnsupportedAttribute(*node, "range");
+      }
+      if (frictionloss != 0.0) {
+        WarnUnsupportedAttribute(*node, "frictionloss");
       }
     } else if (type == "slide") {
       double ref{0.0};
@@ -503,6 +521,8 @@ class MujocoParser {
             Vector1d{range[0]}, Vector1d{range[1]});
       }
       plant_->get_mutable_joint(index).set_default_positions(Vector1d{ref});
+      plant_->get_mutable_joint(index).set_default_dry_friction_vector(
+          Vector1d{frictionloss});
     } else if (type == "hinge") {
       double ref{0.0};
       if (ParseScalarAttribute(node, "ref", &ref) && angle_ == kDegree) {
@@ -524,6 +544,8 @@ class MujocoParser {
             Vector1d{range[0]}, Vector1d{range[1]});
       }
       plant_->get_mutable_joint(index).set_default_positions(Vector1d{ref});
+      plant_->get_mutable_joint(index).set_default_dry_friction_vector(
+          Vector1d{frictionloss});
     } else {
       Error(*node, "Unknown joint type " + type);
       return;
@@ -557,7 +579,6 @@ class MujocoParser {
     WarnUnsupportedAttribute(*node, "actuatorgravcomp");
     LogIgnoredAttribute(*node, "margin");
     WarnUnsupportedAttribute(*node, "springref");
-    WarnUnsupportedAttribute(*node, "frictionloss");
     WarnUnsupportedAttribute(*node, "user");
   }
 

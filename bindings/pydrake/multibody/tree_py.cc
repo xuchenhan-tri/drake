@@ -497,7 +497,21 @@ void DoScalarDependentDefinitions(py::module_ m, T) {
             py::keep_alive<0, 2>(), return_value_policy_for_scalar_type<T>(),
             cls_doc.GetDampingVector.doc)
         .def("SetDampingVector", &Class::SetDampingVector, py::arg("context"),
-            py::arg("damping"), cls_doc.SetDampingVector.doc);
+            py::arg("damping"), cls_doc.SetDampingVector.doc)
+        .def("default_dry_friction_vector", &Class::default_dry_friction_vector,
+            return_value_policy_for_scalar_type<T>(),
+            cls_doc.default_dry_friction_vector.doc)
+        .def("set_default_dry_friction_vector",
+            &Class::set_default_dry_friction_vector, py::arg("dry_friction"),
+            cls_doc.set_default_dry_friction_vector.doc)
+        .def("GetDryFrictionVector", &Class::GetDryFrictionVector,
+            py::arg("context"),
+            // Keep alive, ownership: `return` keeps `context` alive.
+            py::keep_alive<0, 2>(), return_value_policy_for_scalar_type<T>(),
+            cls_doc.GetDryFrictionVector.doc)
+        .def("SetDryFrictionVector", &Class::SetDryFrictionVector,
+            py::arg("context"), py::arg("dry_friction"),
+            cls_doc.SetDryFrictionVector.doc);
   }
 
   // BallRpyJoint
@@ -644,7 +658,15 @@ void DoScalarDependentDefinitions(py::module_ m, T) {
         .def("GetDamping", &Class::GetDamping, py::arg("context"),
             cls_doc.GetDamping.doc)
         .def("SetDamping", &Class::SetDamping, py::arg("context"),
-            py::arg("damping"), cls_doc.SetDamping.doc);
+            py::arg("damping"), cls_doc.SetDamping.doc)
+        .def("default_dry_friction", &Class::default_dry_friction,
+            cls_doc.default_dry_friction.doc)
+        .def("set_default_dry_friction", &Class::set_default_dry_friction,
+            py::arg("dry_friction"), cls_doc.set_default_dry_friction.doc)
+        .def("GetDryFriction", &Class::GetDryFriction, py::arg("context"),
+            cls_doc.GetDryFriction.doc)
+        .def("SetDryFriction", &Class::SetDryFriction, py::arg("context"),
+            py::arg("dry_friction"), cls_doc.SetDryFriction.doc);
   }
 
   // QuaternionFloatingJoint
@@ -768,7 +790,15 @@ void DoScalarDependentDefinitions(py::module_ m, T) {
         .def("GetDamping", &Class::GetDamping, py::arg("context"),
             cls_doc.GetDamping.doc)
         .def("SetDamping", &Class::SetDamping, py::arg("context"),
-            py::arg("damping"), cls_doc.SetDamping.doc);
+            py::arg("damping"), cls_doc.SetDamping.doc)
+        .def("default_dry_friction", &Class::default_dry_friction,
+            cls_doc.default_dry_friction.doc)
+        .def("set_default_dry_friction", &Class::set_default_dry_friction,
+            py::arg("dry_friction"), cls_doc.set_default_dry_friction.doc)
+        .def("GetDryFriction", &Class::GetDryFriction, py::arg("context"),
+            cls_doc.GetDryFriction.doc)
+        .def("SetDryFriction", &Class::SetDryFriction, py::arg("context"),
+            py::arg("dry_friction"), cls_doc.SetDryFriction.doc);
   }
 
   // RpyFloatingJoint
