@@ -2354,6 +2354,8 @@ class TestPlant(unittest.TestCase):
         array_T = np.vectorize(T)
         damping = 2.0
         different_damping = 3.4
+        dry_friction = 0.25
+        different_dry_friction = 0.5
         x_axis = [1.0, 0.0, 0.0]
         X_PC = RigidTransform_[float](p=[1.0, 2.0, 3.0])
 
@@ -2508,10 +2510,45 @@ class TestPlant(unittest.TestCase):
                 )
                 joint.set_default_damping_vector(damping=damping_vector)
 
+            dry_friction_vector = []
+            different_dry_friction_vector = []
+
+            if joint.name() != "weld":
+                # Joints model no dry friction by default.
+                numpy_compare.assert_equal(
+                    joint.default_dry_friction_vector(),
+                    joint.num_velocities() * [0.0],
+                )
+                different_dry_friction_vector = joint.num_velocities() * [
+                    different_dry_friction
+                ]
+                joint.set_default_dry_friction_vector(
+                    dry_friction=different_dry_friction_vector
+                )
+                numpy_compare.assert_equal(
+                    joint.default_dry_friction_vector(),
+                    different_dry_friction_vector,
+                )
+                # Only single-DOF joints of a discrete plant may keep a
+                # non-zero default dry friction through Finalize().
+                if joint.num_velocities() == 1 and time_step:
+                    dry_friction_vector = [dry_friction]
+                else:
+                    dry_friction_vector = joint.num_velocities() * [0.0]
+                joint.set_default_dry_friction_vector(
+                    dry_friction=dry_friction_vector
+                )
+
             if joint.name() in ["prismatic", "revolute"]:
                 # This must be called pre-Finalize().
                 joint.set_default_damping(damping=damping)
                 self.assertEqual(joint.default_damping(), damping)
+                joint.set_default_dry_friction(
+                    dry_friction=dry_friction_vector[0]
+                )
+                self.assertEqual(
+                    joint.default_dry_friction(), dry_friction_vector[0]
+                )
 
             plant.Finalize()
             context = plant.CreateDefaultContext()
@@ -2556,6 +2593,20 @@ class TestPlant(unittest.TestCase):
                     array_T(different_damping_vector),
                 )
                 joint.SetDampingVector(context, array_T(damping_vector))
+                numpy_compare.assert_equal(
+                    joint.GetDryFrictionVector(context),
+                    array_T(dry_friction_vector),
+                )
+                joint.SetDryFrictionVector(
+                    context, array_T(different_dry_friction_vector)
+                )
+                numpy_compare.assert_equal(
+                    joint.GetDryFrictionVector(context),
+                    array_T(different_dry_friction_vector),
+                )
+                joint.SetDryFrictionVector(
+                    context, array_T(dry_friction_vector)
+                )
 
             if joint.name() == "ball_rpy":
                 self.assertEqual(joint.default_damping(), damping)
@@ -2638,6 +2689,13 @@ class TestPlant(unittest.TestCase):
                 numpy_compare.assert_equal(
                     joint.GetDamping(context), T(different_damping)
                 )
+                numpy_compare.assert_equal(
+                    joint.GetDryFriction(context), T(dry_friction_vector[0])
+                )
+                joint.SetDryFriction(context, T(different_dry_friction))
+                numpy_compare.assert_equal(
+                    joint.GetDryFriction(context), T(different_dry_friction)
+                )
             elif joint.name() == "quaternion_floating":
                 self.assertEqual(joint.default_angular_damping(), damping)
                 self.assertEqual(joint.default_translational_damping(), damping)
@@ -2704,6 +2762,13 @@ class TestPlant(unittest.TestCase):
                 joint.SetDamping(context, T(different_damping))
                 numpy_compare.assert_equal(
                     joint.GetDamping(context), T(different_damping)
+                )
+                numpy_compare.assert_equal(
+                    joint.GetDryFriction(context), T(dry_friction_vector[0])
+                )
+                joint.SetDryFriction(context, T(different_dry_friction))
+                numpy_compare.assert_equal(
+                    joint.GetDryFriction(context), T(different_dry_friction)
                 )
             elif joint.name() == "rpy_floating":
                 self.assertEqual(joint.type_name(), "rpy_floating")

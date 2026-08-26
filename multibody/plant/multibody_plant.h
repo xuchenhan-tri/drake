@@ -1395,7 +1395,9 @@ class MultibodyPlant final : public internal::MultibodyTreeSystem<T> {
   /// support joint limits for simulation, these are ignored. %MultibodyPlant
   /// prints a warning to console if joint limits are provided. If your
   /// simulation requires joint limits currently you must use a discrete
-  /// %MultibodyPlant model.
+  /// %MultibodyPlant model. Joint dry friction is not supported either;
+  /// Finalize() throws if any joint specifies it, see
+  /// Joint::default_dry_friction_vector().
   ///
   /// @throws std::exception if `time_step` is negative.
   explicit MultibodyPlant(double time_step);
@@ -6290,6 +6292,13 @@ class MultibodyPlant final : public internal::MultibodyTreeSystem<T> {
   // corresponds to the largest penalty parameter (smaller violation errors)
   // that still guarantees stability.
   void SetUpJointLimitsParameters();
+
+  // Helper method to be called within Finalize() to validate the default dry
+  // friction of joints, see Joint::default_dry_friction_vector(). It throws if
+  // a joint specifies a non-zero dry friction that this plant cannot model:
+  // joints with more than one degree of freedom, continuous models, and
+  // discrete models that do not use the SAP solver.
+  void ValidateJointDryFriction();
 
   // Some constraints support std::optional specs, which implies that the
   // kinematics should be used to compute values such that the constraint is

@@ -6456,6 +6456,49 @@ INSTANTIATE_TEST_SUITE_P(ContinousAndDiscreteConstraints,
                          MultibodyPlantConstraintTestTimeStepParam,
                          ::testing::Values(0.0, 0.1));
 
+// Joint dry friction is only modeled by the SAP solver. Finalize() throws for
+// continuous plants and for plants using the TAMSI solver when a joint
+// specifies it, naming the joint.
+GTEST_TEST(MultibodyPlantTest, JointDryFrictionRequiresSap) {
+  auto make_plant = [](double time_step) {
+    auto plant = std::make_unique<MultibodyPlant<double>>(time_step);
+    const RigidBody<double>& body =
+        plant->AddRigidBody("body", SpatialInertia<double>::MakeUnitary());
+    plant->AddJoint<RevoluteJoint>("joint", plant->world_body(), std::nullopt,
+                                   body, std::nullopt, Vector3d::UnitZ());
+    plant->GetMutableJointByName<RevoluteJoint>("joint")
+        .set_default_dry_friction(0.5);
+    return plant;
+  };
+
+  // Continuous plant.
+  {
+    std::unique_ptr<MultibodyPlant<double>> plant = make_plant(0.0);
+    DRAKE_EXPECT_THROWS_MESSAGE(
+        plant->Finalize(),
+        ".*continuous time.*does not support joint dry friction.*'joint'.*");
+  }
+
+  // Discrete plant using TAMSI.
+  {
+    std::unique_ptr<MultibodyPlant<double>> plant = make_plant(1.0e-3);
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+    plant->set_discrete_contact_approximation(
+        DiscreteContactApproximation::kTamsi);
+#pragma GCC diagnostic pop
+    DRAKE_EXPECT_THROWS_MESSAGE(
+        plant->Finalize(),
+        ".*TAMSI does not support joint dry friction.*'joint'.*");
+  }
+
+  // Discrete plant using SAP (the default approximation).
+  {
+    std::unique_ptr<MultibodyPlant<double>> plant = make_plant(1.0e-3);
+    DRAKE_EXPECT_NO_THROW(plant->Finalize());
+  }
+}
+
 }  // namespace
 }  // namespace multibody
 }  // namespace drake
